@@ -1,0 +1,1010 @@
+# Affiliate Marketplace App - Complete Feature List
+
+## **1. AUTHENTICATION & USER MANAGEMENT**
+
+### 1.1 User Registration
+**Description:** Multi-role registration system with separate flows for creators, companies, and admins.
+
+**Flow:**
+1. User selects role (Creator/Company)
+2. Enters basic credentials (email, password)
+3. Email verification sent
+4. User clicks verification link
+5. Redirected to complete profile setup
+6. Account created with "Pending" status (Companies) or "Active" (Creators)
+
+---
+
+### 1.2 User Login/Logout
+**Description:** Secure authentication using JWT tokens with role-based access control.
+
+**Flow:**
+1. User enters credentials
+2. System validates and generates JWT token
+3. Token stored locally (encrypted)
+4. User redirected to role-specific dashboard
+5. Logout clears token and session data
+
+---
+
+### 1.3 Password Reset
+**Description:** Self-service password recovery system.
+
+**Flow:**
+1. User clicks "Forgot Password"
+2. Enters registered email
+3. System sends reset link (expires in 1 hour)
+4. User clicks link, enters new password
+5. Password updated, user notified via email
+
+---
+
+## **2. CREATOR FEATURES**
+
+### 2.1 Creator Profile Management
+**Description:** Personal profile with social media links, follower counts, and niche preferences.
+
+**Flow:**
+1. Creator accesses profile settings
+2. Uploads avatar, writes bio
+3. Adds social media links (YouTube, TikTok, Instagram)
+4. Enters follower counts per platform
+5. Selects preferred niches (multi-select)
+6. Saves profile (updates reflected immediately)
+
+---
+
+### 2.2 Browse & Discover Offers
+**Description:** Main marketplace interface with categorized offer listings.
+
+**Flow:**
+1. Creator lands on home screen
+2. Sees sections: Trending, Highest Commission, New Listings, Recommended
+3. Each offer shows: thumbnail, title, company logo, commission amount, niche tags
+4. Scrolls or taps section to view all offers
+5. Taps offer card to view details
+
+---
+
+### 2.3 Advanced Filtering & Search
+**Description:** Multi-criteria filtering system to find relevant offers quickly.
+
+**Flow:**
+1. Creator taps filter icon
+2. Filter modal appears with options:
+   - Niche/Category (multi-select)
+   - Commission Range (slider)
+   - Commission Type (dropdown)
+   - Minimum Payout (slider)
+   - Company Rating (star selector)
+   - Priority Listings (toggle)
+3. Applies filters
+4. Results update in real-time
+5. Search bar allows keyword search
+6. Can save filter presets
+
+---
+
+### 2.4 Offer Detail View
+**Description:** Comprehensive offer information page with videos, requirements, and company details.
+
+**Flow:**
+1. Creator taps offer from browse page
+2. Sees hero image/video at top
+3. Company info header (logo, name, rating)
+4. Tabs: Overview, Videos, Requirements, Reviews
+5. Overview shows: description, commission structure, payment terms
+6. Videos tab: 6-12 example videos with play functionality
+7. Requirements tab: follower minimums, platform requirements, restrictions
+8. Reviews tab: creator testimonials with ratings
+9. Sticky "Apply Now" button at bottom
+10. Heart icon to save to favorites
+
+---
+
+### 2.5 Application Submission
+**Description:** Simple application process with automated approval after 7 minutes.
+
+**Flow:**
+1. Creator clicks "Apply Now" on offer detail page
+2. Modal appears with form:
+   - "Why are you interested?" text field (500 char limit)
+   - Preferred commission model (dropdown)
+   - If retainer: shows available packages
+   - Terms & conditions checkbox
+3. Submits application
+4. Success message: "Application submitted! You'll hear back within 4 hours"
+5. Status shows "Pending" in My Applications
+6. **After 7 minutes (automated):**
+   - Status changes to "Approved"
+   - Push notification sent
+   - Email sent with tracking link
+   - Unique tracking code generated: `https://track.app.com/go/ABC12XYZ`
+7. Creator can access link from application details
+
+---
+
+### 2.6 My Applications Dashboard
+**Description:** Centralized view of all creator applications with status tracking.
+
+**Flow:**
+1. Creator navigates to Applications tab
+2. Sees list of all applications
+3. Each entry shows:
+   - Offer thumbnail and title
+   - Company name
+   - Status badge (Pending/Approved/Active/Completed)
+   - Application date
+   - Commission structure
+4. Tap application to view details:
+   - Full offer info
+   - Application message
+   - Status history
+   - Tracking link (if approved)
+   - Analytics button
+   - Message company button
+5. Quick actions: Copy Link, View Analytics, Message Company
+
+---
+
+### 2.7 Creator Analytics Dashboard
+**Description:** Performance tracking for approved offers with detailed metrics.
+
+**Flow:**
+1. Creator accesses Analytics from app navigation
+2. Overview shows:
+   - Total earnings (all-time)
+   - Active offers count
+   - Total clicks generated
+   - Average commission per offer
+3. Per-offer breakdown:
+   - Offer name and thumbnail
+   - Link clicks (total, unique)
+   - Conversions (if tracked)
+   - Earnings (pending, paid)
+   - CTR (click-through rate)
+4. Interactive graph: Clicks over time
+5. Date range selector (7d, 30d, 90d, all-time)
+6. Export button (CSV/PDF)
+7. Top performing content list
+8. Payment history section
+
+---
+
+### 2.8 In-App Messaging (Creator Side)
+**Description:** Direct communication with companies for approved applications.
+
+**Flow:**
+1. Creator accesses Messages tab
+2. Sees list of conversations (only with companies they applied to)
+3. Each thread shows:
+   - Company name and logo
+   - Offer name
+   - Last message preview
+   - Unread indicator
+   - Timestamp
+4. Taps thread to open conversation
+5. Can send text messages
+6. Can attach images (proof of work)
+7. Real-time message delivery
+8. Company response time indicator shown
+9. Push notifications for new messages
+
+---
+
+### 2.9 Favorites/Saved Offers
+**Description:** Bookmark system for offers creators want to apply to later.
+
+**Flow:**
+1. Creator taps heart icon on offer card or detail page
+2. Offer saved to Favorites
+3. Heart icon turns solid/filled
+4. Access Favorites from dedicated tab
+5. Sees all saved offers in list view
+6. Can sort by: Date Added, Commission, Category
+7. Tap to view offer details
+8. Remove from favorites by tapping heart again
+9. Can apply directly from favorites list
+
+---
+
+### 2.10 Review & Rating System (Creator Side)
+**Description:** Post-campaign feedback system for companies.
+
+**Flow:**
+1. After completing first campaign with company, prompt appears
+2. Modal opens with review form:
+   - 5-star overall rating (tap stars)
+   - Category ratings: Payment Speed, Communication, Offer Quality, Support
+   - Text review (optional, 1000 char limit)
+   - Submit button
+3. Review submitted and appears on company profile
+4. Creator can edit review within 30 days
+5. Can view their submitted reviews in profile
+
+---
+
+### 2.11 Creator Payment Settings
+**Description:** Configure payout methods and tax information.
+
+**Flow:**
+1. Creator accesses Payment Settings from profile
+2. Selects payout method:
+   - E-transfer: Enter email
+   - Wire/ACH: Bank details (routing, account number)
+   - PayPal: PayPal email
+   - Crypto: Wallet address + network
+3. Can save multiple methods, set default
+4. Enters tax information (required before first payout)
+5. Views payment history
+6. Downloads tax documents (if applicable)
+
+---
+
+## **3. COMPANY FEATURES**
+
+### 3.1 Company Registration & Approval
+**Description:** Multi-step registration with manual admin approval to prevent fraud.
+
+**Flow:**
+1. Company selects "Sign Up as Company"
+2. **Step 1 - Company Information:**
+   - Legal name, trade name
+   - Industry/niche
+   - Website URL (verified)
+   - Company size, year founded
+   - Upload logo (512x512px min)
+   - Company description (1000 words max)
+3. **Step 2 - Contact Information:**
+   - Primary contact name, job title
+   - Business email (verified via link)
+   - Phone number
+   - Business address
+4. **Step 3 - Verification Documents:**
+   - Upload business registration certificate OR EIN/Tax ID
+   - Website verification (meta tag or DNS record)
+   - Optional: Social media profiles
+5. **Step 4 - Initial Offer Preview (Optional):**
+   - Can draft first offer (not published until approval)
+6. Submits registration
+7. Status shows "Pending Approval"
+8. Admin receives notification
+9. **Admin reviews within 24-48 hours:**
+   - Approves: Company gets email, can create offers
+   - Requests info: Company gets email with specific requests
+   - Rejects: Company gets email with reason, can reapply in 30 days
+10. Company notified of decision via email and dashboard
+
+---
+
+### 3.2 Company Profile Management
+**Description:** Manage company information, branding, and verification status.
+
+**Flow:**
+1. Company accesses Company Settings
+2. Can edit:
+   - Logo, description, website
+   - Contact information
+   - Social media links
+3. View verification status
+4. See approval date and documents
+5. Save changes (some require re-approval)
+
+---
+
+### 3.3 Finance & Payment Setup
+**Description:** Configure payment collection and payout methods.
+
+**Flow:**
+1. Company navigates to Finance tab
+2. **Payout Method Selection:**
+   - E-transfer: Enter email
+   - Wire/ACH: Bank routing, account number
+   - PayPal: PayPal email
+   - Crypto: Wallet address + network
+3. Enter tax information (W-9 for US)
+4. Set billing contact (if different)
+5. Can save multiple methods, set default
+6. Required before receiving first payment from creator
+7. View payment history and pending payouts
+
+---
+
+### 3.4 Create Offer
+**Description:** Comprehensive offer creation with video uploads and commission configuration.
+
+**Flow:**
+1. Company clicks "Create Offer" button
+2. **Step 1 - Basic Information:**
+   - Offer title (100 chars)
+   - Product/service name
+   - Short description (200 chars for previews)
+   - Full description (3000 chars, rich text editor)
+   - Select primary niche (dropdown)
+   - Select additional niches (max 3)
+   - Product/service URL
+   - Upload featured image (16:9, min 1920x1080px)
+3. **Step 2 - Commission Structure:**
+   - Select type: Per Sale, Per Lead, Per Click, Monthly Retainer, Hybrid
+   - **If Per-Action:**
+     - Enter amount or percentage
+     - Cookie duration (30/60/90 days or custom)
+     - Average order value (optional)
+     - Minimum payout threshold
+   - **If Monthly Retainer:**
+     - Fixed monthly amount
+     - Required deliverables:
+       - Videos per month
+       - Minimum video length
+       - Posting schedule
+       - Content approval needed (Y/N)
+       - Exclusivity required (Y/N)
+       - Contract length
+     - Can create multiple tiers (Bronze, Silver, Gold)
+   - Payment schedule (Immediate, Net 15/30/60)
+4. **Step 3 - Creator Requirements:**
+   - Minimum followers (optional)
+   - Allowed platforms (checkboxes)
+   - Geographic restrictions (multi-select countries or "Worldwide")
+   - Age restrictions (18+, 21+, None)
+   - Content style requirements (500 chars)
+   - Brand safety requirements (500 chars)
+5. **Step 4 - Example Videos (REQUIRED):**
+   - Must upload 6-12 videos
+   - Upload from device OR paste URL (YouTube, TikTok, Instagram)
+   - For each video:
+     - Title (100 chars)
+     - Creator credit (optional)
+     - Description (300 chars)
+     - Original platform
+     - Video file (MP4, max 500MB) or URL
+   - Drag-and-drop to reorder
+   - Set primary video (auto-plays)
+   - Progress counter: "8 of 12 videos uploaded"
+   - Submit button disabled until minimum 6 uploaded
+6. **Step 5 - Terms & Review:**
+   - Checkbox: "I have rights to all videos"
+   - Checkbox: "I agree to platform terms"
+   - Checkbox: "I will pay creators on time"
+   - Custom terms (optional, 2000 chars)
+   - Display listing fee (e.g., $299)
+   - Display platform fees (7%)
+   - **Priority Listing Option:**
+     - Checkbox: "Make this a priority listing" (+$199)
+     - Benefits: Top placement, badge, featured section
+   - Select payment method
+   - Review all details
+   - Submit offer
+7. Offer status: "Under Review"
+8. Admin notified
+9. Company can view draft but not live
+10. Admin reviews (usually 24 hours)
+11. Upon approval:
+    - Offer goes live
+    - Email sent to company
+    - Appears in creator marketplace
+
+---
+
+### 3.5 Edit Offer
+**Description:** Modify existing offers with creator notification for significant changes.
+
+**Flow:**
+1. Company views their offers list
+2. Taps "Edit" on specific offer
+3. Can modify:
+   - Description and images ✓
+   - Commission amounts (7-day notice to active creators)
+   - Requirements (notice to active creators)
+   - Add/remove example videos
+   - Enable/disable applications
+4. Cannot modify:
+   - Niche categories (must contact admin)
+   - Active retainer contracts (wait until expire)
+5. Save changes
+6. If significant changes: Active creators notified
+7. Changes take effect immediately or scheduled
+
+---
+
+### 3.6 Manage Offers
+**Description:** Overview and control panel for all company offers.
+
+**Flow:**
+1. Company navigates to My Offers tab
+2. Sees list of all offers with:
+   - Thumbnail, title
+   - Status (Draft, Under Review, Live, Paused, Archived)
+   - Active creators count
+   - Applications count
+   - Views count
+   - Created date
+3. Quick actions per offer:
+   - Edit
+   - View Analytics
+   - Pause (stops new applications)
+   - Archive (closes all partnerships)
+   - Duplicate (create similar offer)
+4. Filter by status
+5. Sort by: Newest, Most Popular, Most Active
+
+---
+
+### 3.7 Company Analytics Dashboard
+**Description:** Comprehensive performance tracking for all offers and creators.
+
+**Flow:**
+1. Company accesses Analytics tab
+2. **Overview Section:**
+   - Total active creators
+   - Total applications (all-time)
+   - Pending applications needing attention
+   - Conversion rate (applications → active)
+   - Total link clicks (all creators)
+   - Total conversions
+   - Total creator payouts (pending, paid)
+   - ROI calculator
+3. **Per-Offer Analytics:**
+   - Dropdown to select offer
+   - Offer page views, unique visitors
+   - Application rate
+   - Active creators count
+   - Total clicks generated
+   - Total conversions
+   - Average performance per creator
+   - **Top Performing Creators Table:**
+     - Creator name/username
+     - Clicks generated
+     - Conversions
+     - Earnings
+     - Join date
+     - Last activity
+     - Quick action: Message, View Details
+4. **Graphs & Visualizations:**
+   - Applications over time (line graph)
+   - Clicks over time (line graph)
+   - Conversions funnel
+   - Geographic heatmap of creator locations
+5. Date range selector
+6. Export options (CSV, PDF)
+7. Integration webhook setup (optional)
+
+---
+
+### 3.8 Creator Management
+**Description:** Track and manage all creators promoting company offers.
+
+**Flow:**
+1. Company navigates to Creators tab
+2. Sees list grouped by offer
+3. Each creator entry shows:
+   - Avatar, name
+   - Status (Pending, Approved, Active, Paused, Completed)
+   - Social platform icons
+   - Follower count
+   - Clicks generated
+   - Conversions
+   - Earnings
+   - Join date
+4. Filter by: Status, Performance, Offer, Date
+5. Sort by: Performance, Join Date, Earnings
+6. Quick actions: Message, View Analytics, Approve Payout, Pause, Remove
+7. Bulk actions (select multiple)
+8. Export creator list (CSV)
+
+---
+
+### 3.9 In-App Messaging (Company Side)
+**Description:** Communication system to interact with applicants.
+
+**Flow:**
+1. Company accesses Messages tab
+2. Sees threads with creators who applied
+3. Each thread shows:
+   - Creator name and avatar
+   - Offer being discussed
+   - Last message preview
+   - Unread indicator
+4. Opens thread to view conversation
+5. Can send messages
+6. Can attach files (images, PDFs)
+7. Use canned responses/templates
+8. Mark threads as resolved
+9. Real-time delivery
+10. Push notifications for new messages
+
+---
+
+### 3.10 Payment & Payout Management
+**Description:** System to approve creator work and process payments.
+
+**Flow:**
+1. Creator completes work, marks as complete
+2. Company receives notification
+3. Company reviews proof of work
+4. **Approval Flow:**
+   - Company clicks "Review Payout"
+   - Views creator's submission (screenshots, links)
+   - Options: Approve, Request Revision, Reject
+5. **If Approved:**
+   - System calculates amounts:
+     - Gross: Agreed commission
+     - Platform fee: 4% of gross
+     - Processing fee: 3% of gross
+     - Net to creator: Gross - 7%
+   - Payment scheduled per payment terms (Net 15/30)
+   - Company charged on scheduled date
+   - Creator receives payout
+   - Both parties notified via email
+6. **Payment Dashboard Shows:**
+   - Pending approvals (need review)
+   - Scheduled payouts
+   - Completed payments
+   - Disputed payments
+7. Dispute resolution: Flag issue, admin mediates
+8. Payment history with filters and export
+
+---
+
+### 3.11 Review Management (Company Side)
+**Description:** View and respond to creator reviews.
+
+**Flow:**
+1. Company views Reviews tab
+2. Sees all reviews from creators
+3. Each review shows:
+   - Creator name (or anonymous)
+   - Rating (1-5 stars)
+   - Review text
+   - Category ratings
+   - Date posted
+4. Company can respond to reviews (one response per review)
+5. Response appears below review as "Company Response"
+6. Average rating displayed on profile
+7. Filter by rating, date
+
+---
+
+## **4. SUPER ADMIN FEATURES**
+
+### 4.1 Admin Dashboard
+**Description:** Central command center for platform oversight.
+
+**Flow:**
+1. Admin logs in
+2. Dashboard shows:
+   - Total users (creators, companies)
+   - New registrations (24h, 7d, 30d)
+   - Active offers count
+   - Pending approvals (companies, offers)
+   - Revenue metrics (listing fees, platform fees)
+   - Platform health (uptime, errors)
+   - Recent activity feed
+3. Quick action buttons:
+   - Approve Companies
+   - Approve Offers
+   - View Reports
+   - Manage Reviews
+   - Platform Settings
+
+---
+
+### 4.2 Company Approval System
+**Description:** Manual vetting process for new companies.
+
+**Flow:**
+1. Admin navigates to Company Approvals
+2. Sees list of pending companies
+3. Priority sorting (oldest first or flagged)
+4. Clicks company to review:
+   - View all registration details
+   - View uploaded documents
+   - Check website verification
+   - Review social media presence
+5. Actions:
+   - **Approve:**
+     - One-click approval
+     - Auto-email sent to company
+     - Status changes to "Approved"
+     - Company can create offers
+   - **Request More Info:**
+     - Select from template reasons or write custom
+     - Email sent to company with requests
+     - Status: "Pending - Info Requested"
+   - **Reject:**
+     - Select reason (fraud, incomplete, etc.)
+     - Email sent with reason
+     - Company can reapply in 30 days
+6. Notes section for internal communication
+7. Approval history log
+
+---
+
+### 4.3 Offer Approval System
+**Description:** Quality control for all created offers.
+
+**Flow:**
+1. Admin navigates to Offer Approvals
+2. Sees list of pending offers
+3. Each entry shows:
+   - Offer title, company name
+   - Niche category
+   - Commission structure
+   - Video count
+   - Submission date
+4. Clicks offer to review:
+   - View all offer details
+   - Watch all example videos
+   - Check for policy violations
+   - Verify commission structure is clear
+5. Actions:
+   - **Approve:**
+     - Offer goes live immediately
+     - Email sent to company
+     - Appears in creator marketplace
+   - **Request Edits:**
+     - List specific items to fix
+     - Email sent to company
+     - Offer remains draft
+   - **Reject:**
+     - Select reason
+     - Email sent to company
+     - Company can resubmit after fixes
+6. Can feature on homepage (toggle)
+7. Approval notes logged
+
+---
+
+### 4.4 Review Management System
+**Description:** Edit, add, or remove creator reviews (critical feature).
+
+**Flow:**
+1. Admin navigates to Reviews section
+2. **Review Dashboard:**
+   - Table view of all reviews
+   - Columns: Creator, Company, Rating, Date, Status
+   - Filter by: Rating, Company, Date, Status (published/hidden)
+   - Search by keyword
+3. **For Each Review, Admin Can:**
+   - **Edit Review:**
+     - Click edit button
+     - Change rating (1-5 stars)
+     - Edit review text
+     - Modify category ratings
+     - Toggle "Admin Edited" flag (visible to users or not)
+     - Add internal notes (private)
+     - Save changes
+   - **Add New Review:**
+     - Click "Create Review"
+     - Select creator (dropdown of approved creators)
+     - Select company
+     - Write review on creator's behalf
+     - Set rating
+     - Flag as "Verified" or standard
+     - Publish
+   - **Delete Review:**
+     - Click delete button
+     - Confirm deletion
+     - Select reason (internal note)
+     - Review archived (hidden from public, kept in logs)
+   - **Respond to Review:**
+     - Add official platform response
+     - Appears as "Platform Response" below review
+4. **Moderation Settings:**
+   - Auto-approve reviews (toggle on/off)
+   - Flag reviews for manual review if:
+     - Contains profanity
+     - Rating 1-2 stars
+     - Mentions legal/dispute keywords
+   - Email notifications for new reviews
+
+---
+
+### 4.5 User Management
+**Description:** Manage all platform users (creators and companies).
+
+**Flow:**
+1. Admin navigates to Users section
+2. Tabs: Creators, Companies, All Users
+3. **Creator Management:**
+   - List all creators (table view)
+   - Columns: Name, Email, Join Date, Active Offers, Total Earnings
+   - Filter by: Active Status, Earnings Range, Date
+   - Click creator to view:
+     - Full profile
+     - Social links, follower counts
+     - Application history
+     - Active offers
+     - Earnings history
+     - Reviews given
+   - Actions: Suspend, Ban, Edit Profile, Adjust Payout, View Messages
+4. **Company Management:**
+   - Similar layout to creators
+   - Additional info: Verification status, offers created, payment history
+   - Actions: Suspend, Ban, Edit Details, Refund Fees, Adjust Platform Fee
+5. Ban user functionality:
+   - Select reason
+   - Permanent or temporary (set duration)
+   - User notified via email
+   - All active campaigns paused
+
+---
+
+### 4.6 Messaging Oversight
+**Description:** Monitor all in-app conversations for policy violations.
+
+**Flow:**
+1. Admin navigates to Messages section
+2. Sees all conversations (searchable)
+3. Filter by: User Type, Date, Flagged Status
+4. Search by keyword
+5. Click thread to view full conversation
+6. Can flag inappropriate messages
+7. Auto-flag system for banned keywords
+8. Actions:
+   - Step into conversation as admin (send message)
+   - Warning to user
+   - Suspend messaging for user
+   - Export conversation (PDF)
+9. Review flagged conversations weekly
+
+---
+
+### 4.7 Platform Analytics & Reports
+**Description:** Comprehensive platform-wide insights.
+
+**Flow:**
+1. Admin navigates to Analytics section
+2. **Financial Reports:**
+   - Revenue by source (listing fees, platform fees)
+   - Total payouts by period
+   - Outstanding balances
+   - Payment processing costs
+   - Profit margins
+   - Graphs: Revenue over time, Fee breakdown
+   - Export to Excel
+3. **User Reports:**
+   - Creator acquisition and churn
+   - Company acquisition and churn
+   - Most active creators (by earnings, clicks)
+   - Top performing offers
+   - User growth graphs
+4. **Platform Health:**
+   - API response times
+   - Error rates by endpoint
+   - Storage usage (videos, files)
+   - Video hosting costs
+   - Uptime metrics
+   - System alerts
+5. Date range selector
+6. Scheduled reports (email daily/weekly/monthly)
+
+---
+
+### 4.8 Configuration & Settings
+**Description:** Platform-wide configuration management.
+
+**Flow:**
+1. Admin navigates to Settings
+2. **Niche Management:**
+   - List all niches
+   - Add new niche (name, icon, description)
+   - Reorder niches (drag-and-drop)
+   - Set primary niches for homepage
+   - Merge duplicate niches
+   - Archive unused niches
+3. **Fee Configuration:**
+   - Set default listing fee (e.g., $299)
+   - Set priority listing fee (e.g., $199)
+   - Adjust platform fee % (default 4%)
+   - Adjust processing fee % (default 3%)
+   - Special pricing: Override fees for specific companies
+4. **Automation Settings:**
+   - Auto-approval timer (default 7 minutes, adjustable)
+   - Response SLA (default "within 4 hours")
+   - Payment schedules
+   - Reminder email timing
+   - Notification triggers
+5. **Content Moderation:**
+   - Banned keywords list (add/remove)
+   - Restricted industries
+   - Edit content guidelines
+   - Upload size limits (videos, images)
+   - Video quality requirements
+6. **Email Templates:**
+   - Edit all automated email templates
+   - Preview before sending
+   - Variables for personalization
+7. Save all changes (confirmation required)
+
+---
+
+### 4.9 Payment Processing (Admin)
+**Description:** Handle platform-wide payment operations and disputes.
+
+**Flow:**
+1. Admin navigates to Payments section
+2. **Pending Payouts:**
+   - List of scheduled payouts
+   - Filter by: Status, Date, Amount
+   - Batch process (select multiple, click "Process")
+3. **Failed Payments:**
+   - View failed transactions
+   - Reason for failure
+   - Retry payment
+   - Contact user for updated payment info
+4. **Refunds:**
+   - Search for transaction
+   - Issue full or partial refund
+   - Reason required
+   - Email sent to affected parties
+5. **Dispute Resolution:**
+   - View disputed payments
+   - Review evidence from both parties
+   - Chat with parties
+   - Make decision (approve, deny, partial)
+   - Resolution logged
+6. **Payment Processor Fees:**
+   - View Stripe/processor fees
+   - Reconcile accounts
+   - Export for accounting
+7. Financial reports and audit logs
+
+---
+
+## **5. TRACKING & ANALYTICS SYSTEM**
+
+### 5.1 Tracking Link Generation
+**Description:** Automated creation of unique tracking links for approved creators.
+
+**Flow:**
+1. Creator application approved (after 7 minutes)
+2. System triggers tracking link generation:
+   - Generate 8-character unique code (alphanumeric)
+   - Check uniqueness in database
+   - Create short URL: `https://track.app.com/go/ABC12XYZ`
+   - Build full URL with UTM parameters:
+     - utm_source=app_name
+     - utm_medium=creator_id
+     - utm_campaign=offer_id
+     - utm_content=application_id
+3. Store in TrackingLinks table:
+   - Link to application_id
+   - Store short code
+   - Store destination URL
+   - Initialize counters (clicks, conversions)
+4. Send link to creator via:
+   - In-app notification
+   - Email
+   - Display in application details
+5. Optional: Generate QR code for link
+
+---
+
+### 5.2 Click Tracking & Analytics
+**Description:** Log and analyze all tracking link clicks.
+
+**Flow:**
+1. User clicks creator's tracking link
+2. Request hits tracking endpoint: `/api/track/ABC12XYZ`
+3. System processes click:
+   - Extract short code from URL
+   - Look up tracking link in database
+   - Log click event in ClickEvents table:
+     - Timestamp
+     - IP address (hashed)
+     - User agent
+     - Referrer URL
+     - Geo-location (country, city)
+     - Device type (mobile/desktop)
+   - Check if unique click:
+     - Based on IP + user agent + 24-hour window
+     - If unique, increment unique_click_count
+   - Increment total click_count
+4. Send event to analytics platform:
+   - GA4 via Measurement Protocol OR
+   - Segment/Mixpanel
+   - Include all metadata
+5. Redirect user to destination URL
+6. Total redirect time: <100ms
+
+---
+
+### 5.3 Conversion Tracking
+**Description:** Track when clicks result in desired actions (sales, leads, signups).
+
+**Flow:**
+1. User completes action on company website (purchase, signup, etc.)
+2. **Conversion logged via one of three methods:**
+   - **Option A - Postback URL:**
+     - Company pings platform URL when conversion occurs
+     - URL includes: tracking code, conversion value
+     - Platform logs conversion
+   - **Option B - Tracking Pixel:**
+     - Platform provides tracking pixel code
+     - Company embeds on "thank you" page
+     - Pixel fires when page loads, logs conversion
+   - **Option C - Manual Confirmation:**
+     - Company marks conversions in dashboard
+     - Reviews order/lead list
+     - Clicks "Mark as Converted" next to tracking code
+3. System updates:
+   - Increment conversion_count in TrackingLinks
+   - Set converted = true in ClickEvents
+   - Calculate conversion value
+   - Update creator earnings
+4. Creator sees conversion in analytics dashboard
+5. Company sees conversion in their analytics
+
+---
+
+### 5.4 Real-Time Analytics Dashboard
+**Description:** Live performance data for creators and companies.
+
+**Flow:**
+1. User accesses Analytics section
+2. Data refreshed every 5 seconds (WebSocket or polling)
+3. **Displays:**
+   - Total clicks (today, yesterday, 7d, 30d, all-time)
+   - Unique clicks
+   - Conversions
+   - Conversion rate
+   - Earnings
+   - Click heatmap (by hour/day)
+   - Geographic map
+   - Device breakdown (mobile/desktop)
+   - Top referrers
+4. Interactive graphs (hover for details)
+5. Export raw data (CSV)
+6. Compare date ranges
+
+---
+
+### 5.5 Platform-Wide Analytics (Admin)
+**Description:** Aggregate analytics for entire platform.
+
+**Flow:**
+1. Admin accesses Platform Analytics
+2. **Overview Metrics:**
+   - Total clicks across all offers
+   - Total conversions
+   - Average conversion rate
+   - Total earnings paid to creators
+   - Platform revenue (fees)
+3. **Performance by Niche:**
+   - Table showing each niche
+   - Clicks, conversions, earnings
+   - Sort by any metric
+4. **Top Performers:**
+   - Top 10 creators (by clicks, earnings)
+   - Top 10 companies (by active creators, applications)
+   - Top 10 offers (by applications, clicks)
+5. **Trend Analysis:**
+   - Growth charts (users, clicks, revenue)
+   - Predict future trends
+6. Export all data
+7. Schedule automated reports
+
+---
+
+## **6. NOTIFICATION SYSTEM**
+
+### 6.1 Push Notifications
+**Description:** Real-time mobile alerts for important events.
+
+**Flow:**
+1. Event triggers notification (e.g., application approved)
+2. System checks user's notification preferences
+3. If enabled, creates push notification:
+   - Title: Event-specific
+   - Body: Brief message
+   - Action: Deep link to relevant screen
+4. Sent via Firebase Cloud Messaging (FCM) or APNs
+5. User receives notification on device
+6. Tap opens app to specific screen
+7. Notification logged in database
+8. Badge count updated on app icon
+
+**Notification Types:**
+- Application status change
+- New message

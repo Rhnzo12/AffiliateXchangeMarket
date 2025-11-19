@@ -1,0 +1,340 @@
+CREATOR FEATURES (Video Content Creators)
+1. Registration & Profile Setup
+
+Description: Creators sign up using email, verify their account, and set up a profile including bio, social links, and niches.
+Flow:
+
+User registers → verifies email
+
+Completes profile (bio, platforms, follower count, niches)
+
+Gains access to “Browse Offers” page
+
+2. Offer Discovery & Filtering
+
+Description: Browse and search for affiliate offers with rich filters and sorting options.
+Flow:
+
+Open Home/Browse → view “Trending”, “New”, “Highest Commission” offers
+
+Apply filters (niche, commission type, payout, rating)
+
+Click an offer → view full details page
+
+3. Offer Detail View
+
+Description: Displays all essential details (company info, commission, requirements, videos, etc.)
+Flow:
+
+Creator opens offer
+
+Views:
+
+Company logo & description
+
+Commission structure (per sale, per lead, retainer, etc.)
+
+Example promotional videos (6–12)
+
+“Apply Now” button
+
+4. Offer Application System
+
+Description: Allows creators to apply for affiliate offers.
+Flow:
+
+Click Apply Now → fill mini form (reason, preferred commission, agree to terms)
+
+Status = Pending
+
+After 7 minutes → Auto-approved → Creator gets unique tracking link
+
+Notification + email confirmation sent
+
+5. Affiliate Tracking Links
+
+Description: Each approved application gets an auto-generated unique tracking link.
+Flow:
+
+System generates UTM link (e.g., track.app.com/go/abc12345)
+
+Creator uses link in content
+
+Platform logs clicks, conversions, and commissions
+
+6. Analytics Dashboard
+
+Description: Real-time insights into creator’s performance.
+Flow:
+
+Creator opens “Analytics”
+
+Views:
+
+Clicks, conversions, CTR
+
+Earnings (total, pending, paid)
+
+Graph of performance over time
+
+Can export or filter by offer
+
+7. Messaging System
+
+Description: Creators can message companies (one-on-one).
+Flow:
+
+From “My Applications”, click “Message Company”
+
+Send/receive messages (real-time)
+
+Attach proof of work
+
+8. Favorites System
+
+Description: Save offers for later.
+Flow:
+
+Tap ❤️ icon to save
+
+Access “Favorites” tab
+
+Sort by commission, date, or category
+
+9. Review System
+
+Description: Creators can rate and review companies after working together.
+Flow:
+
+Upon completing campaign → prompted for review
+
+Submit 1–5 star rating + comment
+
+Appears on company profile & offer page
+
+🏢 COMPANY FEATURES (Offer Providers)
+1. Company Registration & Approval
+
+Description: Multi-step registration requiring admin approval.
+Flow:
+
+Fill out company info + upload verification docs
+
+Admin reviews → Approve/Reject/Request Info
+
+Once approved → can post offers
+
+2. Finance & Payment Setup
+
+Description: Companies must add payout and billing info before using platform.
+Flow:
+
+Choose payment method (ACH, PayPal, crypto, etc.)
+
+Provide tax and billing details
+
+Save preferred payment method
+
+3. Offer Creation & Management
+
+Description: Create detailed affiliate offers with commission rules and example videos.
+Flow:
+
+Company → “Create Offer”
+
+Fill form (title, description, niches, requirements)
+
+Upload 6–12 sample videos
+
+Set commission structure
+
+Submit → goes to Admin for approval
+
+Once approved → Offer goes live
+
+4. Offer Analytics Dashboard
+
+Description: Visual reports on performance and creator activity.
+Flow:
+
+Company dashboard shows:
+
+Applications, clicks, conversions
+
+Active creators
+
+ROI metrics, graphs, heatmaps
+
+Filter by date, offer, or creator
+
+5. Creator Management
+
+Description: Manage creators per offer.
+Flow:
+
+View list of applicants
+
+Approve, message, or remove creators
+
+Mark work completed or pending payout
+
+6. Messaging
+
+Description: Company ↔ Creator direct communication.
+Flow:
+
+Message from application dashboard
+
+Use attachments and templates
+
+Mark messages as resolved
+
+7. Payment Management
+
+Description: Manage creator payouts and disputes.
+Flow:
+
+Creator marks task as complete
+
+Company approves → triggers payout (Stripe Connect)
+
+System deducts platform + processing fees
+
+Logs transaction
+
+🛠️ SUPER ADMIN FEATURES (Platform Operators)
+1. Admin Dashboard
+
+Description: Central control for users, offers, and payments.
+Flow:
+
+Admin login → sees overview (new users, offers, revenue)
+
+Can approve/reject companies/offers
+
+2. Company & Creator Management
+
+Flow:
+
+View full profiles, documents, and activities
+
+Approve, suspend, or ban users
+
+Adjust fees or refund payments
+
+3. Offer Moderation
+
+Flow:
+
+Review new offers → approve/reject
+
+Feature offers on homepage
+
+Remove flagged content
+
+4. Review Moderation
+
+Description: Edit or remove reviews to maintain quality.
+Flow:
+
+View all reviews
+
+Approve, edit, or delete
+
+Add admin response or internal note
+
+5. Financial & Analytics Reports
+
+Description: Full platform-wide metrics and accounting tools.
+Flow:
+
+View total payouts, revenue, balances
+
+Generate CSV/PDF reports
+
+Monitor performance, uptime, and API latency
+
+6. System Configuration
+
+Flow:
+
+Adjust platform fees, niches, and automation settings
+
+Configure payment and tracking rules
+
+Manage banned keywords and industries
+
+💳 PAYMENT & TRACKING SYSTEM
+1. Payment Flow
+
+Description: 7% total platform fee (3% processing + 4% platform).
+Flow:
+
+Creator completes task → company confirms
+
+System calculates payouts
+
+Stripe charges company
+
+Platform deducts fees → pays creator
+
+2. Tracking Flow
+
+Description: Central tracking system with unique short links per creator-offer pair.
+Flow:
+
+Creator’s tracking link clicked
+
+System logs click (IP, device, geo)
+
+Redirects user to product page
+
+Company can mark conversions manually or via API
+
+🔔 NOTIFICATIONS SYSTEM
+
+Types:
+
+Offer approved/rejected
+
+Application status update
+
+Payment processed
+
+Message received
+
+Review received
+
+Flow:
+Backend → Push Notification (mobile) + Email → User views alert
+
+🔐 SECURITY FEATURES
+
+JWT authentication
+
+HTTPS encryption
+
+Document verification for companies
+
+GDPR/CCPA compliance
+
+Account deletion + data export
+
+🧩 AUTOMATED WORKFLOWS
+
+Creator Auto-Approval → 7-minute timer → auto-generate link
+
+Priority Listing Expiry → 30 days → auto-remove badge
+
+Payment Automation → triggers Stripe payout on approval
+
+📱 MVP FLOW SUMMARY
+
+Creator:
+Register → Browse Offers → Apply → Get Tracking Link → Promote → View Analytics → Get Paid
+
+Company:
+Register → Get Approved → Create Offer → Manage Creators → Approve Work → Pay → View Analytics
+
+Admin:
+Approve Companies & Offers → Oversee Reviews & Payments → Manage Platform Fees & Reports

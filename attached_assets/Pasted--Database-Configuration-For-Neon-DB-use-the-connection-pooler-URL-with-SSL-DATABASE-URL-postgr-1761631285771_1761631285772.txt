@@ -1,0 +1,52 @@
+# Database Configuration
+# For Neon DB, use the connection pooler URL with SSL
+DATABASE_URL=postgresql://neondb_owner:npg_fgl6xOo9IDLt@ep-dawn-butterfly-a1y95rqd-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+# PostgreSQL Connection Details (parsed from DATABASE_URL)
+PORT=3000
+PGHOST=ep-dawn-butterfly-a1y95rqd-pooler.ap-southeast-1.aws.neon.tech
+PGPORT=5432
+PGUSER=neondb_owner
+PGPASSWORD=npg_fgl6xOo9IDLt
+PGDATABASE=neondb
+PGSSLMODE=require
+
+# Session Secret (generate a random string)
+SESSION_SECRET=819aa2b6dfe289ab4df4283bbebffc8f80f0e9a9abd9d3c0c8701106a6f13adf
+
+# Node Environment
+NODE_ENV=development
+
+# ✅ CLIENT-SIDE ENVIRONMENT VARIABLES (VITE_ prefix required for Vite)
+# These are accessible in client-side code via import.meta.env
+VITE_API_PORT=3000
+VITE_WS_PORT=3000
+VITE_API_URL=http://localhost:3000
+VITE_WS_URL=ws://localhost:3000
+
+# Stripe Payment Processing (optional - only needed for payment features)
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
+VITE_STRIPE_PUBLIC_KEY=pk_test_your_stripe_public_key
+TESTING_STRIPE_SECRET_KEY=sk_test_your_testing_key
+TESTING_VITE_STRIPE_PUBLIC_KEY=pk_test_your_testing_public_key
+
+# Cloudinary Configuration (REQUIRED for video uploads)
+# Sign up at https://cloudinary.com to get your credentials
+# Dashboard: https://console.cloudinary.com/console
+
+CLOUDINARY_CLOUD_NAME=your-cloud-name-here
+CLOUDINARY_API_KEY=your-api-key-here
+CLOUDINARY_API_SECRET=your-api-secret-here
+
+# Cloudinary Upload Settings
+CLOUDINARY_UPLOAD_PRESET=affiliatexchange-videos
+CLOUDINARY_FOLDER=affiliatexchange/videos
+
+# Note: 
+# 1. Copy this file to .env in your project root
+# 2. Fill in your actual Neon DB credentials above
+# 3. Generate a strong SESSION_SECRET
+# 4. Never commit .env to version control!
+# 5. For Neon DB, always use the pooler URL (-pooler suffix) for serverless/connection pooling
+# 6. ⚠️ IMPORTANT: Only VITE_ prefixed variables are accessible in client-side code
+# 7. After updating this file, RESTART your dev server for changes to take effect

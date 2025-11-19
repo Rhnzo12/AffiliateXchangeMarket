@@ -1,0 +1,402 @@
+[1mdiff --git a/client/src/pages/company-retainers.tsx b/client/src/pages/company-retainers.tsx[m
+[1mindex 5f9f1f4..8b6f6ed 100644[m
+[1m--- a/client/src/pages/company-retainers.tsx[m
+[1m+++ b/client/src/pages/company-retainers.tsx[m
+[36m@@ -56,15 +56,7 @@[m [mimport { TopNavBar } from "../components/TopNavBar";[m
+ import { ListSkeleton } from "../components/skeletons";[m
+ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";[m
+ [m
+[31m-<<<<<<< HEAD[m
+[31m-//[m
+[31m-// ----------------------------------------------------[m
+[31m-// FIXED ZOD SCHEMAS[m
+[31m-// ----------------------------------------------------[m
+[31m-const tierSchema = z.object({[m
+[31m-=======[m
+ const retainerTierSchema = z.object({[m
+[31m->>>>>>> b4de0957ceebb06b6f463adb6bfd1096c107a229[m
+   name: z.string().min(1, "Tier name is required"),[m
+   monthlyAmount: z.string().min(1, "Monthly amount is required"),[m
+   videosPerMonth: z.string().min(1, "Videos per month is required"),[m
+[36m@@ -78,32 +70,20 @@[m [mconst createRetainerSchema = z.object({[m
+   videosPerMonth: z.string().min(1, "Videos per month is required"),[m
+   durationMonths: z.string().min(1, "Duration is required"),[m
+   requiredPlatform: z.string().min(1, "Platform is required"),[m
+[31m-[m
+   platformAccountDetails: z.string().optional(),[m
+   contentGuidelines: z.string().optional(),[m
+   brandSafetyRequirements: z.string().optional(),[m
+   minimumFollowers: z.string().optional(),[m
+   niches: z.string().optional(),[m
+[31m-[m
+   contentApprovalRequired: z.boolean().default(false),[m
+   exclusivityRequired: z.boolean().default(false),[m
+[31m-[m
+   minimumVideoLengthSeconds: z.string().optional(),[m
+   postingSchedule: z.string().optional(),[m
+[31m-<<<<<<< HEAD[m
+[31m-[m
+[31m-  retainerTiers: z.array(tierSchema).max(5).default([]),[m
+[31m-=======[m
+   retainerTiers: z.array(retainerTierSchema).max(5).default([]),[m
+[31m->>>>>>> b4de0957ceebb06b6f463adb6bfd1096c107a229[m
+ });[m
+ [m
+ export type CreateRetainerForm = z.infer<typeof createRetainerSchema>;[m
+ [m
+[31m-//[m
+[31m-// ----------------------------------------------------[m
+[31m-// COMPONENT[m
+[31m-// ----------------------------------------------------[m
+ export default function CompanyRetainers() {[m
+   const { toast } = useToast();[m
+ [m
+[36m@@ -175,10 +155,6 @@[m [mexport default function CompanyRetainers() {[m
+     setPlatformFilter("all");[m
+   };[m
+ [m
+[31m-  //[m
+[31m-  // ---------------------------[m
+[31m-  // FORM SETUP[m
+[31m-  // ---------------------------[m
+   const form = useForm<CreateRetainerForm>({[m
+     resolver: zodResolver(createRetainerSchema),[m
+     defaultValues: {[m
+[36m@@ -213,10 +189,6 @@[m [mexport default function CompanyRetainers() {[m
+     name: "retainerTiers",[m
+   });[m
+ [m
+[31m-  //[m
+[31m-  // ---------------------------[m
+[31m-  // MUTATION[m
+[31m-  // ---------------------------[m
+   const createMutation = useMutation({[m
+     mutationFn: async (data: CreateRetainerForm) => {[m
+       const payload = {[m
+[36m@@ -236,7 +208,6 @@[m [mexport default function CompanyRetainers() {[m
+         minimumVideoLengthSeconds: data.minimumVideoLengthSeconds[m
+           ? parseInt(data.minimumVideoLengthSeconds)[m
+           : undefined,[m
+[31m-[m
+         retainerTiers: data.retainerTiers.map((tier) => ({[m
+           ...tier,[m
+           monthlyAmount: parseFloat(tier.monthlyAmount),[m
+[36m@@ -289,10 +260,6 @@[m [mexport default function CompanyRetainers() {[m
+     }[m
+   };[m
+ [m
+[31m-  //[m
+[31m-  // ---------------------------[m
+[31m-  // LOADING STATE[m
+[31m-  // ---------------------------[m
+   if (isLoading) {[m
+     return ([m
+       <div className="space-y-6">[m
+[36m@@ -310,15 +277,10 @@[m [mexport default function CompanyRetainers() {[m
+     );[m
+   }[m
+ [m
+[31m-  //[m
+[31m-  // ---------------------------------------------------[m
+[31m-  // RENDER UI[m
+[31m-  // ---------------------------------------------------[m
+   return ([m
+     <div className="space-y-6">[m
+       <TopNavBar />[m
+ [m
+[31m-      {/* HEADER */}[m
+       <div className="flex items-center justify-between">[m
+         <div>[m
+           <h1 className="text-3xl font-bold">Monthly Retainers</h1>[m
+[36m@@ -327,7 +289,6 @@[m [mexport default function CompanyRetainers() {[m
+           </p>[m
+         </div>[m
+ [m
+[31m-        {/* CREATE BTN */}[m
+         <Dialog open={open} onOpenChange={setOpen}>[m
+           <DialogTrigger asChild>[m
+             <Button>[m
+[36m@@ -336,7 +297,6 @@[m [mexport default function CompanyRetainers() {[m
+             </Button>[m
+           </DialogTrigger>[m
+ [m
+[31m-          {/* FORM MODAL */}[m
+           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">[m
+             <DialogHeader>[m
+               <DialogTitle>Create Monthly Retainer</DialogTitle>[m
+[36m@@ -345,13 +305,11 @@[m [mexport default function CompanyRetainers() {[m
+               </DialogDescription>[m
+             </DialogHeader>[m
+ [m
+[31m-            {/* FULL FORM */}[m
+             <Form {...form}>[m
+               <form[m
+                 onSubmit={form.handleSubmit(onSubmit)}[m
+                 className="space-y-4"[m
+               >[m
+[31m-                {/* TITLE */}[m
+                 <FormField[m
+                   control={form.control}[m
+                   name="title"[m
+[36m@@ -366,7 +324,6 @@[m [mexport default function CompanyRetainers() {[m
+                   )}[m
+                 />[m
+ [m
+[31m-                {/* DESCRIPTION */}[m
+                 <FormField[m
+                   control={form.control}[m
+                   name="description"[m
+[36m@@ -381,7 +338,6 @@[m [mexport default function CompanyRetainers() {[m
+                   )}[m
+                 />[m
+ [m
+[31m-                {/* MONTHLY + VIDEOS */}[m
+                 <div className="grid sm:grid-cols-2 gap-4">[m
+                   <FormField[m
+                     control={form.control}[m
+[36m@@ -415,7 +371,6 @@[m [mexport default function CompanyRetainers() {[m
+                   />[m
+                 </div>[m
+ [m
+[31m-                {/* DURATION + PLATFORM */}[m
+                 <div className="grid sm:grid-cols-2 gap-4">[m
+                   <FormField[m
+                     control={form.control}[m
+[36m@@ -445,7 +400,6 @@[m [mexport default function CompanyRetainers() {[m
+                     )}[m
+                   />[m
+ [m
+[31m-                  {/* PLATFORM */}[m
+                   <FormField[m
+                     control={form.control}[m
+                     name="requiredPlatform"[m
+[36m@@ -475,7 +429,6 @@[m [mexport default function CompanyRetainers() {[m
+                   />[m
+                 </div>[m
+ [m
+[31m-                {/* OPTIONAL FIELDS */}[m
+                 <FormField[m
+                   control={form.control}[m
+                   name="platformAccountDetails"[m
+[36m@@ -518,79 +471,6 @@[m [mexport default function CompanyRetainers() {[m
+                   )}[m
+                 />[m
+ [m
+[31m-                {/* VIDEO LENGTH + SCHEDULE */}[m
+[31m-                <div className="grid sm:grid-cols-2 gap-4">[m
+[31m-                  <FormField[m
+[31m-                    control={form.control}[m
+[31m-                    name="minimumVideoLengthSeconds"[m
+[31m-                    render={({ field }) => ([m
+[31m-                      <FormItem>[m
+[31m-                        <FormLabel>Minimum Video Length (seconds)</FormLabel>[m
+[31m-                        <FormControl>[m
+[31m-                          <Input type="number" {...field} />[m
+[31m-                        </FormControl>[m
+[31m-                        <FormMessage />[m
+[31m-                      </FormItem>[m
+[31m-                    )}[m
+[31m-                  />[m
+[31m-[m
+[31m-                  <FormField[m
+[31m-                    control={form.control}[m
+[31m-                    name="postingSchedule"[m
+[31m-                    render={({ field }) => ([m
+[31m-                      <FormItem>[m
+[31m-                        <FormLabel>Posting Schedule</FormLabel>[m
+[31m-                        <FormControl>[m
+[31m-                          <Input placeholder="1 video per weekday" {...field} />[m
+[31m-                        </FormControl>[m
+[31m-                        <FormMessage />[m
+[31m-                      </FormItem>[m
+[31m-                    )}[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-[m
+[31m-                {/* APPROVAL + EXCLUSIVITY */}[m
+[31m-                <div className="grid sm:grid-cols-2 gap-4">[m
+[31m-                  <FormField[m
+[31m-                    control={form.control}[m
+[31m-                    name="contentApprovalRequired"[m
+[31m-                    render={({ field }) => ([m
+[31m-                      <FormItem className="flex justify-between items-center border rounded-md p-4">[m
+[31m-                        <div>[m
+[31m-                          <FormLabel>Content Approval</FormLabel>[m
+[31m-                          <FormDescription>[m
+[31m-                            Review videos before they go live[m
+[31m-                          </FormDescription>[m
+[31m-                        </div>[m
+[31m-[m
+[31m-                        <FormControl>[m
+[31m-                          <Switch checked={field.value} onCheckedChange={field.onChange}/>[m
+[31m-                        </FormControl>[m
+[31m-                      </FormItem>[m
+[31m-                    )}[m
+[31m-                  />[m
+[31m-[m
+[31m-                  <FormField[m
+[31m-                    control={form.control}[m
+[31m-                    name="exclusivityRequired"[m
+[31m-                    render={({ field }) => ([m
+[31m-                      <FormItem className="flex justify-between items-center border rounded-md p-4">[m
+[31m-                        <div>[m
+[31m-                          <FormLabel>Exclusivity</FormLabel>[m
+[31m-                          <FormDescription>[m
+[31m-                            Prevent creators from working with competitors[m
+[31m-                          </FormDescription>[m
+[31m-                        </div>[m
+[31m-[m
+[31m-                        <FormControl>[m
+[31m-                          <Switch checked={field.value} onCheckedChange={field.onChange}/>[m
+[31m-                        </FormControl>[m
+[31m-                      </FormItem>[m
+[31m-                    )}[m
+[31m-                  />[m
+[31m-                </div>[m
+[31m-[m
+[31m-                {/* MIN FOLLOWERS + NICHES */}[m
+                 <div className="grid sm:grid-cols-2 gap-4">[m
+                   <FormField[m
+                     control={form.control}[m
+[36m@@ -711,7 +591,6 @@[m [mexport default function CompanyRetainers() {[m
+                   />[m
+                 </div>[m
+ [m
+[31m-                {/* TIERS */}[m
+                 <div className="border rounded-lg p-4 space-y-3 bg-muted/30">[m
+                   <div className="flex justify-between items-center">[m
+                     <div>[m
+[36m@@ -742,7 +621,6 @@[m [mexport default function CompanyRetainers() {[m
+                     </Button>[m
+                   </div>[m
+ [m
+[31m-                  {/* TABLE HEADERS */}[m
+                   <div className="grid md:grid-cols-5 gap-3 text-xs uppercase text-muted-foreground font-semibold px-1">[m
+                     <span>Tier name</span>[m
+                     <span>Monthly amount</span>[m
+[36m@@ -751,7 +629,6 @@[m [mexport default function CompanyRetainers() {[m
+                     <span className="text-right">$ / video</span>[m
+                   </div>[m
+ [m
+[31m-                  {/* TIER ROWS */}[m
+                   {fields.map((field, index) => {[m
+                     const monthly = Number([m
+                       form.watch(`retainerTiers.${index}.monthlyAmount`) || 0[m
+[36m@@ -769,14 +646,12 @@[m [mexport default function CompanyRetainers() {[m
+                         key={field.id}[m
+                         className="grid md:grid-cols-5 gap-3 items-center border rounded-md p-3"[m
+                       >[m
+[31m-                        {/* NAME */}[m
+                         <Input[m
+                           {...form.register([m
+                             `retainerTiers.${index}.name`[m
+                           )}[m
+                         />[m
+ [m
+[31m-                        {/* MONTHLY AMOUNT */}[m
+                         <Input[m
+                           type="number"[m
+                           {...form.register([m
+[36m@@ -784,7 +659,6 @@[m [mexport default function CompanyRetainers() {[m
+                           )}[m
+                         />[m
+ [m
+[31m-                        {/* VIDEOS */}[m
+                         <Input[m
+                           type="number"[m
+                           {...form.register([m
+[36m@@ -792,7 +666,6 @@[m [mexport default function CompanyRetainers() {[m
+                           )}[m
+                         />[m
+ [m
+[31m-                        {/* DURATION MONTHS */}[m
+                         <Input[m
+                           type="number"[m
+                           {...form.register([m
+[36m@@ -800,7 +673,6 @@[m [mexport default function CompanyRetainers() {[m
+                           )}[m
+                         />[m
+ [m
+[31m-                        {/* PRICE PER VIDEO */}[m
+                         <div className="flex items-center justify-end gap-2">[m
+                           <div className="bg-primary/5 text-primary px-3 py-2 rounded-md text-sm font-semibold">[m
+                             ${perVideo}/video[m
+[36m@@ -821,7 +693,6 @@[m [mexport default function CompanyRetainers() {[m
+                   })}[m
+                 </div>[m
+ [m
+[31m-                {/* ACTION BUTTONS */}[m
+                 <DialogFooter>[m
+                   <Button[m
+                     type="button"[m
+[36m@@ -841,7 +712,6 @@[m [mexport default function CompanyRetainers() {[m
+         </Dialog>[m
+       </div>[m
+ [m
+[31m-      {/* FILTERS */}[m
+       <Card>[m
+         <CardContent className="pt-6 space-y-4">[m
+           <div className="flex flex-col sm:flex-row sm:items-center gap-3">[m
+[36m@@ -874,7 +744,6 @@[m [mexport default function CompanyRetainers() {[m
+           </div>[m
+ [m
+           <div className="grid gap-4 md:grid-cols-3">[m
+[31m-            {/* SEARCH */}[m
+             <div className="space-y-2">[m
+               <label className="text-sm font-medium">Search</label>[m
+               <Input[m
+[36m@@ -884,7 +753,6 @@[m [mexport default function CompanyRetainers() {[m
+               />[m
+             </div>[m
+ [m
+[31m-            {/* STATUS FILTER */}[m
+             <div className="space-y-2">[m
+               <label className="text-sm font-medium">Status</label>[m
+               <Select value={statusFilter} onValueChange={setStatusFilter}>[m
+[36m@@ -903,7 +771,6 @@[m [mexport default function CompanyRetainers() {[m
+               </Select>[m
+             </div>[m
+ [m
+[31m-            {/* PLATFORM FILTER */}[m
+             <div className="space-y-2">[m
+               <label className="text-sm font-medium">Platform</label>[m
+               <Select[m
+[36m@@ -928,7 +795,6 @@[m [mexport default function CompanyRetainers() {[m
+         </CardContent>[m
+       </Card>[m
+ [m
+[31m-      {/* EMPTY STATE / RESULTS */}[m
+       {contractsList.length === 0 ? ([m
+         <Card>[m
+           <CardContent className="p-12 text-center">[m
+[36m@@ -953,7 +819,6 @@[m [mexport default function CompanyRetainers() {[m
+           </CardContent>[m
+         </Card>[m
+       ) : ([m
+[31m-        /* CONTRACT LIST */[m
+         <div className="grid gap-6">[m
+           {filteredContracts.map((contract) => ([m
+             <Card[m
+[36m@@ -1049,7 +914,6 @@[m [mexport default function CompanyRetainers() {[m
+                   </div>[m
+                 </div>[m
+ [m
+[31m-                {/* TIERS */}[m
+                 {Array.isArray(contract.retainerTiers) &&[m
+                   contract.retainerTiers.length > 0 && ([m
+                     <div className="mt-4 pt-4 border-t space-y-3">[m
+[36m@@ -1077,7 +941,6 @@[m [mexport default function CompanyRetainers() {[m
+                     </div>[m
+                   )}[m
+ [m
+[31m-                {/* APPLICATION COUNT */}[m
+                 {contract.applicationCount > 0 && ([m
+                   <div className="mt-4 pt-4 border-t">[m
+                     <p className="text-muted-foreground text-sm">[m
+[36m@@ -1093,4 +956,4 @@[m [mexport default function CompanyRetainers() {[m
+       )}[m
+     </div>[m
+   );[m
+[31m-}[m
+[32m+[m[32m}[m
+\ No newline at end of file[m
