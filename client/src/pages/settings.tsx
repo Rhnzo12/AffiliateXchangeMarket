@@ -84,6 +84,8 @@ export default function Settings() {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
 
+  const requiresPasswordForEmailChange = (!user?.googleId || Boolean(user?.password));
+
   // Dialog state for video platform warning
   const [showVideoPlatformDialog, setShowVideoPlatformDialog] = useState(false);
 
@@ -1799,7 +1801,7 @@ export default function Settings() {
                 />
               </div>
 
-              {(!user?.googleId || user?.password) && (
+              {requiresPasswordForEmailChange && (
                 <div className="space-y-2">
                   <Label htmlFor="email-change-password">Current Password *</Label>
                   <Input
@@ -1823,7 +1825,11 @@ export default function Settings() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleVerifyEmailChange}
-                    disabled={isVerifyingEmail || !newEmail || ((!user?.googleId || user?.password) && !emailChangePassword)}
+                    disabled={
+                      isVerifyingEmail ||
+                      !newEmail ||
+                      (requiresPasswordForEmailChange && !emailChangePassword)
+                    }
                   >
                     {isVerifyingEmail ? "Verifying..." : "Verify & Enable Change"}
                   </Button>
