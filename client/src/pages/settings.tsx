@@ -76,6 +76,14 @@ export default function Settings() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
+  // Email change states
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [emailChangePassword, setEmailChangePassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+
   // Dialog state for video platform warning
   const [showVideoPlatformDialog, setShowVideoPlatformDialog] = useState(false);
 
@@ -87,9 +95,9 @@ export default function Settings() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Privacy & Data states
+  const [isExportingData, setIsExportingData] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
-  const [isExportingData, setIsExportingData] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [showActiveItemsDialog, setShowActiveItemsDialog] = useState(false);
   const [activeItemsDetails, setActiveItemsDetails] = useState<any>(null);
@@ -596,6 +604,153 @@ export default function Settings() {
       });
     } finally {
       setIsExportingData(false);
+    }
+  };
+
+  // Handle email change verification with password
+  const handleVerifyEmailChange = async () => {
+    try {
+      setIsVerifyingEmail(true);
+
+      // Basic validation
+      if (!newEmail) {
+        toast({
+          title: "Error",
+          description: "Please enter a new email address.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid email address.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // For OAuth users, verify directly without password
+      if (user?.googleId && !user?.password) {
+        const response = await fetch("/api/auth/verify-email-change", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            newEmail: newEmail.trim(),
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to verify email change");
+        }
+
+        setIsEmailVerified(true);
+        toast({
+          title: "Verified",
+          description: "You can now update your email address.",
+        });
+        return;
+      }
+
+      // For local auth users, require password
+      if (!emailChangePassword) {
+        toast({
+          title: "Error",
+          description: "Password is required to change your email.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const response = await fetch("/api/auth/verify-email-change", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          password: emailChangePassword,
+          newEmail: newEmail.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to verify email change");
+      }
+
+      setIsEmailVerified(true);
+      toast({
+        title: "Verified",
+        description: "Password verified. You can now update your email address.",
+      });
+    } catch (error: any) {
+      console.error("Email verification error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to verify. Please check your password.",
+        variant: "destructive",
+      });
+      setIsEmailVerified(false);
+    } finally {
+      setIsVerifyingEmail(false);
+    }
+  };
+
+  // Handle email update after verification
+  const handleUpdateEmail = async () => {
+    try {
+      setIsUpdatingEmail(true);
+
+      const response = await fetch("/api/auth/email", {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          newEmail: newEmail.trim(),
+          password: emailChangePassword || undefined,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to update email");
+      }
+
+      toast({
+        title: "Success",
+        description: "Email updated successfully. Please verify your new email address.",
+      });
+
+      // Reset states
+      setShowEmailChange(false);
+      setEmailChangePassword("");
+      setNewEmail("");
+      setIsEmailVerified(false);
+
+      // Refresh user data
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    } catch (error: any) {
+      console.error("Email update error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update email. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingEmail(false);
     }
   };
 
@@ -1584,6 +1739,142 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Email Change Section */}
+      <Card className="border-card-border">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Change Email Address
+          </CardTitle>
+          <CardDescription>
+            Update your account email address. {user?.googleId && !user?.password ? "As an OAuth user, you can change your email directly." : "You'll need to verify your password to change your email."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!showEmailChange ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-medium">Current Email</div>
+                <div className="text-sm text-muted-foreground">{user?.email}</div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowEmailChange(true)}
+              >
+                Change Email
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Email Change</AlertTitle>
+                <AlertDescription>
+                  Changing your email will require you to verify the new email address. You'll receive verification emails at both your old and new addresses.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-2">
+                <Label htmlFor="current-email-display">Current Email</Label>
+                <Input
+                  id="current-email-display"
+                  type="email"
+                  value={user?.email || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="new-email">New Email Address *</Label>
+                <Input
+                  id="new-email"
+                  type="email"
+                  placeholder="newemail@example.com"
+                  value={newEmail}
+                  onChange={(e) => {
+                    setNewEmail(e.target.value);
+                    setIsEmailVerified(false); // Reset verification when email changes
+                  }}
+                  disabled={isEmailVerified}
+                />
+              </div>
+
+              {(!user?.googleId || user?.password) && (
+                <div className="space-y-2">
+                  <Label htmlFor="email-change-password">Current Password *</Label>
+                  <Input
+                    id="email-change-password"
+                    type="password"
+                    placeholder="Enter your current password"
+                    value={emailChangePassword}
+                    onChange={(e) => {
+                      setEmailChangePassword(e.target.value);
+                      setIsEmailVerified(false); // Reset verification when password changes
+                    }}
+                    disabled={isEmailVerified}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Your password is required to verify this change
+                  </p>
+                </div>
+              )}
+
+              {!isEmailVerified ? (
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleVerifyEmailChange}
+                    disabled={isVerifyingEmail || !newEmail || ((!user?.googleId || user?.password) && !emailChangePassword)}
+                  >
+                    {isVerifyingEmail ? "Verifying..." : "Verify & Enable Change"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowEmailChange(false);
+                      setEmailChangePassword("");
+                      setNewEmail("");
+                      setIsEmailVerified(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Alert className="border-green-200 bg-green-50 dark:bg-green-950/20">
+                    <Shield className="h-4 w-4 text-green-600" />
+                    <AlertTitle className="text-green-900 dark:text-green-100">Verified</AlertTitle>
+                    <AlertDescription className="text-green-800 dark:text-green-200">
+                      You can now update your email address.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleUpdateEmail}
+                      disabled={isUpdatingEmail}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {isUpdatingEmail ? "Updating..." : "Update Email Address"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowEmailChange(false);
+                        setEmailChangePassword("");
+                        setNewEmail("");
+                        setIsEmailVerified(false);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {!user?.googleId && (
         <Card className="border-card-border">
           <CardHeader>
@@ -1674,26 +1965,31 @@ export default function Settings() {
               </Button>
             </div>
 
-            <Separator />
+            {/* Delete Account - Only for creators and companies, not admins */}
+            {user?.role !== 'admin' && (
+              <>
+                <Separator />
 
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="font-medium text-destructive">Delete Account</div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  Permanently delete your account and all associated data. This action cannot
-                  be undone.
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="font-medium text-destructive">Delete Account</div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Permanently delete your account and all associated data. This action cannot
+                      be undone.
+                    </div>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={isDeletingAccount}
+                    className="flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Account
+                  </Button>
                 </div>
-              </div>
-              <Button
-                variant="destructive"
-                onClick={() => setShowDeleteDialog(true)}
-                disabled={isDeletingAccount}
-                className="flex-shrink-0"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Account
-              </Button>
-            </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1719,67 +2015,6 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Delete Account Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Delete Account - Are you absolutely sure?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3">
-              <p>
-                This action <strong>cannot be undone</strong>. This will permanently delete
-                your account and remove all your data from our servers.
-              </p>
-              <div className="bg-muted p-3 rounded-md text-sm">
-                <p className="font-semibold mb-2">The following data will be deleted:</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>Personal information (email, name, profile)</li>
-                  <li>Payment information and settings</li>
-                  <li>Profile images and uploaded content</li>
-                  <li>Applications and favorites</li>
-                  <li>Notifications and preferences</li>
-                </ul>
-              </div>
-              <div className="bg-muted p-3 rounded-md text-sm">
-                <p className="font-semibold mb-2">The following will be kept (anonymized):</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>Reviews (content kept, author anonymized)</li>
-                  <li>Messages (content kept, sender anonymized)</li>
-                </ul>
-              </div>
-              {!user?.googleId && (
-                <div className="space-y-2 pt-2">
-                  <Label htmlFor="delete-password">
-                    Enter your password to confirm deletion:
-                  </Label>
-                  <Input
-                    id="delete-password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={deletePassword}
-                    onChange={(e) => setDeletePassword(e.target.value)}
-                  />
-                </div>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeletePassword("")}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteAccount}
-              disabled={isDeletingAccount}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingAccount ? "Deleting..." : "Yes, delete my account"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Video Platform Requirement Dialog */}
       <AlertDialog open={showVideoPlatformDialog} onOpenChange={setShowVideoPlatformDialog}>
@@ -1819,7 +2054,71 @@ export default function Settings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Active Items Warning Dialog */}
+      {/* Delete Account Confirmation Dialog - Only for creators and companies */}
+      {user?.role !== 'admin' && (
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                Delete Account - Are you absolutely sure?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>
+                  This action <strong>cannot be undone</strong>. This will permanently delete
+                  your account and remove all your data from our servers.
+                </p>
+                <div className="bg-muted p-3 rounded-md text-sm">
+                  <p className="font-semibold mb-2">The following data will be deleted:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Personal information (email, name, profile)</li>
+                    <li>Payment information and settings</li>
+                    <li>Profile images and uploaded content</li>
+                    <li>Applications and favorites</li>
+                    <li>Notifications and preferences</li>
+                  </ul>
+                </div>
+                <div className="bg-muted p-3 rounded-md text-sm">
+                  <p className="font-semibold mb-2">The following will be kept (anonymized):</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Reviews (content kept, author anonymized)</li>
+                    <li>Messages (content kept, sender anonymized)</li>
+                  </ul>
+                </div>
+                {!user?.googleId && (
+                  <div className="space-y-2 pt-2">
+                    <Label htmlFor="delete-password">
+                      Enter your password to confirm deletion:
+                    </Label>
+                    <Input
+                      id="delete-password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                    />
+                  </div>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeletePassword("")}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteAccount}
+                disabled={isDeletingAccount}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeletingAccount ? "Deleting..." : "Yes, delete my account"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      {/* Active Items Warning Dialog - Only for creators and companies */}
+      {user?.role !== 'admin' && (
         <AlertDialog open={showActiveItemsDialog} onOpenChange={setShowActiveItemsDialog}>
           <AlertDialogContent className="max-w-2xl">
             <AlertDialogHeader>
@@ -1893,7 +2192,6 @@ export default function Settings() {
                       </div>
                     )}
 
-                    {/* ADD PENDING DELIVERABLES HERE - INSIDE the activeItemsDetails check */}
                     {activeItemsDetails.details.pendingDeliverables > 0 && (
                       <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                         <p className="font-semibold text-amber-900 dark:text-amber-100 mb-2">
@@ -1921,6 +2219,7 @@ export default function Settings() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      )}
       </div>
     </div>
   );
