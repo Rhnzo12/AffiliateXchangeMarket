@@ -13,6 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { checkClickFraud, logFraudDetection } from "./fraudDetection";
 import { NotificationService } from "./notifications/notificationService";
+import bcrypt from "bcrypt";
 import { PriorityListingScheduler } from "./priorityListingScheduler";
 import * as QRCode from "qrcode";
 import {
@@ -68,6 +69,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   }, 60000); // Check every minute
+
+  // Email change verification endpoint - validates password and checks email availability
+  app.post("/api/auth/verify-email-change", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = req.user as any;
+      const { password, newEmail } = req.body;
+
+      if (!newEmail) {
+        return res.status(400).json({ error: "New email is required" });
+      }
+
+      const normalizedCurrentEmail = (user.email || "").toLowerCase();
+      if (newEmail.toLowerCase() === normalizedCurrentEmail) {
+        return res.status(400).json({ error: "New email must be different from current email" });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      const existingUser = await storage.getUserByEmail(newEmail);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ error: "Email is already registered to another account" });
+      }
+
+      if (user.googleId && !user.password) {
+        return res.json({
+          success: true,
+          message: "Email change verified for OAuth account",
+          canChange: true,
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Password is required for email change" });
+      }
+
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser || !currentUser.password) {
+        return res.status(400).json({ error: "Account authentication error" });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, currentUser.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
+
+      res.json({
+        success: true,
+        message: "Password verified successfully",
+        canChange: true,
+      });
+    } catch (error: any) {
+      console.error("Email change verification error:", error);
+      res.status(500).json({ error: error.message || "Failed to verify email change" });
+    }
+  });
+
+  // Update email endpoint - changes the email after verification
+  app.put("/api/auth/email", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = req.user as any;
+      const { newEmail, password } = req.body;
+
+      if (!newEmail) {
+        return res.status(400).json({ error: "New email is required" });
+      }
+
+      const normalizedCurrentEmail = (user.email || "").toLowerCase();
+      if (newEmail.toLowerCase() === normalizedCurrentEmail) {
+        return res.status(400).json({ error: "New email must be different from current email" });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        return res.status(400).json({ error: "Invalid email format" });
+      }
+
+      const existingUser = await storage.getUserByEmail(newEmail);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ error: "Email is already registered to another account" });
+      }
+
+      const sendEmailChangeNotifications = async (oldEmail: string | null | undefined) => {
+        if (!oldEmail) {
+          return;
+        }
+
+        try {
+          await notificationService.sendEmailNotification(
+            oldEmail,
+            "system_announcement",
+            {
+              userName: user.firstName || user.username,
+              announcementTitle: "Email Address Changed",
+              announcementMessage: `Your account email has been changed from ${oldEmail} to ${newEmail}. If you did not make this change, please contact support immediately.`,
+            }
+          );
+
+          await notificationService.sendEmailNotification(
+            newEmail,
+            "system_announcement",
+            {
+              userName: user.firstName || user.username,
+              announcementTitle: "Welcome to Your New Email",
+              announcementMessage: `Your account email has been successfully updated to ${newEmail}. Please verify your new email address.`,
+            }
+          );
+        } catch (emailError) {
+          console.error("Failed to send email change notification:", emailError);
+        }
+      };
+
+      if (user.googleId && !user.password) {
+        const oldEmail = user.email;
+        await storage.updateUser(userId, {
+          email: newEmail,
+          emailVerified: false,
+        });
+
+        await sendEmailChangeNotifications(oldEmail);
+
+        if (req.user) {
+          (req.user as any).email = newEmail;
+          (req.user as any).emailVerified = false;
+        }
+
+        return res.json({
+          success: true,
+          message: "Email updated successfully",
+          requiresVerification: true,
+        });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Password is required for email change" });
+      }
+
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser || !currentUser.password) {
+        return res.status(400).json({ error: "Account authentication error" });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, currentUser.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
+
+      const oldEmail = currentUser.email || user.email;
+      await storage.updateUser(userId, {
+        email: newEmail,
+        emailVerified: false,
+      });
+
+      await sendEmailChangeNotifications(oldEmail);
+
+      if (req.user) {
+        (req.user as any).email = newEmail;
+        (req.user as any).emailVerified = false;
+      }
+
+      res.json({
+        success: true,
+        message: "Email updated successfully. Please verify your new email address.",
+        requiresVerification: true,
+      });
+    } catch (error: any) {
+      console.error("Email update error:", error);
+      res.status(500).json({ error: error.message || "Failed to update email" });
+    }
+  });
 
   // Profile routes
   app.get("/api/profile", requireAuth, async (req, res) => {
