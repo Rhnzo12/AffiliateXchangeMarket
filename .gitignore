@@ -15,6 +15,10 @@ keys/
 *-key.json
 gcs-*.json
 
+# Google Cloud credentials
+config/*.json
+*-tool-development-478707-2c70538ff11c.json
+
 # Database exports
 database-export-*.json
 database-dump.sql
