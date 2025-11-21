@@ -24,6 +24,7 @@ import { Link } from "wouter";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function CompanyRetainerDetail() {
   const [, params] = useRoute("/company/retainers/:id");
@@ -37,6 +38,7 @@ export default function CompanyRetainerDetail() {
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | 'request_revision' | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [showRejected, setShowRejected] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   // Use the correct API endpoint - /api/retainer-contracts/:id (not /api/company/retainer-contracts/:id)
   const { data: contract, isLoading, error } = useQuery<any>({
@@ -72,10 +74,9 @@ export default function CompanyRetainerDetail() {
       setSelectedApplication(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to approve application",
-        variant: "destructive",
+        message: error.message || "Failed to approve application",
       });
     },
   });
@@ -96,10 +97,9 @@ export default function CompanyRetainerDetail() {
       setSelectedApplication(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to reject application",
-        variant: "destructive",
+        message: error.message || "Failed to reject application",
       });
     },
   });
@@ -133,10 +133,9 @@ export default function CompanyRetainerDetail() {
       setReviewAction(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to approve deliverable",
-        variant: "destructive",
+        message: error.message || "Failed to approve deliverable",
       });
     },
   });
@@ -159,10 +158,9 @@ export default function CompanyRetainerDetail() {
       setReviewAction(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to reject deliverable",
-        variant: "destructive",
+        message: error.message || "Failed to reject deliverable",
       });
     },
   });
@@ -185,10 +183,9 @@ export default function CompanyRetainerDetail() {
       setReviewAction(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to request revision",
-        variant: "destructive",
+        message: error.message || "Failed to request revision",
       });
     },
   });
@@ -211,20 +208,18 @@ export default function CompanyRetainerDetail() {
       approveDeliverableMutation.mutate(data);
     } else if (reviewAction === 'reject') {
       if (!reviewNotes.trim()) {
-        toast({
+        setErrorDialog({
           title: "Review Notes Required",
-          description: "Please provide a reason for rejection",
-          variant: "destructive",
+          message: "Please provide a reason for rejection",
         });
         return;
       }
       rejectDeliverableMutation.mutate(data as { deliverableId: string; reviewNotes: string });
     } else if (reviewAction === 'request_revision') {
       if (!reviewNotes.trim()) {
-        toast({
+        setErrorDialog({
           title: "Review Notes Required",
-          description: "Please provide revision instructions",
-          variant: "destructive",
+          message: "Please provide revision instructions",
         });
         return;
       }
@@ -601,41 +596,43 @@ export default function CompanyRetainerDetail() {
                           </div>
 
                           {/* Submitter Info Card */}
-                          <Card className="bg-muted/30 border-muted">
-                            <CardContent className="p-4">
-                              <p className="text-xs font-medium text-muted-foreground uppercase mb-3">
-                                Submitted By
-                              </p>
-                              <div className="flex items-center gap-3">
-                                <Avatar className="h-12 w-12 border-2 border-background">
-                                  <AvatarFallback className="text-base font-semibold">
-                                    {contract.assignedCreator?.firstName?.[0]}
-                                    {contract.assignedCreator?.lastName?.[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-semibold truncate">
-                                    {contract.assignedCreator?.email}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground truncate">
-                                    @{contract.assignedCreator?.username}
-                                  </p>
+                          {contract.assignedCreator && (
+                            <Card className="bg-muted/30 border-muted">
+                              <CardContent className="p-4">
+                                <p className="text-xs font-medium text-muted-foreground uppercase mb-3">
+                                  Submitted By
+                                </p>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-12 w-12 border-2 border-background">
+                                    <AvatarFallback className="text-base font-semibold">
+                                      {contract.assignedCreator.firstName?.[0]}
+                                      {contract.assignedCreator.lastName?.[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold truncate">
+                                      {contract.assignedCreator.email}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground truncate">
+                                      @{contract.assignedCreator.username}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
 
-                              {/* Submission Time */}
-                              {deliverable.submittedAt && (
-                                <div className="mt-3 pt-3 border-t border-border/50">
-                                  <p className="text-xs text-muted-foreground">
-                                    📅 {format(new Date(deliverable.submittedAt), "MMM d, yyyy")}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    🕐 {format(new Date(deliverable.submittedAt), "h:mm a")}
-                                  </p>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
+                                {/* Submission Time */}
+                                {deliverable.submittedAt && (
+                                  <div className="mt-3 pt-3 border-t border-border/50">
+                                    <p className="text-xs text-muted-foreground">
+                                      📅 {format(new Date(deliverable.submittedAt), "MMM d, yyyy")}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      🕐 {format(new Date(deliverable.submittedAt), "h:mm a")}
+                                    </p>
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          )}
                         </div>
 
                         {/* Right Column: Details & Actions */}
@@ -876,6 +873,14 @@ export default function CompanyRetainerDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

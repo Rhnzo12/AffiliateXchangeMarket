@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   TrendingUp,
   Plus,
@@ -151,19 +152,19 @@ export default function CompanyOffers() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [commissionFilter, setCommissionFilter] = useState("all");
   const [nicheFilter, setNicheFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ title: string; description: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: offers = [], isLoading: loadingOffers } = useQuery<any[]>({
     queryKey: ["/api/company/offers"],
@@ -230,10 +231,9 @@ export default function CompanyOffers() {
       setOfferToDelete(null);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
         description: error.message || "Failed to delete offer",
-        variant: "destructive",
       });
     },
   });
@@ -643,6 +643,14 @@ export default function CompanyOffers() {
           />
         )}
       </div>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        description={errorDialog?.description || "An error occurred"}
+      />
     </div>
   );
 }

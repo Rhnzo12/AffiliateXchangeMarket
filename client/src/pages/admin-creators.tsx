@@ -19,6 +19,7 @@ import {
 } from "../components/ui/dialog";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function AdminCreators() {
   const { toast } = useToast();
@@ -26,19 +27,24 @@ export default function AdminCreators() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCreator, setSelectedCreator] = useState<any>(null);
   const [actionDialog, setActionDialog] = useState<{ open: boolean; action: 'suspend' | 'ban' | 'unsuspend' | null }>({ open: false, action: null });
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string; errorDetails?: string }>({
+    open: false,
+    title: "",
+    description: ""
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: creators = [], isLoading: loadingCreators } = useQuery<any[]>({
     queryKey: ["/api/admin/creators"],
@@ -59,10 +65,11 @@ export default function AdminCreators() {
       setSelectedCreator(null);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message || "Failed to suspend creator",
-        variant: "destructive",
+        description: "Failed to suspend creator",
+        errorDetails: error.message,
       });
     },
   });
@@ -81,10 +88,11 @@ export default function AdminCreators() {
       setSelectedCreator(null);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message || "Failed to unsuspend creator",
-        variant: "destructive",
+        description: "Failed to unsuspend creator",
+        errorDetails: error.message,
       });
     },
   });
@@ -103,10 +111,11 @@ export default function AdminCreators() {
       setSelectedCreator(null);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message || "Failed to ban creator",
-        variant: "destructive",
+        description: "Failed to ban creator",
+        errorDetails: error.message,
       });
     },
   });
@@ -382,6 +391,16 @@ export default function AdminCreators() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

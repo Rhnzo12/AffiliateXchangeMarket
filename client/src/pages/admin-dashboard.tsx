@@ -10,24 +10,34 @@ import { Link } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton } from "../components/skeletons";
 import { apiRequest } from "../lib/queryClient";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function AdminDashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/admin/stats"],
@@ -48,10 +58,10 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread/count"] });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to send notifications",
-        variant: "destructive",
       });
     },
   });
@@ -234,6 +244,14 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

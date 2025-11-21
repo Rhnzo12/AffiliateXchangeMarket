@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function AdminPaymentDisputes() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -41,6 +42,7 @@ export default function AdminPaymentDisputes() {
   const [resolution, setResolution] = useState<'refund' | 'complete' | 'cancel'>('complete');
   const [notes, setNotes] = useState("");
   const [showDialog, setShowDialog] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   const { data: disputedPayments = [], isLoading: paymentsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/payments/disputed"],
@@ -75,10 +77,9 @@ export default function AdminPaymentDisputes() {
       setResolution('complete');
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message,
-        variant: "destructive",
+        message: error.message,
       });
     },
   });
@@ -347,6 +348,13 @@ export default function AdminPaymentDisputes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An unexpected error occurred"}
+      />
     </div>
   );
 }

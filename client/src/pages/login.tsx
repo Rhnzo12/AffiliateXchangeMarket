@@ -9,6 +9,7 @@ import { Input } from "../components/ui/input";
 import { useToast } from "../hooks/use-toast";
 import { Zap, Mail, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -21,6 +22,12 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
+  const [errorDialog, setErrorDialog] = useState({
+    open: false,
+    title: "Error",
+    description: "An error occurred",
+    errorDetails: "",
+  });
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -65,10 +72,11 @@ export default function Login() {
         }
       }, 1000);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Login Failed",
+        description: "We couldn't sign you in. Please check your credentials and try again.",
+        errorDetails: error.message,
       });
     } finally {
       setIsLoading(false);
@@ -184,6 +192,16 @@ export default function Login() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Generic Error Dialog */}
+        <GenericErrorDialog
+          open={errorDialog.open}
+          onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+          title={errorDialog.title}
+          description={errorDialog.description}
+          errorDetails={errorDialog.errorDetails}
+          variant="error"
+        />
       </div>
     </div>
   );

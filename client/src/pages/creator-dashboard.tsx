@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -26,19 +27,19 @@ const formatCommission = (offer: any) => {
 export default function CreatorDashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
+        message: "You are logged out. Logging in again...",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/creator/stats"],
@@ -251,6 +252,13 @@ export default function CreatorDashboard() {
           )}
         </CardContent>
       </Card>
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title}
+        message={errorDialog?.message}
+      />
     </div>
   );
 }

@@ -44,6 +44,7 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { DetailPageSkeleton } from "../components/skeletons";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 // Helper function to format commission display
 const formatCommission = (offer: any) => {
@@ -146,6 +147,7 @@ export default function CompanyOfferDetail() {
   const [creatorCredit, setCreatorCredit] = useState("");
   const [originalPlatform, setOriginalPlatform] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: "Error", description: "An error occurred", errorDetails: "" });
 
   // Refs for sections
   const overviewRef = useRef<HTMLDivElement>(null);
@@ -155,16 +157,17 @@ export default function CompanyOfferDetail() {
   // Auth check
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Authentication Required",
         description: "Please log in to view offer details.",
-        variant: "destructive",
+        errorDetails: "You must be logged in to access this page.",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // Scroll spy with IntersectionObserver
   useEffect(() => {
@@ -291,10 +294,11 @@ export default function CompanyOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to add video",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Video Addition Error",
+        description: "Failed to add the video to your offer. Please try again.",
+        errorDetails: error.message || "Failed to add video",
       });
     },
   });
@@ -311,10 +315,11 @@ export default function CompanyOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete video",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Deletion Error",
+        description: "Failed to delete the video. Please try again.",
+        errorDetails: error.message || "Failed to delete video",
       });
     },
   });
@@ -327,19 +332,21 @@ export default function CompanyOfferDetail() {
     const isVideo = videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isVideo) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Invalid File Type",
         description: "Please upload a video file (MP4, MOV, AVI, WebM, etc.)",
-        variant: "destructive",
+        errorDetails: `File type not supported: ${file.name}`,
       });
       return;
     }
 
     if (file.size > 524288000) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "File Too Large",
-        description: "Video file must be less than 500MB",
-        variant: "destructive",
+        description: "Video file must be less than 500MB. Please compress your video or choose a smaller file.",
+        errorDetails: `File size: ${(file.size / (1024 * 1024)).toFixed(2)} MB (limit: 500 MB)`,
       });
       return;
     }
@@ -364,10 +371,11 @@ export default function CompanyOfferDetail() {
           companyId: offer?.companyId || 'missing',
           offerId: offerId || 'missing',
         });
-        toast({
+        setErrorDialog({
+          open: true,
           title: "Upload Error",
           description: "Unable to upload video. Please refresh the page and try again.",
-          variant: "destructive",
+          errorDetails: `Missing required information: ${!offer?.companyId ? 'Company ID' : ''} ${!offerId ? 'Offer ID' : ''}`,
         });
         setIsUploading(false);
         return;
@@ -481,29 +489,32 @@ export default function CompanyOfferDetail() {
       }
     } catch (error) {
       setIsUploading(false);
-      toast({
-        title: "Upload Failed",
-        description: "Failed to upload video. Please try again.",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Video Upload Error",
+        description: "Failed to upload video. Please check your internet connection and try again.",
+        errorDetails: error instanceof Error ? error.message : "Upload failed",
       });
     }
   }, [toast, offer, offerId]); // Include offer and offerId so callback sees updated values
 
   const handleSubmitVideo = useCallback(() => {
     if (!videoUrl) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Video Required",
-        description: "Please upload a video file before submitting",
-        variant: "destructive",
+        description: "Please upload a video file before submitting.",
+        errorDetails: "No video file has been uploaded yet.",
       });
       return;
     }
 
     if (!videoTitle.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Title Required",
-        description: "Please provide a title for your video",
-        variant: "destructive",
+        description: "Please provide a title for your video before submitting.",
+        errorDetails: "Video title field is empty.",
       });
       return;
     }
@@ -1140,6 +1151,16 @@ export default function CompanyOfferDetail() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
 
       <style>{`
         .hide-scrollbar::-webkit-scrollbar {

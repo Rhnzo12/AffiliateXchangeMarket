@@ -36,6 +36,7 @@ import { Play, Trash2, ExternalLink, Video, Filter, X } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
 import { useMemo, useState } from "react";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { VideoPlayer } from "../components/VideoPlayer";
 
 export default function CompanyVideos() {
@@ -45,6 +46,7 @@ export default function CompanyVideos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [offerFilter, setOfferFilter] = useState("all");
   const [creditFilter, setCreditFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   // Fetch all offers for the company
   const { data: offers, isLoading } = useQuery<any[]>({
@@ -64,10 +66,9 @@ export default function CompanyVideos() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: "Failed to delete video. Please try again.",
-        variant: "destructive",
+        message: "Failed to delete video. Please try again.",
       });
     },
   });
@@ -373,6 +374,13 @@ export default function CompanyVideos() {
           </DialogContent>
         </Dialog>
       )}
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title}
+        message={errorDialog?.message}
+      />
     </div>
   );
 }

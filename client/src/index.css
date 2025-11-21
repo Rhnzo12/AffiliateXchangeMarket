@@ -325,4 +325,110 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Responsive Utilities for Mobile Optimization */
+
+  /* Responsive padding utilities - smaller on mobile, larger on desktop */
+  .responsive-p {
+    @apply p-4 md:p-6;
+  }
+
+  .responsive-px {
+    @apply px-4 md:px-6;
+  }
+
+  .responsive-py {
+    @apply py-4 md:py-6;
+  }
+
+  /* Responsive gap utilities for grids */
+  .responsive-gap {
+    @apply gap-4 md:gap-6;
+  }
+
+  .responsive-gap-sm {
+    @apply gap-3 md:gap-4;
+  }
+
+  .responsive-gap-lg {
+    @apply gap-6 md:gap-8;
+  }
+
+  /* Responsive container padding */
+  .responsive-container {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Mobile-optimized touch targets (44px minimum for iOS) */
+  .touch-target {
+    @apply min-h-11 min-w-11; /* 44px */
+  }
+
+  /* Smooth scrolling for mobile */
+  @supports (-webkit-touch-callout: none) {
+    .smooth-scroll {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Prevent text size adjustment on orientation change (iOS) */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Better tap highlighting for mobile */
+  * {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .dark * {
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Safe area insets for iOS notch/home indicator */
+  @supports (padding: max(0px)) {
+    .safe-area-inset-top {
+      padding-top: max(1rem, env(safe-area-inset-top));
+    }
+
+    .safe-area-inset-bottom {
+      padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+
+    .safe-area-inset-left {
+      padding-left: max(1rem, env(safe-area-inset-left));
+    }
+
+    .safe-area-inset-right {
+      padding-right: max(1rem, env(safe-area-inset-right));
+    }
+  }
+
+  /* Responsive table wrapper */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbar but keep functionality (for cleaner mobile UI) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Mobile-optimized dialog */
+  .mobile-dialog {
+    @apply max-h-[90vh] md:max-h-[85vh];
+  }
+
+  /* Prevent horizontal scroll on mobile */
+  body {
+    overflow-x: hidden;
+    width: 100%;
+  }
 }

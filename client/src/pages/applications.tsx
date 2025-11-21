@@ -15,6 +15,7 @@ import { proxiedSrc } from "../lib/image";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { Input } from "../components/ui/input";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Select,
   SelectContent,
@@ -100,6 +101,15 @@ export default function Applications() {
     offerQualityRating: 0,
     supportRating: 0,
   });
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -170,10 +180,10 @@ export default function Applications() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message,
-        variant: "destructive",
       });
     },
   });
@@ -228,10 +238,10 @@ export default function Applications() {
 
   const handleSubmitReview = () => {
     if (reviewForm.overallRating === 0) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Please provide an overall rating",
-        variant: "destructive",
       });
       return;
     }
@@ -612,6 +622,15 @@ export default function Applications() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

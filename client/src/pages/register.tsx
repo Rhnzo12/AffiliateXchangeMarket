@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { useToast } from "../hooks/use-toast";
 import { Zap, Mail } from "lucide-react";
 import { Link } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -29,6 +30,12 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const [errorDialog, setErrorDialog] = useState({
+    open: false,
+    title: "Error",
+    description: "An error occurred",
+    errorDetails: "",
+  });
 
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -75,10 +82,11 @@ export default function Register() {
         window.location.href = data.role === "creator" ? "/creator-onboarding" : "/company-onboarding";
       }, 1000);
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Registration Failed",
+        description: "We couldn't create your account. Please check your information and try again.",
+        errorDetails: error.message,
       });
     } finally {
       setIsLoading(false);
@@ -279,6 +287,16 @@ export default function Register() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Generic Error Dialog */}
+        <GenericErrorDialog
+          open={errorDialog.open}
+          onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+          title={errorDialog.title}
+          description={errorDialog.description}
+          errorDetails={errorDialog.errorDetails}
+          variant="error"
+        />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { Badge } from "./ui/badge";
 import { useToast } from "../hooks/use-toast";
 import { queryClient } from "../lib/queryClient";
 import { Star, TrendingUp, Sparkles, Crown, Check } from "lucide-react";
+import { GenericErrorDialog } from "./GenericErrorDialog";
 
 interface PriorityListingPurchaseProps {
   offerId: string;
@@ -31,6 +32,12 @@ export function PriorityListingPurchase({
 }: PriorityListingPurchaseProps) {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorDialog, setErrorDialog] = useState({
+    open: false,
+    title: "Error",
+    description: "An error occurred",
+    errorDetails: "",
+  });
 
   // Fetch priority listing settings
   const { data: settings } = useQuery({
@@ -76,10 +83,11 @@ export function PriorityListingPurchase({
       onClose();
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to process priority listing",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Priority Listing Error",
+        description: "We couldn't process your priority listing request at this time. Please try again later.",
+        errorDetails: error.message || "Failed to process priority listing",
       });
     },
   });
@@ -180,6 +188,16 @@ export function PriorityListingPurchase({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Generic Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </Dialog>
   );
 }

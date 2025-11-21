@@ -33,6 +33,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
 import { Checkbox } from "../components/ui/checkbox";
 import { Badge } from "../components/ui/badge";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -103,6 +104,7 @@ export default function Settings() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [showActiveItemsDialog, setShowActiveItemsDialog] = useState(false);
   const [activeItemsDetails, setActiveItemsDetails] = useState<any>(null);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   const { data: profile } = useQuery<any>({
     queryKey: ["/api/profile"],
@@ -262,22 +264,20 @@ export default function Settings() {
     // Validate file type
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
     const isImage = imageExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
-    
+
     if (!isImage) {
-      toast({
+      setErrorDialog({
         title: "Invalid File Type",
-        description: "Please upload an image file (JPG, PNG, GIF, WebP)",
-        variant: "destructive",
+        message: "Please upload an image file (JPG, PNG, GIF, WebP)",
       });
       return;
     }
 
     // Validate file size (5MB limit)
     if (file.size > 5242880) {
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Image file must be less than 5MB",
-        variant: "destructive",
+        message: "Image file must be less than 5MB",
       });
       return;
     }
@@ -345,10 +345,9 @@ export default function Settings() {
       });
     } catch (error) {
       console.error("Logo upload error:", error);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload logo. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload logo. Please try again.",
       });
     } finally {
       setIsUploadingLogo(false);
@@ -363,19 +362,17 @@ export default function Settings() {
     const isImage = imageExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isImage) {
-      toast({
+      setErrorDialog({
         title: "Invalid File Type",
-        description: "Please upload an image file (JPG, PNG, GIF, WebP)",
-        variant: "destructive",
+        message: "Please upload an image file (JPG, PNG, GIF, WebP)",
       });
       return;
     }
 
     if (file.size > 5242880) {
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Image file must be less than 5MB",
-        variant: "destructive",
+        message: "Image file must be less than 5MB",
       });
       return;
     }
@@ -435,10 +432,9 @@ export default function Settings() {
       });
     } catch (error) {
       console.error("Profile image upload error:", error);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload profile image. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload profile image. Please try again.",
       });
     } finally {
       setIsUploadingProfileImage(false);
@@ -453,19 +449,17 @@ export default function Settings() {
     const isValid = allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isValid) {
-      toast({
+      setErrorDialog({
         title: "Invalid File Type",
-        description: "Please upload a PDF or image file",
-        variant: "destructive",
+        message: "Please upload a PDF or image file",
       });
       return;
     }
 
     if (file.size > 10485760) { // 10MB
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Document must be less than 10MB",
-        variant: "destructive",
+        message: "Document must be less than 10MB",
       });
       return;
     }
@@ -529,10 +523,9 @@ export default function Settings() {
       });
     } catch (error) {
       console.error("Document upload error:", error);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload document. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload document. Please try again.",
       });
     } finally {
       setIsUploadingDocument(false);
@@ -556,10 +549,9 @@ export default function Settings() {
       window.location.href = "/login";
     } catch (error) {
       console.error("Logout error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: "Failed to logout. Please try again.",
-        variant: "destructive",
+        message: "Failed to logout. Please try again.",
       });
       setIsLoggingOut(false);
     }
@@ -599,10 +591,9 @@ export default function Settings() {
       });
     } catch (error: any) {
       console.error("Export data error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to export data. Please try again.",
-        variant: "destructive",
+        message: error.message || "Failed to export data. Please try again.",
       });
     } finally {
       setIsExportingData(false);
@@ -616,10 +607,9 @@ export default function Settings() {
 
       // Basic validation
       if (!newEmail) {
-        toast({
+        setErrorDialog({
           title: "Error",
-          description: "Please enter a new email address.",
-          variant: "destructive",
+          message: "Please enter a new email address.",
         });
         return;
       }
@@ -627,10 +617,9 @@ export default function Settings() {
       // Email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(newEmail)) {
-        toast({
+        setErrorDialog({
           title: "Error",
-          description: "Please enter a valid email address.",
-          variant: "destructive",
+          message: "Please enter a valid email address.",
         });
         return;
       }
@@ -664,10 +653,9 @@ export default function Settings() {
 
       // For local auth users, require password
       if (!emailChangePassword) {
-        toast({
+        setErrorDialog({
           title: "Error",
-          description: "Password is required to change your email.",
-          variant: "destructive",
+          message: "Password is required to change your email.",
         });
         return;
       }
@@ -697,10 +685,9 @@ export default function Settings() {
       });
     } catch (error: any) {
       console.error("Email verification error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to verify. Please check your password.",
-        variant: "destructive",
+        message: error.message || "Failed to verify. Please check your password.",
       });
       setIsEmailVerified(false);
     } finally {
@@ -746,10 +733,9 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     } catch (error: any) {
       console.error("Email update error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to update email. Please try again.",
-        variant: "destructive",
+        message: error.message || "Failed to update email. Please try again.",
       });
     } finally {
       setIsUpdatingEmail(false);
@@ -765,10 +751,9 @@ export default function Settings() {
       // Only require password for non-OAuth users
       if (!user?.googleId && user?.password) {
         if (!deletePassword) {
-          toast({
+          setErrorDialog({
             title: "Error",
-            description: "Password is required to delete your account.",
-            variant: "destructive",
+            message: "Password is required to delete your account.",
           });
           return;
         }
@@ -810,10 +795,9 @@ export default function Settings() {
       }, 2000);
     } catch (error: any) {
       console.error("Delete account error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to delete account. Please try again.",
-        variant: "destructive",
+        message: error.message || "Failed to delete account. Please try again.",
       });
     } finally {
       setIsDeletingAccount(false);
@@ -859,10 +843,9 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to update account information",
-        variant: "destructive",
+        message: error.message || "Failed to update account information",
       });
     },
   });
@@ -903,10 +886,9 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to change password",
-        variant: "destructive",
+        message: error.message || "Failed to change password",
       });
     },
   });
@@ -974,10 +956,9 @@ export default function Settings() {
     onError: (error: Error) => {
       console.log("[Settings] Error caught:", error);
       console.log("[Settings] Error message:", error.message);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to update profile",
-        variant: "destructive",
+        message: error.message || "Failed to update profile",
       });
     },
   });
@@ -2226,6 +2207,13 @@ export default function Settings() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
       </div>
     </div>
   );

@@ -24,6 +24,14 @@ export interface PaymentResult {
   error?: string;
 }
 
+/**
+ * Check if payment sandbox mode is enabled
+ * In sandbox mode, payment operations are simulated without calling real APIs
+ */
+function isSandboxMode(): boolean {
+  return process.env.PAYMENT_SANDBOX_MODE === 'true';
+}
+
 // Initialize PayPal Client
 function getPayPalClient() {
   const clientId = process.env.PAYPAL_CLIENT_ID;
@@ -48,6 +56,11 @@ export class PaymentProcessorService {
    */
   async processPayment(paymentId: string): Promise<PaymentResult> {
     try {
+      // Log sandbox mode status
+      if (isSandboxMode()) {
+        console.log('[Payment Processor] 🏖️ SANDBOX MODE ENABLED - Payments will be simulated without real transactions');
+      }
+
       // Get payment details
       const payment = await storage.getPayment(paymentId);
       if (!payment) {
@@ -120,6 +133,11 @@ export class PaymentProcessorService {
    */
   async processRetainerPayment(retainerPaymentId: string): Promise<PaymentResult> {
     try {
+      // Log sandbox mode status
+      if (isSandboxMode()) {
+        console.log('[Payment Processor] 🏖️ SANDBOX MODE ENABLED - Payments will be simulated without real transactions');
+      }
+
       // Get retainer payment details
       const retainerPayment = await storage.getRetainerPayment(retainerPaymentId);
       if (!retainerPayment) {
@@ -286,6 +304,7 @@ export class PaymentProcessorService {
 
   /**
    * Process E-Transfer (Interac e-Transfer for Canadian payments)
+   * Uses Stripe Connect to transfer funds to creator's connected account
    */
   private async processETransfer(
     email: string,
@@ -296,63 +315,131 @@ export class PaymentProcessorService {
     try {
       console.log(`[E-Transfer] Sending $${amount} CAD to ${email}`);
 
-      let stripe: Stripe;
-      try {
-        stripe = getStripeClient();
-      } catch (error: any) {
-        console.error('[E-Transfer] Stripe initialization failed:', error?.message || error);
+      // Get payment to find creator ID
+      const payment = await storage.getPaymentOrRetainerPayment(paymentId);
+      if (!payment) {
+        return { success: false, error: 'Payment not found' };
+      }
+
+      // Get creator's payment settings to find Stripe account ID
+      const paymentSettings = await storage.getPaymentSettings(payment.creatorId);
+      const eTransferSetting = paymentSettings.find(ps =>
+        ps.payoutMethod === 'etransfer' && ps.payoutEmail === email
+      );
+
+      if (!eTransferSetting?.stripeAccountId) {
+        console.error(`[E-Transfer] ERROR: Creator ${payment.creatorId} has not connected their Stripe account`);
         return {
           success: false,
-          error: error?.message || 'Stripe configuration error'
+          error: 'Creator has not connected their Stripe account for e-transfers. Please complete Stripe onboarding first.'
         };
       }
 
-      // Ensure the Stripe account can pay out in CAD before attempting to create a payout
-      const platformAccount = await stripe.accounts.retrieve();
-      const externalAccounts = await stripe.accounts.listExternalAccounts(platformAccount.id, {
-        object: 'bank_account',
-        limit: 100
-      });
+      console.log(`[E-Transfer] Using Stripe account ${eTransferSetting.stripeAccountId}`);
 
-      const hasCadExternalAccount = externalAccounts.data.some((account) => account.currency?.toLowerCase() === 'cad');
+      // Import Stripe Connect service
+      const { stripeConnectService } = await import('./stripeConnectService');
 
-      if (!hasCadExternalAccount) {
-        const errorMessage = 'Stripe account has no CAD-enabled external account. Please add a CAD bank account to Stripe to enable e-transfers.';
-        console.error('[E-Transfer] Missing CAD external account for payouts');
-        return { success: false, error: errorMessage };
+      // Verify connected account is ready
+      console.log(`[E-Transfer] Checking account status for ${eTransferSetting.stripeAccountId}...`);
+      const accountStatus = await stripeConnectService.checkAccountStatus(eTransferSetting.stripeAccountId);
+
+      if (!accountStatus.success) {
+        console.error(`[E-Transfer] ERROR: Unable to verify Stripe account: ${accountStatus.error}`);
+        return {
+          success: false,
+          error: `Unable to verify Stripe account: ${accountStatus.error}`
+        };
       }
 
-      const payout = await stripe.payouts.create({
-        amount: Math.round(amount * 100),
-        currency: 'cad',
-        method: 'standard',
-        description: description,
-        statement_descriptor: 'AffiliateXchange',
-        metadata: {
+      console.log(`[E-Transfer] Account status: detailsSubmitted=${accountStatus.detailsSubmitted}, payoutsEnabled=${accountStatus.payoutsEnabled}`);
+
+      if (!accountStatus.payoutsEnabled) {
+        console.error(`[E-Transfer] ERROR: Account ${eTransferSetting.stripeAccountId} payouts not enabled. Requirements: ${JSON.stringify(accountStatus.requirements)}`);
+
+        // Build a helpful error message with specific requirements
+        let errorMessage = 'Creator Stripe account is not yet enabled for payouts.';
+        if (accountStatus.requirements && accountStatus.requirements.length > 0) {
+          const requirementDescriptions: Record<string, string> = {
+            'individual.verification.proof_of_liveness': 'identity verification (photo/video)',
+            'individual.verification.document': 'identity document upload',
+            'individual.verification.additional_document': 'additional identity document',
+            'business_profile.url': 'business website',
+            'tos_acceptance.date': 'terms of service acceptance',
+          };
+
+          const readableReqs = accountStatus.requirements.map(req =>
+            requirementDescriptions[req] || req.replace(/[._]/g, ' ')
+          ).join(', ');
+
+          errorMessage += ` Missing: ${readableReqs}. Please return to Payment Settings and complete Stripe Connect onboarding.`;
+        } else {
+          errorMessage += ' Please complete all required onboarding steps in Payment Settings.';
+        }
+
+        return {
+          success: false,
+          error: errorMessage
+        };
+      }
+
+      if (accountStatus.requirements && accountStatus.requirements.length > 0) {
+        console.warn(`[E-Transfer] Account ${eTransferSetting.stripeAccountId} has pending requirements:`, accountStatus.requirements);
+      }
+
+      // Create transfer to connected account
+      console.log(`[E-Transfer] Creating transfer: $${amount} CAD to account ${eTransferSetting.stripeAccountId}`);
+      const transferResult = await stripeConnectService.createTransfer(
+        eTransferSetting.stripeAccountId,
+        amount,
+        'cad',
+        description,
+        {
           payment_id: paymentId,
           payout_method: 'etransfer',
           payout_email: email
         }
-      });
+      );
 
-      console.log(`[E-Transfer] SUCCESS - Stripe Payout ID: ${payout.id}`);
+      if (!transferResult.success) {
+        console.error(`[E-Transfer] ERROR: Transfer failed: ${transferResult.error}`);
+        return {
+          success: false,
+          error: transferResult.error || 'Transfer failed'
+        };
+      }
+
+      console.log(`[E-Transfer] SUCCESS - Stripe Transfer ID: ${transferResult.transferId}`);
 
       return {
         success: true,
-        transactionId: payout.id,
+        transactionId: transferResult.transferId!,
         providerResponse: {
           method: 'etransfer',
           email: email,
           amount: amount,
-          payoutId: payout.id,
-          arrivalDate: payout.arrival_date,
-          status: payout.status,
+          transferId: transferResult.transferId,
+          stripeAccountId: eTransferSetting.stripeAccountId,
+          status: 'completed',
           timestamp: new Date().toISOString(),
-          note: 'Processed via Stripe payouts API'
+          note: 'Processed via Stripe Connect transfer'
         }
       };
     } catch (error: any) {
-      const errorMessage = error?.message || 'Unknown error while processing e-transfer payout';
+      // Enhanced error handling for common Stripe transfer errors
+      let errorMessage = error?.message || 'Unknown error while processing e-transfer';
+
+      // Check for specific Stripe error types
+      if (error.type === 'StripePermissionError' || errorMessage.includes('does not have the required permissions')) {
+        errorMessage = 'Stripe API key does not have the required permissions. Please ensure you are using a Stripe Connect enabled API key.';
+      } else if (errorMessage.includes('minimum') || errorMessage.includes('amount')) {
+        errorMessage = `Transfer amount issue: ${errorMessage}. Note: Stripe typically requires minimum transfer amounts (usually $1 CAD or more).`;
+      } else if (errorMessage.includes('balance') || errorMessage.includes('insufficient')) {
+        errorMessage = 'Insufficient balance in platform Stripe account. Please ensure your Stripe account has sufficient funds for transfers.';
+      } else if (errorMessage.includes('account')) {
+        errorMessage = `Stripe Connect account issue: ${errorMessage}. The creator may need to complete their Stripe onboarding.`;
+      }
+
       console.error('[E-Transfer] Error:', errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -471,9 +558,11 @@ export class PaymentProcessorService {
    * Verify that a creator has valid payment settings configured
    */
   async validateCreatorPaymentSettings(creatorId: string): Promise<{ valid: boolean; error?: string }> {
+    console.log(`[Validation] Checking payment settings for creator ${creatorId}...`);
     const paymentSettings = await storage.getPaymentSettings(creatorId);
 
     if (!paymentSettings || paymentSettings.length === 0) {
+      console.error(`[Validation] ERROR: Creator ${creatorId} has no payment settings configured`);
       return {
         valid: false,
         error: 'No payment method configured. Creator must add payment details in Settings > Payment Methods.'
@@ -481,18 +570,27 @@ export class PaymentProcessorService {
     }
 
     const defaultMethod = paymentSettings.find(ps => ps.isDefault) || paymentSettings[0];
+    console.log(`[Validation] Found ${paymentSettings.length} payment method(s), using: ${defaultMethod.payoutMethod}`);
 
     // Validate based on method type
     switch (defaultMethod.payoutMethod) {
       case 'paypal':
         if (!defaultMethod.paypalEmail) {
+          console.error(`[Validation] ERROR: PayPal email is missing`);
           return { valid: false, error: 'PayPal email is missing' };
         }
+        console.log(`[Validation] PayPal email validated: ${defaultMethod.paypalEmail}`);
         break;
       case 'etransfer':
         if (!defaultMethod.payoutEmail) {
+          console.error(`[Validation] ERROR: E-Transfer email is missing`);
           return { valid: false, error: 'E-Transfer email is missing' };
         }
+        if (!defaultMethod.stripeAccountId) {
+          console.error(`[Validation] ERROR: Stripe account not connected for e-transfer`);
+          return { valid: false, error: 'Stripe account not connected. Please complete Stripe Connect onboarding in Payment Settings.' };
+        }
+        console.log(`[Validation] E-Transfer validated: ${defaultMethod.payoutEmail} with Stripe account ${defaultMethod.stripeAccountId}`);
         break;
       case 'wire':
         if (!defaultMethod.bankRoutingNumber || !defaultMethod.bankAccountNumber) {

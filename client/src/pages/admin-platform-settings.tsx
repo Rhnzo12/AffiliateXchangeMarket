@@ -18,6 +18,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { Switch } from "../components/ui/switch";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 interface PlatformSetting {
   id: string;
@@ -35,6 +36,12 @@ export default function AdminPlatformSettings() {
   const [editingSetting, setEditingSetting] = useState<PlatformSetting | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editReason, setEditReason] = useState("");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title?: string;
+    description?: string;
+    errorDetails?: string;
+  }>({ open: false });
 
   const { data: settings, isLoading } = useQuery<PlatformSetting[]>({
     queryKey: ["/api/admin/settings"],
@@ -55,10 +62,10 @@ export default function AdminPlatformSettings() {
       setEditReason("");
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update setting",
-        variant: "destructive",
       });
     },
   });
@@ -72,10 +79,10 @@ export default function AdminPlatformSettings() {
   const handleSave = () => {
     if (!editingSetting) return;
     if (!editReason.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Please provide a reason for this change",
-        variant: "destructive",
       });
       return;
     }
@@ -271,6 +278,15 @@ export default function AdminPlatformSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

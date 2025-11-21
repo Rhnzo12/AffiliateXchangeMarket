@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ import {
 } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
+import { Checkbox } from "../components/ui/checkbox";
 import {
   DollarSign,
   Video,
@@ -39,6 +41,7 @@ import {
   Clock3,
   Info,
   CheckCircle2,
+  Send,
 } from "lucide-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -66,6 +69,22 @@ const uploadDeliverableSchema = z.object({
 
 type UploadDeliverableForm = z.infer<typeof uploadDeliverableSchema>;
 
+const applyRetainerSchema = z.object({
+  message: z
+    .string()
+    .min(20, "Tell us why you're interested (at least 20 characters)")
+    .max(500, "Keep your note under 500 characters"),
+  portfolioLinks: z.string().optional(),
+  proposedStartDate: z.string().optional(),
+  selectedTierId: z.string().optional(),
+  acceptTerms: z
+    .boolean()
+    .refine((val) => val === true, { message: "You need to accept the expectations before applying" })
+    .default(false),
+});
+
+type ApplyRetainerForm = z.infer<typeof applyRetainerSchema>;
+
 export default function CreatorRetainerDetail() {
   const [, params] = useRoute("/retainers/:id");
   const { toast} = useToast();
@@ -80,9 +99,11 @@ export default function CreatorRetainerDetail() {
   const [resubmitVideoUrl, setResubmitVideoUrl] = useState("");
   const [isResubmitUploading, setIsResubmitUploading] = useState(false);
   const resubmitVideoInputRef = useRef<HTMLInputElement>(null);
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   const { data: contract, isLoading } = useQuery<any>({
-    queryKey: ["/api/retainer-contracts", contractId],
+    queryKey: [`/api/retainer-contracts/${contractId}`],
     enabled: !!contractId,
   });
 
@@ -91,7 +112,7 @@ export default function CreatorRetainerDetail() {
   });
 
   const { data: deliverables } = useQuery<any[]>({
-    queryKey: ["/api/retainer-contracts", contractId, "deliverables"],
+    queryKey: [`/api/retainer-contracts/${contractId}/deliverables`],
     enabled: !!contractId && myApplication?.some((app: any) => app.contractId === contractId && app.status === "approved"),
   });
 
@@ -112,10 +133,9 @@ export default function CreatorRetainerDetail() {
 
     // Validate file size (max 500MB)
     if (file.size > 500 * 1024 * 1024) {
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Video file must be less than 500MB",
-        variant: "destructive",
+        message: "Video file must be less than 500MB",
       });
       return;
     }
@@ -188,10 +208,9 @@ export default function CreatorRetainerDetail() {
     } catch (error) {
       console.error("Video upload error:", error);
       setIsUploading(false);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload video. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload video. Please try again.",
       });
     }
   };
@@ -213,7 +232,7 @@ export default function CreatorRetainerDetail() {
       return await apiRequest("POST", "/api/creator/retainer-deliverables", payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/deliverables`] });
       toast({
         title: "Deliverable Submitted",
         description: "Your video has been submitted for review.",
@@ -223,10 +242,9 @@ export default function CreatorRetainerDetail() {
       setVideoUrl("");
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to submit deliverable",
-        variant: "destructive",
+        message: error.message || "Failed to submit deliverable",
       });
     },
   });
@@ -237,6 +255,17 @@ export default function CreatorRetainerDetail() {
 
   const resubmitForm = useForm<UploadDeliverableForm>({
     resolver: zodResolver(uploadDeliverableSchema),
+  });
+
+  const applyForm = useForm<ApplyRetainerForm>({
+    resolver: zodResolver(applyRetainerSchema),
+    defaultValues: {
+      message: "",
+      portfolioLinks: "",
+      proposedStartDate: "",
+      selectedTierId: "",
+      acceptTerms: false,
+    },
   });
 
   const handleResubmitVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -311,10 +340,9 @@ export default function CreatorRetainerDetail() {
     } catch (error) {
       console.error("Video upload error:", error);
       setIsResubmitUploading(false);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload video. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload video. Please try again.",
       });
     }
   };
@@ -336,7 +364,7 @@ export default function CreatorRetainerDetail() {
       return await apiRequest("PATCH", `/api/creator/retainer-deliverables/${selectedDeliverable.id}/resubmit`, payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts", contractId, "deliverables"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/deliverables`] });
       toast({
         title: "Revision Submitted",
         description: "Your revised video has been submitted for review.",
@@ -347,10 +375,9 @@ export default function CreatorRetainerDetail() {
       setSelectedDeliverable(null);
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to resubmit deliverable",
-        variant: "destructive",
+        message: error.message || "Failed to resubmit deliverable",
       });
     },
   });
@@ -369,6 +396,39 @@ export default function CreatorRetainerDetail() {
       videoNumber: deliverable.videoNumber.toString(),
     });
     setResubmitOpen(true);
+  };
+
+  const applyMutation = useMutation({
+    mutationFn: async (data: ApplyRetainerForm) => {
+      const payload = {
+        message: data.message,
+        portfolioLinks: data.portfolioLinks
+          ? data.portfolioLinks.split(",").map((link) => link.trim()).filter(Boolean)
+          : [],
+        proposedStartDate: data.proposedStartDate || undefined,
+        selectedTierId: data.selectedTierId || undefined,
+      };
+      return await apiRequest("POST", `/api/creator/retainer-contracts/${contractId}/apply`, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/creator/retainer-applications"] });
+      toast({
+        title: "Application Submitted!",
+        description: "Your application has been sent. The company will review it soon.",
+      });
+      setApplyOpen(false);
+      applyForm.reset();
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Application Failed",
+        message: error.message || "Failed to submit application",
+      });
+    },
+  });
+
+  const onApplySubmit = (data: ApplyRetainerForm) => {
+    applyMutation.mutate(data);
   };
 
   if (isLoading) {
@@ -421,15 +481,14 @@ export default function CreatorRetainerDetail() {
     };
   });
 
-  const bestValueTier = tierSummaries.reduce(
-    (best: any, tier: any) => {
-      if (tier.perVideoCost < best.perVideoCost) {
-        return tier;
-      }
-      return best;
-    },
-    tierSummaries[0] || null
-  );
+  const bestValueTier = tierSummaries.length > 0
+    ? tierSummaries.reduce((best: any, tier: any) => {
+        if (tier.perVideoCost < best.perVideoCost) {
+          return tier;
+        }
+        return best;
+      })
+    : null;
 
   const getValidationBadge = (label: string, isValid: boolean) => (
     <Badge variant={isValid ? "outline" : "destructive"} className="gap-1">
@@ -454,7 +513,7 @@ export default function CreatorRetainerDetail() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       <TopNavBar />
       <div className="flex items-center gap-4">
         <Link href="/retainers">
@@ -782,6 +841,111 @@ export default function CreatorRetainerDetail() {
                   disabled={resubmitMutation.isPending || !resubmitVideoUrl || isResubmitUploading}
                 >
                   {resubmitMutation.isPending ? "Submitting..." : "Submit Revision"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Dialog */}
+      <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Apply to {contract?.title}</DialogTitle>
+            <DialogDescription>
+              Submit your application for this monthly retainer opportunity
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...applyForm}>
+            <form onSubmit={applyForm.handleSubmit(onApplySubmit)} className="space-y-4">
+              <FormField
+                control={applyForm.control}
+                name="message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Why are you interested?</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Share your niche, experience, and why this brand is a great fit."
+                        rows={5}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Minimum 20 characters, maximum 500
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={applyForm.control}
+                name="portfolioLinks"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Portfolio Links (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://tiktok.com/@yourprofile, https://instagram.com/yourprofile"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Comma-separated URLs to your social profiles
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={applyForm.control}
+                name="proposedStartDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Proposed Start Date (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={applyForm.control}
+                name="acceptTerms"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <div className="flex items-start gap-2 rounded-md border bg-background p-3">
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                      <div className="space-y-1 text-sm">
+                        <FormLabel className="text-sm">I understand the deliverables</FormLabel>
+                        <p className="text-muted-foreground text-xs">
+                          {contract?.videosPerMonth} videos per month for {contract?.durationMonths} months, following the posted schedule and approval requirements.
+                        </p>
+                      </div>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setApplyOpen(false);
+                    applyForm.reset();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={applyMutation.isPending}>
+                  {applyMutation.isPending ? "Submitting..." : "Submit Application"}
                 </Button>
               </DialogFooter>
             </form>
@@ -1265,6 +1429,37 @@ export default function CreatorRetainerDetail() {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Sticky Apply Button */}
+      {!currentApplication && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
+          <div className="container max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-semibold text-sm sm:text-base">{contract.title}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  {formatCurrency(contractMonthlyAmount)} / month · {contractVideosPerMonth} videos
+                </p>
+              </div>
+              <Dialog open={applyOpen} onOpenChange={setApplyOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full sm:w-auto" variant="default" data-testid="button-apply-retainer-sticky">
+                    <Send className="h-4 w-4 mr-2" />
+                    Apply Now
+                  </Button>
+                </DialogTrigger>
+              </Dialog>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

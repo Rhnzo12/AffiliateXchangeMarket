@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Building2, ExternalLink, Filter, X } from "lucide-react";
 import { TopNavBar } from "../components/TopNavBar";
 import { useLocation } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 type Company = {
   id: string;
@@ -37,19 +38,28 @@ export default function AdminCompanies() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // Fetch all companies with filters
   const buildQueryParams = () => {
@@ -309,6 +319,14 @@ export default function AdminCompanies() {
           </div>
         </Card>
       )}
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

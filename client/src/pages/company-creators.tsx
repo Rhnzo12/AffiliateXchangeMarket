@@ -28,6 +28,7 @@ import {
 import { Link, useLocation } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest } from "../lib/queryClient";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -133,6 +134,7 @@ export default function CompanyCreators() {
   const [joinDateFilter, setJoinDateFilter] = useState("all");
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [payoutProcessingId, setPayoutProcessingId] = useState<string | null>(null);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   const startConversationMutation = useMutation({
     mutationFn: async (applicationId: string) => {
@@ -143,10 +145,9 @@ export default function CompanyCreators() {
       setLocation(`/company/messages?conversation=${data.conversationId}`);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to start conversation",
-        variant: "destructive",
+        message: error.message || "Failed to start conversation",
       });
     },
   });
@@ -167,10 +168,9 @@ export default function CompanyCreators() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/applications"] });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Unable to update status",
-        description: error.message || "Please try again later.",
-        variant: "destructive",
+        message: error.message || "Please try again later.",
       });
     },
     onSettled: () => {
@@ -194,10 +194,9 @@ export default function CompanyCreators() {
       queryClient.invalidateQueries({ queryKey: ["/api/company/applications"] });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Unable to approve payout",
-        description: error.message || "Please try again later.",
-        variant: "destructive",
+        message: error.message || "Please try again later.",
       });
     },
     onSettled: () => {
@@ -207,16 +206,15 @@ export default function CompanyCreators() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
+        message: "You are logged out. Logging in again...",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: applications = [], isLoading: loadingCreators } = useQuery<CompanyApplication[]>({
     queryKey: ["/api/company/applications"],
@@ -765,6 +763,12 @@ export default function CompanyCreators() {
           ))}
         </div>
       )}
+      <GenericErrorDialog
+        open={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An unexpected error occurred."}
+      />
     </div>
   );
 }

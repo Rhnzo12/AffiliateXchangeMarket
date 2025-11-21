@@ -18,6 +18,7 @@ import {
 } from "../components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function CompanyReviews() {
   const { toast } = useToast();
@@ -32,19 +33,24 @@ export default function CompanyReviews() {
   const [ratingFilter, setRatingFilter] = useState("all");
   const [offerFilter, setOfferFilter] = useState("all");
   const [responseFilter, setResponseFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: companyReviews = [], isLoading: loadingReviews } = useQuery<any[]>({
     queryKey: ["/api/company/reviews"],
@@ -133,10 +139,10 @@ export default function CompanyReviews() {
       setResponseDialog({ open: false, reviewId: null, response: "" });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message,
-        variant: "destructive",
       });
     },
   });
@@ -147,10 +153,10 @@ export default function CompanyReviews() {
 
   const handleSubmitResponse = () => {
     if (!responseDialog.reviewId || !responseDialog.response.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Please enter a response",
-        variant: "destructive",
       });
       return;
     }
@@ -485,6 +491,13 @@ export default function CompanyReviews() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+      />
     </div>
   );
 }

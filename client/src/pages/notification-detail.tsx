@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { Copy, CheckCircle, ExternalLink } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 interface Notification {
   id: string;
@@ -39,6 +40,11 @@ export default function NotificationDetail() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [copiedLink, setCopiedLink] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   const { data: notification, isLoading } = useQuery<Notification | null>({
     queryKey: ["/api/notifications", id],
@@ -82,10 +88,10 @@ export default function NotificationDetail() {
       });
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (err) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Failed to copy",
         description: "Please copy the link manually",
-        variant: "destructive",
       });
     }
   };
@@ -562,6 +568,14 @@ export default function NotificationDetail() {
       <div className="mt-6">
         <Link href="/notifications"><Button variant="ghost">Back</Button></Link>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

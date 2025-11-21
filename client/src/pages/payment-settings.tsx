@@ -36,8 +36,10 @@ import {
   Download,
   Eye,
   Filter,
+  Info,
   Search,
   Send,
+  Trash2,
   TrendingUp,
   Users,
   X,
@@ -46,6 +48,7 @@ import {
 
 import type { User } from "../../../shared/schema";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 type PaymentStatus =
   | "pending"
@@ -78,6 +81,7 @@ type PaymentMethod = {
   paypalEmail?: string;
   cryptoWalletAddress?: string;
   cryptoNetwork?: string;
+  stripeAccountId?: string;
   isDefault?: boolean;
 };
 
@@ -317,6 +321,9 @@ function PaymentMethodSettings({
   cryptoNetwork,
   setCryptoNetwork,
   onAddPaymentMethod,
+  onDeletePaymentMethod,
+  onSetPrimary,
+  onUpgradeETransfer,
   isSubmitting,
   title = "Payment Methods",
   emptyDescription = "Add a payment method to receive payouts",
@@ -338,6 +345,9 @@ function PaymentMethodSettings({
   cryptoNetwork: string;
   setCryptoNetwork: (value: string) => void;
   onAddPaymentMethod: () => void;
+  onDeletePaymentMethod?: (method: PaymentMethod) => void;
+  onSetPrimary?: (method: PaymentMethod) => void;
+  onUpgradeETransfer?: (method: PaymentMethod) => void;
   isSubmitting: boolean;
   title?: string;
   emptyDescription?: string;
@@ -370,25 +380,76 @@ function PaymentMethodSettings({
           </div>
         ) : (
           <div className="mt-6 space-y-4">
-            {paymentMethods.map((method) => (
-              <div
-                key={method.id}
-                className="flex items-center justify-between rounded-lg border-2 border-gray-200 p-4"
-              >
-                <div className="flex items-center gap-4">
-                  <CreditCard className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <div className="font-medium capitalize text-gray-900">
-                      {method.payoutMethod.replace("_", " ")}
+            {paymentMethods.map((method) => {
+              const needsStripeSetup = method.payoutMethod === 'etransfer' && !method.stripeAccountId;
+
+              return (
+                <div
+                  key={method.id}
+                  className={`flex flex-col rounded-lg border-2 p-4 ${
+                    needsStripeSetup ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <CreditCard className={`h-5 w-5 ${needsStripeSetup ? 'text-yellow-600' : 'text-gray-400'}`} />
+                      <div>
+                        <div className="font-medium capitalize text-gray-900 flex items-center gap-2">
+                          {method.payoutMethod.replace("_", " ")}
+                          {needsStripeSetup && (
+                            <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                              Setup Required
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">{getDisplayValue(method)}</div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600">{getDisplayValue(method)}</div>
+                    <div className="flex items-center gap-2">
+                      {method.isDefault ? (
+                        <Badge>Default</Badge>
+                      ) : (
+                        onSetPrimary && !needsStripeSetup && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onSetPrimary(method)}
+                            className="text-sm"
+                          >
+                            Set as Primary
+                          </Button>
+                        )
+                      )}
+                      {onDeletePaymentMethod && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDeletePaymentMethod(method)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  {needsStripeSetup && (
+                    <div className="mt-3 pt-3 border-t border-yellow-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm text-yellow-800">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>Stripe Connect setup required to process payments</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => onUpgradeETransfer && onUpgradeETransfer(method)}
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                      >
+                        Complete Setup
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  {method.isDefault && <Badge>Default</Badge>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -421,6 +482,15 @@ function PaymentMethodSettings({
                 value={payoutEmail}
                 onChange={(e) => setPayoutEmail(e.target.value)}
               />
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 mt-2">
+                <div className="flex gap-2">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-900">
+                    <p className="font-semibold mb-1">Payment Requirements:</p>
+                    <p className="text-xs">E-Transfer payments via Stripe require a minimum transaction amount of <strong>$1.00 CAD</strong>. Payments below this amount cannot be processed.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -528,6 +598,11 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
   const [disputeReason, setDisputeReason] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   const pendingPayouts = useMemo(
     () => payouts.filter((payout) => payout.status === "pending" || payout.status === "processing"),
@@ -579,10 +654,10 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to approve payment",
-        variant: "destructive",
       });
     },
   });
@@ -602,10 +677,10 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to dispute payment",
-        variant: "destructive",
       });
     },
   });
@@ -763,6 +838,11 @@ function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
   const totalPaid = payouts
     .filter((p) => p.status === "completed")
     .reduce((sum, p) => sum + parseFloat(p.grossAmount), 0);
@@ -979,6 +1059,14 @@ function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
           )}
         </div>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }
@@ -992,10 +1080,19 @@ function AdminPaymentDashboard({
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [paymentToProcess, setPaymentToProcess] = useState<CreatorPayment | null>(null);
   const [insufficientFundsDialogOpen, setInsufficientFundsDialogOpen] = useState(false);
   const [failedPayment, setFailedPayment] = useState<CreatorPayment | null>(null);
+  const [minimumPaymentDialogOpen, setMinimumPaymentDialogOpen] = useState(false);
+  const [minimumPaymentError, setMinimumPaymentError] = useState<string>("");
+  const [paymentFailedDialogOpen, setPaymentFailedDialogOpen] = useState(false);
+  const [paymentFailedError, setPaymentFailedError] = useState<string>("");
 
   const allPayments = payments;
 
@@ -1087,11 +1184,22 @@ function AdminPaymentDashboard({
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to process payments",
-        variant: "destructive",
-      });
+      const errorMsg = error.message || "Failed to process payments";
+
+      // Check if it's a minimum payment error
+      const isMinimumPaymentError = errorMsg.toLowerCase().includes('minimum') ||
+                                     errorMsg.toLowerCase().includes('below the minimum required amount');
+
+      if (isMinimumPaymentError) {
+        setMinimumPaymentError(errorMsg);
+        setMinimumPaymentDialogOpen(true);
+      } else {
+        setErrorDialog({
+          open: true,
+          title: "Error",
+          description: errorMsg,
+        });
+      }
     },
   });
 
@@ -1132,6 +1240,10 @@ function AdminPaymentDashboard({
       // Check if it's an insufficient funds error
       const isInsufficientFunds = errorMsg.toLowerCase().includes('insufficient funds');
 
+      // Check if it's a minimum payment error
+      const isMinimumPaymentError = errorMsg.toLowerCase().includes('minimum') ||
+                                     errorMsg.toLowerCase().includes('below the minimum required amount');
+
       if (isInsufficientFunds) {
         // Find the payment that failed
         const payment = allPayments.find(p => p.id === paymentId);
@@ -1139,14 +1251,22 @@ function AdminPaymentDashboard({
           setFailedPayment(payment);
         }
         setInsufficientFundsDialogOpen(true);
+      } else if (isMinimumPaymentError) {
+        // Show minimum payment dialog instead of toast
+        const payment = allPayments.find(p => p.id === paymentId);
+        if (payment) {
+          setFailedPayment(payment);
+        }
+        setMinimumPaymentError(errorMsg);
+        setMinimumPaymentDialogOpen(true);
       } else {
-        // Show error toast for other types of errors
-        toast({
-          title: "Payment Failed",
-          description: errorMsg,
-          variant: "destructive",
-          duration: 5000,
-        });
+        // Show payment failed dialog for other types of errors
+        const payment = allPayments.find(p => p.id === paymentId);
+        if (payment) {
+          setFailedPayment(payment);
+        }
+        setPaymentFailedError(errorMsg);
+        setPaymentFailedDialogOpen(true);
       }
     },
   });
@@ -1165,10 +1285,10 @@ function AdminPaymentDashboard({
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update payment status",
-        variant: "destructive",
       });
     },
   });
@@ -1529,6 +1649,174 @@ function AdminPaymentDashboard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Minimum Payment Amount Dialog */}
+      <AlertDialog open={minimumPaymentDialogOpen} onOpenChange={setMinimumPaymentDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-900">
+              <Info className="h-6 w-6 text-orange-600" />
+              Minimum Payment Amount Required
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4 pt-3">
+              <div className="rounded-lg bg-orange-50 border-2 border-orange-200 p-4">
+                <p className="text-gray-800 leading-relaxed">
+                  The payment amount is below the minimum required for E-Transfer transactions. Stripe requires a minimum transfer of at least <strong>$1.00 CAD</strong>.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-700">Payment Details:</p>
+                <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-semibold text-gray-900">${failedPayment?.netAmount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Description:</span>
+                    <span className="font-medium text-gray-900">{failedPayment?.description || 'Payment'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Payment ID:</span>
+                    <span className="font-mono text-xs text-gray-700">{failedPayment?.id.slice(0, 12)}...</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <p className="text-sm font-semibold text-blue-900 mb-2">Important Information:</p>
+                <ul className="space-y-1.5 text-sm text-blue-800">
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>E-Transfer payments via Stripe require a minimum of <strong>$1.00 CAD</strong></span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>This payment has been marked as "failed" due to not meeting the minimum requirement</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>Please ensure future payments meet or exceed the minimum amount</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="rounded-lg bg-green-50 border border-green-200 p-3">
+                <p className="text-sm font-semibold text-green-900 mb-2">Next Steps:</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-sm text-green-800">
+                  <li>Review payment amounts before processing</li>
+                  <li>Consider combining small payments to meet the minimum threshold</li>
+                  <li>Contact the creator if payment amounts need to be adjusted</li>
+                </ol>
+              </div>
+
+              {minimumPaymentError && (
+                <div className="rounded-lg bg-gray-100 border border-gray-300 p-3">
+                  <p className="text-xs font-mono text-gray-700">
+                    {minimumPaymentError}
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              Close
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Payment Failed Reminder Dialog */}
+      <AlertDialog open={paymentFailedDialogOpen} onOpenChange={setPaymentFailedDialogOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-gray-900">
+              <Info className="h-6 w-6 text-gray-600" />
+              Payment Processing Reminder
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4 pt-3">
+              <div className="rounded-lg bg-gray-50 border-2 border-gray-200 p-4">
+                <p className="text-gray-800 leading-relaxed">
+                  The payment could not be processed at this time. Please review the details below and take appropriate action.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-gray-700">Payment Details:</p>
+                <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Amount:</span>
+                    <span className="font-semibold text-gray-900">${failedPayment?.netAmount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Description:</span>
+                    <span className="font-medium text-gray-900">{failedPayment?.description || 'Payment'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Payment ID:</span>
+                    <span className="font-mono text-xs text-gray-700">{failedPayment?.id.slice(0, 12)}...</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                <p className="text-sm font-semibold text-blue-900 mb-2">What Happened:</p>
+                <ul className="space-y-1.5 text-sm text-blue-800">
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>The payment processing encountered an issue</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>The payment status has been updated to "failed"</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span>•</span>
+                    <span>Please review the error details below</span>
+                  </li>
+                </ul>
+              </div>
+
+              {paymentFailedError && (
+                <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3">
+                  <p className="text-sm font-semibold text-yellow-900 mb-2">Error Details:</p>
+                  <p className="text-sm text-yellow-800">
+                    {paymentFailedError}
+                  </p>
+                </div>
+              )}
+
+              <div className="rounded-lg bg-green-50 border border-green-200 p-3">
+                <p className="text-sm font-semibold text-green-900 mb-2">Next Steps:</p>
+                <ol className="list-decimal list-inside space-y-1.5 text-sm text-green-800">
+                  <li>Review the error details and payment information</li>
+                  <li>Verify the payment settings are configured correctly</li>
+                  <li>Contact the creator if additional information is needed</li>
+                  <li>Use the "Retry" button to process the payment again once the issue is resolved</li>
+                </ol>
+              </div>
+
+              <p className="text-xs text-gray-500 italic">
+                This payment will remain in "failed" status until you successfully retry the transaction or take corrective action.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              Close
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }
@@ -1539,6 +1827,11 @@ function AdminPaymentSettings() {
   const [reservePercentage, setReservePercentage] = useState("10");
   const [minimumBalance, setMinimumBalance] = useState("5000");
   const [autoDisburse, setAutoDisburse] = useState(true);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
   const [notificationEmail, setNotificationEmail] = useState("finance@affiliatexchange.com");
   const [escalationEmail, setEscalationEmail] = useState("compliance@affiliatexchange.com");
   const [includeReports, setIncludeReports] = useState(true);
@@ -1574,10 +1867,10 @@ function AdminPaymentSettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update setting",
-        variant: "destructive",
       });
     },
   });
@@ -1650,10 +1943,10 @@ function AdminPaymentSettings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to add funding account",
-        variant: "destructive",
       });
     },
   });
@@ -1671,10 +1964,10 @@ function AdminPaymentSettings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update account",
-        variant: "destructive",
       });
     },
   });
@@ -1692,10 +1985,10 @@ function AdminPaymentSettings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to delete account",
-        variant: "destructive",
       });
     },
   });
@@ -1713,10 +2006,10 @@ function AdminPaymentSettings() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to set primary account",
-        variant: "destructive",
       });
     },
   });
@@ -2025,6 +2318,14 @@ function AdminPaymentSettings() {
           </Button>
         </div>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }
@@ -2041,19 +2342,26 @@ export default function PaymentSettings() {
   const [paypalEmail, setPaypalEmail] = useState("");
   const [cryptoWalletAddress, setCryptoWalletAddress] = useState("");
   const [cryptoNetwork, setCryptoNetwork] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [paymentMethodToDelete, setPaymentMethodToDelete] = useState<PaymentMethod | null>(null);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (user?.role === "company" || user?.role === "creator") {
@@ -2064,6 +2372,29 @@ export default function PaymentSettings() {
       setActiveTab("dashboard");
     }
   }, [user?.role]);
+
+  // Handle Stripe Connect onboarding return
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const onboardingStatus = params.get('stripe_onboarding');
+
+    if (onboardingStatus === 'success') {
+      toast({
+        title: "Success",
+        description: "Stripe Connect onboarding completed! Your e-transfer payment method is now active.",
+      });
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (onboardingStatus === 'refresh') {
+      setErrorDialog({
+        open: true,
+        title: "Setup Incomplete",
+        description: "Stripe Connect onboarding was not completed. Please try again.",
+      });
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   // Fetch payment methods
   const { data: paymentMethods } = useQuery<PaymentMethod[]>({
@@ -2091,8 +2422,40 @@ export default function PaymentSettings() {
     mutationFn: async () => {
       const payload: Record<string, string> = { payoutMethod };
 
+      // For e-transfer, we need to set up Stripe Connect first
       if (payoutMethod === "etransfer") {
         payload.payoutEmail = payoutEmail;
+
+        // Step 1: Create Stripe Connect account
+        const accountRes = await apiRequest("POST", "/api/stripe-connect/create-account");
+        const accountData = await accountRes.json();
+
+        if (!accountData.success || !accountData.accountId) {
+          throw new Error(accountData.error || "Failed to create Stripe Connect account");
+        }
+
+        // Step 2: Save the stripeAccountId with payment settings
+        payload.stripeAccountId = accountData.accountId;
+
+        // Save payment settings first
+        const res = await apiRequest("POST", "/api/payment-settings", payload);
+        const result = await res.json();
+
+        // Step 3: Redirect to Stripe onboarding
+        const onboardingRes = await apiRequest("POST", "/api/stripe-connect/onboarding-link", {
+          accountId: accountData.accountId,
+          returnUrl: `${window.location.origin}/settings/payment?stripe_onboarding=success`,
+          refreshUrl: `${window.location.origin}/settings/payment?stripe_onboarding=refresh`,
+        });
+        const onboardingData = await onboardingRes.json();
+
+        if (!onboardingData.success || !onboardingData.url) {
+          throw new Error(onboardingData.error || "Failed to create onboarding link");
+        }
+
+        // Redirect user to Stripe onboarding
+        window.location.href = onboardingData.url;
+        return result;
       } else if (payoutMethod === "wire") {
         payload.bankRoutingNumber = bankRoutingNumber;
         payload.bankAccountNumber = bankAccountNumber;
@@ -2121,23 +2484,160 @@ export default function PaymentSettings() {
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
-        toast({
+        setErrorDialog({
+          open: true,
           title: "Unauthorized",
           description: "You are logged out. Logging in again...",
-          variant: "destructive",
         });
         setTimeout(() => {
           window.location.href = "/api/login";
         }, 500);
         return;
       }
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Failed to add payment method",
-        variant: "destructive",
       });
     },
   });
+
+  const deletePaymentMethodMutation = useMutation({
+    mutationFn: async (paymentMethodId: number) => {
+      const res = await apiRequest("DELETE", `/api/payment-settings/${paymentMethodId}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-settings"] });
+      toast({
+        title: "Success",
+        description: "Payment method deleted successfully",
+      });
+      setDeleteDialogOpen(false);
+      setPaymentMethodToDelete(null);
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        setErrorDialog({
+          open: true,
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: "Failed to delete payment method",
+      });
+    },
+  });
+
+  const handleDeleteClick = (method: PaymentMethod) => {
+    setPaymentMethodToDelete(method);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (paymentMethodToDelete) {
+      deletePaymentMethodMutation.mutate(paymentMethodToDelete.id);
+    }
+  };
+
+  const setPrimaryPaymentMethodMutation = useMutation({
+    mutationFn: async (paymentMethodId: number) => {
+      const res = await apiRequest("PUT", `/api/payment-settings/${paymentMethodId}/set-primary`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-settings"] });
+      toast({
+        title: "Success",
+        description: "Primary payment method updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        setErrorDialog({
+          open: true,
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: "Failed to set primary payment method",
+      });
+    },
+  });
+
+  const handleSetPrimary = (method: PaymentMethod) => {
+    setPrimaryPaymentMethodMutation.mutate(method.id);
+  };
+
+  // Upgrade existing e-transfer payment method with Stripe Connect
+  const upgradeETransferMutation = useMutation({
+    mutationFn: async (paymentMethod: PaymentMethod) => {
+      // Step 1: Create Stripe Connect account
+      const accountRes = await apiRequest("POST", "/api/stripe-connect/create-account");
+      const accountData = await accountRes.json();
+
+      if (!accountData.success || !accountData.accountId) {
+        throw new Error(accountData.error || "Failed to create Stripe Connect account");
+      }
+
+      // Step 2: Update the existing payment setting with stripeAccountId
+      const updateRes = await apiRequest("PUT", `/api/payment-settings/${paymentMethod.id}`, {
+        stripeAccountId: accountData.accountId,
+      });
+      await updateRes.json();
+
+      // Step 3: Get onboarding link and redirect
+      const onboardingRes = await apiRequest("POST", "/api/stripe-connect/onboarding-link", {
+        accountId: accountData.accountId,
+        returnUrl: `${window.location.origin}/settings/payment?stripe_onboarding=success`,
+        refreshUrl: `${window.location.origin}/settings/payment?stripe_onboarding=refresh`,
+      });
+      const onboardingData = await onboardingRes.json();
+
+      if (!onboardingData.success || !onboardingData.url) {
+        throw new Error(onboardingData.error || "Failed to create onboarding link");
+      }
+
+      // Redirect to Stripe onboarding
+      window.location.href = onboardingData.url;
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        setErrorDialog({
+          open: true,
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to upgrade e-transfer payment method",
+      });
+    },
+  });
+
+  const handleUpgradeETransfer = (method: PaymentMethod) => {
+    upgradeETransferMutation.mutate(method);
+  };
 
   if (isLoading) {
     return (
@@ -2207,6 +2707,9 @@ export default function PaymentSettings() {
               cryptoNetwork={cryptoNetwork}
               setCryptoNetwork={setCryptoNetwork}
               onAddPaymentMethod={() => addPaymentMethodMutation.mutate()}
+              onDeletePaymentMethod={handleDeleteClick}
+              onSetPrimary={handleSetPrimary}
+              onUpgradeETransfer={handleUpgradeETransfer}
               isSubmitting={addPaymentMethodMutation.isPending}
             />
           )}
@@ -2273,6 +2776,8 @@ export default function PaymentSettings() {
                 cryptoNetwork={cryptoNetwork}
                 setCryptoNetwork={setCryptoNetwork}
                 onAddPaymentMethod={() => addPaymentMethodMutation.mutate()}
+                onDeletePaymentMethod={handleDeleteClick}
+                onSetPrimary={handleSetPrimary}
                 isSubmitting={addPaymentMethodMutation.isPending}
                 emptyDescription="Add a payment method to fund creator payouts"
                 showFeeBreakdown={false}
@@ -2315,6 +2820,39 @@ export default function PaymentSettings() {
           </>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Payment Method</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this payment method?
+              {paymentMethodToDelete?.isDefault && (
+                <span className="mt-2 block text-yellow-600 font-medium">
+                  This is your primary payment method. Another payment method will be automatically set as primary.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deletePaymentMethodMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

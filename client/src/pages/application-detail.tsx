@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const STATUS_CONFIG: Record<string, any> = {
   pending: {
@@ -136,6 +137,14 @@ export default function ApplicationDetail() {
     supportRating: 0,
   });
 
+  // Generic error dialog state
+  const [errorDialog, setErrorDialog] = useState({
+    open: false,
+    title: "Error",
+    description: "An error occurred",
+    errorDetails: "",
+  });
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       window.location.href = "/login";
@@ -189,10 +198,11 @@ export default function ApplicationDetail() {
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Review Submission Error",
+        description: "We couldn't submit your review at this time. Please try again later.",
+        errorDetails: error.message,
       });
     },
   });
@@ -215,10 +225,11 @@ export default function ApplicationDetail() {
 
       if (!response.ok) {
         const error = await response.json();
-        toast({
-          title: "Error",
-          description: error.message || "Failed to generate QR code",
-          variant: "destructive",
+        setErrorDialog({
+          open: true,
+          title: "QR Code Generation Error",
+          description: "We couldn't generate the QR code at this time. Please try again later.",
+          errorDetails: error.message || "Failed to generate QR code",
         });
         return;
       }
@@ -238,10 +249,11 @@ export default function ApplicationDetail() {
         description: "QR code downloaded successfully",
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to download QR code",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "QR Code Download Error",
+        description: "We couldn't download the QR code at this time. Please try again later.",
+        errorDetails: error.message || "Failed to download QR code",
       });
     }
   };
@@ -284,10 +296,11 @@ export default function ApplicationDetail() {
 
   const handleSubmitReview = () => {
     if (reviewForm.overallRating === 0) {
-      toast({
-        title: "Error",
-        description: "Please provide an overall rating",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Rating Required",
+        description: "Please provide an overall rating before submitting your review.",
+        errorDetails: "",
       });
       return;
     }
@@ -766,6 +779,16 @@ export default function ApplicationDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Generic Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

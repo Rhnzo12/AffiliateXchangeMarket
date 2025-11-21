@@ -44,6 +44,7 @@ import {
 } from 'recharts';
 import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton, ChartSkeleton } from "../components/skeletons";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const DATE_RANGES = [
   { value: "7d", label: "Last 7 Days" },
@@ -87,6 +88,7 @@ export default function Analytics() {
   const [dateRange, setDateRange] = useState("30d");
   const [, params] = useRoute("/analytics/:id");
   const applicationId = params?.id;
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -185,10 +187,9 @@ export default function Analytics() {
 
   const exportData = () => {
     if (!analytics) {
-      toast({
+      setErrorDialog({
         title: "No data to export",
-        description: "There is no analytics data available",
-        variant: "destructive",
+        message: "There is no analytics data available",
       });
       return;
     }
@@ -221,20 +222,18 @@ export default function Analytics() {
 
   const exportPdf = () => {
     if (!analytics) {
-      toast({
+      setErrorDialog({
         title: "No data to export",
-        description: "There is no analytics data available",
-        variant: "destructive",
+        message: "There is no analytics data available",
       });
       return;
     }
 
     const printWindow = window.open("", "_blank", "width=900,height=700");
     if (!printWindow) {
-      toast({
+      setErrorDialog({
         title: "Popup blocked",
-        description: "Allow popups to generate the PDF report.",
-        variant: "destructive",
+        message: "Allow popups to generate the PDF report.",
       });
       return;
     }
@@ -332,10 +331,9 @@ export default function Analytics() {
 
   const sendToZapier = async () => {
     if (!analytics) {
-      toast({
+      setErrorDialog({
         title: "No data to export",
-        description: "There is no analytics data available",
-        variant: "destructive",
+        message: "There is no analytics data available",
       });
       return;
     }
@@ -379,10 +377,9 @@ export default function Analytics() {
         description: "Analytics data delivered to the configured URL.",
       });
     } catch (err: any) {
-      toast({
+      setErrorDialog({
         title: "Zapier export failed",
-        description: err.message || "Unable to send data to Zapier.",
-        variant: "destructive",
+        message: err.message || "Unable to send data to Zapier.",
       });
     }
   };
@@ -1144,6 +1141,13 @@ export default function Analytics() {
           </Card>
         )}
       </div>
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

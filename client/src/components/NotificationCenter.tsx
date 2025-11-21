@@ -270,12 +270,12 @@ export function NotificationCenter() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
-          <Bell className="h-5 w-5" />
+        <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-10 sm:w-10" data-testid="button-notifications">
+          <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
-              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              className="absolute -top-1 -right-1 h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center p-0 text-[10px] sm:text-xs"
               data-testid="badge-notification-count"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
@@ -283,20 +283,20 @@ export function NotificationCenter() {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Notifications</h3>
-          <div className="flex gap-2">
+      <DropdownMenuContent align="end" className="w-[calc(100vw-1rem)] sm:w-96 max-w-96">
+        <div className="flex items-center justify-between p-3 sm:p-4 border-b">
+          <h3 className="font-semibold text-sm sm:text-base">Notifications</h3>
+          <div className="flex gap-1 sm:gap-2">
             {hasUnread && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => markAllAsReadMutation.mutate()}
-                className="h-8 text-xs"
+                className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                 data-testid="button-mark-all-read"
               >
-                <Check className="h-3 w-3 mr-1" />
-                Mark all read
+                <Check className="h-3 w-3 sm:mr-1" />
+                <span className="hidden xs:inline">Mark all read</span>
               </Button>
             )}
             {notifications.length > 0 && (
@@ -304,25 +304,25 @@ export function NotificationCenter() {
                 variant="ghost"
                 size="sm"
                 onClick={() => clearAllMutation.mutate()}
-                className="h-8 text-xs"
+                className="h-7 sm:h-8 text-[10px] sm:text-xs px-2 sm:px-3"
                 data-testid="button-clear-all"
               >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear all
+                <Trash2 className="h-3 w-3 sm:mr-1" />
+                <span className="hidden xs:inline">Clear all</span>
               </Button>
             )}
           </div>
         </div>
 
-        <ScrollArea className="h-[400px]">
+        <ScrollArea className="h-[300px] sm:h-[400px]">
           {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground">
+            <div className="p-6 sm:p-8 text-center text-muted-foreground text-xs sm:text-sm">
               Loading notifications...
             </div>
           ) : notifications.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              <Bell className="h-12 w-12 mx-auto mb-2 opacity-20" />
-              <p>No notifications yet</p>
+            <div className="p-6 sm:p-8 text-center text-muted-foreground">
+              <Bell className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 opacity-20" />
+              <p className="text-xs sm:text-sm">No notifications yet</p>
             </div>
           ) : (
             notifications.map((notification) => (
@@ -332,29 +332,29 @@ export function NotificationCenter() {
                   !notification.isRead ? "bg-blue-50 dark:bg-blue-950/20" : ""
                 }`}
               >
-                <div className="p-4 hover:bg-accent/50 cursor-pointer group relative">
+                <div className="p-3 sm:p-4 hover:bg-accent/50 cursor-pointer group relative">
                   <div
                     onClick={() => handleNotificationClick(notification)}
-                    className="pr-8"
+                    className="pr-7 sm:pr-8"
                     data-testid="notification-item"
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-2 sm:gap-3">
                       <div className="flex-shrink-0">
                         {getNotificationIcon(notification)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium text-sm">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                          <h4 className="font-medium text-xs sm:text-sm">
                             {notification.title}
                           </h4>
                           {!notification.isRead && (
-                            <div className="h-2 w-2 rounded-full bg-blue-600 flex-shrink-0" />
+                            <div className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-blue-600 flex-shrink-0" />
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2">
+                        <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2">
                           {notification.message}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
                           {formatDistanceToNow(new Date(notification.createdAt), {
                             addSuffix: true,
                           })}
@@ -365,14 +365,14 @@ export function NotificationCenter() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute top-4 right-4 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-3 sm:top-4 right-3 sm:right-4 h-5 w-5 sm:h-6 sm:w-6 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteNotificationMutation.mutate(notification.id);
                     }}
                     data-testid="button-delete-notification"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </div>
               </div>

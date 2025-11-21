@@ -12,6 +12,7 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { CardGridSkeleton } from "../components/skeletons";
 import { Input } from "../components/ui/input";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,15 @@ export default function Favorites() {
   const [searchTerm, setSearchTerm] = useState("");
   const [nicheFilter, setNicheFilter] = useState("all");
   const [commissionFilter, setCommissionFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -109,10 +119,10 @@ export default function Favorites() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Failed to remove favorite",
-        variant: "destructive",
       });
     },
   });
@@ -264,10 +274,10 @@ export default function Favorites() {
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="font-semibold line-clamp-1 flex-1">{offer.title}</h3>
                       {offer.company?.logoUrl && (
-                        <img 
-                          src={offer.company.logoUrl} 
-                          alt={offer.company.tradeName} 
-                          className="h-8 w-8 rounded-full object-cover" 
+                        <img
+                          src={offer.company.logoUrl}
+                          alt={offer.company.tradeName}
+                          className="h-8 w-8 rounded-full object-cover"
                         />
                       )}
                     </div>
@@ -298,6 +308,15 @@ export default function Favorites() {
           })}
         </div>
       )}
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

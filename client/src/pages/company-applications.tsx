@@ -23,6 +23,7 @@ import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { ReviewPromptDialog } from "../components/ReviewPromptDialog";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function CompanyApplications() {
   const { toast } = useToast();
@@ -36,19 +37,19 @@ export default function CompanyApplications() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [offerFilter, setOfferFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
+        message: "You are logged out. Logging in again...",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: applications = [], isLoading: loadingApplications } = useQuery<any[]>({
     queryKey: ["/api/company/applications"],
@@ -124,10 +125,9 @@ export default function CompanyApplications() {
       }
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to mark work as complete",
-        variant: "destructive",
+        message: error.message || "Failed to mark work as complete",
       });
     },
   });
@@ -142,10 +142,9 @@ export default function CompanyApplications() {
       setLocation(`/company/messages?conversation=${data.conversationId}`);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to start conversation",
-        variant: "destructive",
+        message: error.message || "Failed to start conversation",
       });
     },
   });
@@ -163,10 +162,9 @@ export default function CompanyApplications() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to approve application",
-        variant: "destructive",
+        message: error.message || "Failed to approve application",
       });
     },
   });
@@ -184,10 +182,9 @@ export default function CompanyApplications() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to reject application",
-        variant: "destructive",
+        message: error.message || "Failed to reject application",
       });
     },
   });
@@ -210,10 +207,9 @@ export default function CompanyApplications() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to record conversion",
-        variant: "destructive",
+        message: error.message || "Failed to record conversion",
       });
     },
   });
@@ -267,10 +263,9 @@ export default function CompanyApplications() {
     if (selectedApplication.offer?.commissionType === 'per_sale') {
       const amount = parseFloat(saleAmount);
       if (isNaN(amount) || amount <= 0) {
-        toast({
+        setErrorDialog({
           title: "Invalid Amount",
-          description: "Please enter a valid sale amount greater than 0.",
-          variant: "destructive",
+          message: "Please enter a valid sale amount greater than 0.",
         });
         return;
       }
@@ -662,6 +657,14 @@ export default function CompanyApplications() {
           applicationId={reviewPromptData.applicationId}
         />
       )}
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An unexpected error occurred"}
+      />
     </div>
   );
 }

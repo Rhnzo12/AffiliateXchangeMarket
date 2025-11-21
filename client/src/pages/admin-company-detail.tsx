@@ -32,6 +32,7 @@ import {
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { useLocation, useRoute } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 type CompanyDetail = {
   id: string;
@@ -74,19 +75,28 @@ export default function AdminCompanyDetail() {
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [activeTab, setActiveTab] = useState("details");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // Fetch company details
   const { data: company, isLoading: loadingCompany, error } = useQuery<CompanyDetail>({
@@ -142,10 +152,10 @@ export default function AdminCompanyDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to approve company",
-        variant: "destructive",
       });
     },
   });
@@ -167,10 +177,10 @@ export default function AdminCompanyDetail() {
       setRejectionReason("");
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to reject company",
-        variant: "destructive",
       });
     },
   });
@@ -189,10 +199,10 @@ export default function AdminCompanyDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to suspend company",
-        variant: "destructive",
       });
     },
   });
@@ -211,10 +221,10 @@ export default function AdminCompanyDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to unsuspend company",
-        variant: "destructive",
       });
     },
   });
@@ -746,6 +756,14 @@ export default function AdminCompanyDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

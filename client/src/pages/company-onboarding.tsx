@@ -13,6 +13,7 @@ import { Badge } from "../components/ui/badge";
 import { Progress } from "../components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Building2,
   Upload,
@@ -70,6 +71,7 @@ export default function CompanyOnboarding() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   // Step 1: Company Information
   const [legalName, setLegalName] = useState("");
@@ -129,19 +131,17 @@ export default function CompanyOnboarding() {
     const isImage = imageExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isImage) {
-      toast({
+      setErrorDialog({
         title: "Invalid File Type",
-        description: "Please upload an image file (JPG, PNG, GIF, WebP)",
-        variant: "destructive",
+        message: "Please upload an image file (JPG, PNG, GIF, WebP)",
       });
       return;
     }
 
     if (file.size > 5242880) {
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Image file must be less than 5MB",
-        variant: "destructive",
+        message: "Image file must be less than 5MB",
       });
       return;
     }
@@ -202,10 +202,9 @@ export default function CompanyOnboarding() {
       });
     } catch (error) {
       console.error("Logo upload error:", error);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload logo. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload logo. Please try again.",
       });
     } finally {
       setIsUploadingLogo(false);
@@ -220,19 +219,17 @@ export default function CompanyOnboarding() {
     const isValid = allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isValid) {
-      toast({
+      setErrorDialog({
         title: "Invalid File Type",
-        description: "Please upload a PDF or image file",
-        variant: "destructive",
+        message: "Please upload a PDF or image file",
       });
       return;
     }
 
     if (file.size > 10485760) { // 10MB
-      toast({
+      setErrorDialog({
         title: "File Too Large",
-        description: "Document must be less than 10MB",
-        variant: "destructive",
+        message: "Document must be less than 10MB",
       });
       return;
     }
@@ -291,10 +288,9 @@ export default function CompanyOnboarding() {
       });
     } catch (error) {
       console.error("Document upload error:", error);
-      toast({
+      setErrorDialog({
         title: "Upload Failed",
-        description: "Failed to upload document. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload document. Please try again.",
       });
     } finally {
       setIsUploadingDocument(false);
@@ -305,42 +301,37 @@ export default function CompanyOnboarding() {
     switch (step) {
       case 1:
         if (!legalName.trim()) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Legal company name is required",
-            variant: "destructive",
+            message: "Legal company name is required",
           });
           return false;
         }
         if (!websiteUrl.trim()) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Company website URL is required",
-            variant: "destructive",
+            message: "Company website URL is required",
           });
           return false;
         }
         if (!logoUrl) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Company logo is required",
-            variant: "destructive",
+            message: "Company logo is required",
           });
           return false;
         }
         if (!description.trim() || description.trim().length < 50) {
-          toast({
+          setErrorDialog({
             title: "Description Too Short",
-            description: "Company description must be at least 50 characters",
-            variant: "destructive",
+            message: "Company description must be at least 50 characters",
           });
           return false;
         }
         if (description.trim().split(/\s+/).length > 1000) {
-          toast({
+          setErrorDialog({
             title: "Description Too Long",
-            description: "Company description must not exceed 1000 words",
-            variant: "destructive",
+            message: "Company description must not exceed 1000 words",
           });
           return false;
         }
@@ -348,26 +339,23 @@ export default function CompanyOnboarding() {
 
       case 2:
         if (!contactName.trim()) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Contact name is required",
-            variant: "destructive",
+            message: "Contact name is required",
           });
           return false;
         }
         if (!phoneNumber.trim()) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Business phone number is required",
-            variant: "destructive",
+            message: "Business phone number is required",
           });
           return false;
         }
         if (!businessAddress.trim()) {
-          toast({
+          setErrorDialog({
             title: "Required Field",
-            description: "Business address is required",
-            variant: "destructive",
+            message: "Business address is required",
           });
           return false;
         }
@@ -375,10 +363,9 @@ export default function CompanyOnboarding() {
 
       case 3:
         if (!verificationDocumentUrl) {
-          toast({
+          setErrorDialog({
             title: "Verification Required",
-            description: "Please upload a business registration certificate or Tax ID document",
-            variant: "destructive",
+            message: "Please upload a business registration certificate or Tax ID document",
           });
           return false;
         }
@@ -386,10 +373,9 @@ export default function CompanyOnboarding() {
 
       case 4:
         if (!paymentMethod) {
-          toast({
+          setErrorDialog({
             title: "Payment Method",
-            description: "Please select how you'll pay creators or choose to set it up later.",
-            variant: "destructive",
+            message: "Please select how you'll pay creators or choose to set it up later.",
           });
           return false;
         }
@@ -399,37 +385,33 @@ export default function CompanyOnboarding() {
         }
 
         if (paymentMethod === "etransfer" && !payoutEmail) {
-          toast({
+          setErrorDialog({
             title: "Payment details required",
-            description: "Please add an e-transfer email to continue.",
-            variant: "destructive",
+            message: "Please add an e-transfer email to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "wire" && (!bankRoutingNumber || !bankAccountNumber)) {
-          toast({
+          setErrorDialog({
             title: "Payment details required",
-            description: "Please add your bank routing and account number to continue.",
-            variant: "destructive",
+            message: "Please add your bank routing and account number to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "paypal" && !paypalEmail) {
-          toast({
+          setErrorDialog({
             title: "Payment details required",
-            description: "Please add your PayPal email to continue.",
-            variant: "destructive",
+            message: "Please add your PayPal email to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "crypto" && (!cryptoWalletAddress || !cryptoNetwork)) {
-          toast({
+          setErrorDialog({
             title: "Payment details required",
-            description: "Please add your wallet address and network to continue.",
-            variant: "destructive",
+            message: "Please add your wallet address and network to continue.",
           });
           return false;
         }
@@ -508,10 +490,9 @@ export default function CompanyOnboarding() {
       }, 1500);
     } catch (error: any) {
       console.error("Onboarding error:", error);
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to submit onboarding. Please try again.",
-        variant: "destructive",
+        message: error.message || "Failed to submit onboarding. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -1318,6 +1299,13 @@ export default function CompanyOnboarding() {
           <p>Need help? Contact us at support@affiliatexchange.com</p>
         </div>
       </div>
+
+      <GenericErrorDialog
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        description={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

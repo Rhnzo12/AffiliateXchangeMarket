@@ -3161,6 +3161,27 @@ export class DatabaseStorage implements IStorage {
     await db.delete(paymentSettings).where(eq(paymentSettings.id, id));
   }
 
+  async setPrimaryPaymentMethod(userId: string, paymentMethodId: string): Promise<void> {
+    // First, unset all primary flags for this user
+    await db
+      .update(paymentSettings)
+      .set({ isDefault: false })
+      .where(eq(paymentSettings.userId, userId));
+
+    // Then set the specified one as primary
+    await db
+      .update(paymentSettings)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(paymentSettings.id, paymentMethodId));
+  }
+
+  async updatePaymentSetting(paymentMethodId: string, updates: Partial<PaymentSetting>): Promise<void> {
+    await db
+      .update(paymentSettings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(paymentSettings.id, paymentMethodId));
+  }
+
   // Payments
   async createPayment(payment: InsertPayment): Promise<Payment> {
     const result = await db

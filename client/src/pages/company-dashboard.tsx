@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -12,23 +12,24 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton, ListItemSkeleton } from "../components/skeletons";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function CompanyDashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
         title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
+        message: "You are logged out. Logging in again...",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/company/stats"],
@@ -53,10 +54,9 @@ export default function CompanyDashboard() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
         title: "Error",
-        description: error.message || "Failed to mark work as complete",
-        variant: "destructive",
+        message: error.message || "Failed to mark work as complete",
       });
     },
   });
@@ -313,6 +313,13 @@ export default function CompanyDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

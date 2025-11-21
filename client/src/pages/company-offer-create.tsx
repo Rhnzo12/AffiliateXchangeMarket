@@ -31,6 +31,7 @@ import { proxiedSrc } from "../lib/image";
 import { TopNavBar } from "../components/TopNavBar";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { Progress } from "../components/ui/progress";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 // Helper function to generate thumbnail from video
 const generateThumbnail = async (videoUrl: string): Promise<Blob> => {
@@ -111,6 +112,17 @@ export default function CompanyOfferCreate() {
   const { isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
+  // Error dialog state
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+  });
+
   const [formData, setFormData] = useState({
     title: "",
     productName: "",
@@ -166,16 +178,16 @@ export default function CompanyOfferCreate() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "Please log in to create offers",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // Fetch company profile to get company ID for folder organization
   const { data: companyProfile } = useQuery<{ id: string }>({
@@ -514,10 +526,10 @@ export default function CompanyOfferCreate() {
     },
     onError: (error: any) => {
       console.error("Offer creation error:", error);
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to create offer",
-        variant: "destructive",
       });
       setOfferUploadProgress(0);
       setUploadStatus("");
@@ -535,19 +547,19 @@ export default function CompanyOfferCreate() {
     const isImage = imageExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isImage) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Invalid File Type",
         description: "Please upload an image file (JPG, PNG, GIF, WebP)",
-        variant: "destructive",
       });
       return;
     }
 
     if (file.size > 10485760) { // 10MB
-      toast({
+      setErrorDialog({
+        open: true,
         title: "File Too Large",
         description: "Image file must be less than 10MB",
-        variant: "destructive",
       });
       return;
     }
@@ -573,19 +585,19 @@ export default function CompanyOfferCreate() {
     const isVideo = videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isVideo) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Invalid File Type",
         description: "Please upload a video file (MP4, MOV, AVI, WebM, etc.)",
-        variant: "destructive",
       });
       return;
     }
 
     if (file.size > 524288000) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "File Too Large",
         description: "Video file must be less than 500MB",
-        variant: "destructive",
       });
       return;
     }
@@ -615,19 +627,19 @@ export default function CompanyOfferCreate() {
 
   const handleAddVideo = () => {
     if (!currentVideo.videoFile) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Video Required",
         description: "Please select a video file",
-        variant: "destructive",
       });
       return;
     }
 
     if (!currentVideo.title.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Title Required",
         description: "Please provide a title for your video",
-        variant: "destructive",
       });
       return;
     }
@@ -667,55 +679,55 @@ export default function CompanyOfferCreate() {
     e.preventDefault();
 
     if (!formData.title.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter an offer title",
-        variant: "destructive",
       });
       return;
     }
 
     if (!formData.productName.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a product name",
-        variant: "destructive",
       });
       return;
     }
 
     if (!formData.shortDescription.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a short description",
-        variant: "destructive",
       });
       return;
     }
 
     if (!formData.fullDescription.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a full description",
-        variant: "destructive",
       });
       return;
     }
 
     if (!formData.primaryNiche.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please select a primary niche",
-        variant: "destructive",
       });
       return;
     }
 
     if (!formData.productUrl.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a product URL",
-        variant: "destructive",
       });
       return;
     }
@@ -726,20 +738,20 @@ export default function CompanyOfferCreate() {
         productUrl = 'https://' + productUrl;
         setFormData({ ...formData, productUrl: productUrl });
       } else {
-        toast({
+        setErrorDialog({
+          open: true,
           title: "Validation Error",
           description: "Please enter a valid URL",
-          variant: "destructive",
         });
         return;
       }
     }
 
     if (formData.commissionType === "per_sale" && !formData.commissionRate) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a commission rate",
-        variant: "destructive",
       });
       return;
     }
@@ -747,20 +759,20 @@ export default function CompanyOfferCreate() {
     if (formData.commissionType === "per_sale" && formData.commissionRate) {
       const rate = parseFloat(formData.commissionRate);
       if (isNaN(rate) || rate <= 0 || rate > 100) {
-        toast({
+        setErrorDialog({
+          open: true,
           title: "Validation Error",
           description: "Commission rate must be between 0 and 100",
-          variant: "destructive",
         });
         return;
       }
     }
 
     if (formData.commissionType !== "per_sale" && !formData.commissionAmount) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Validation Error",
         description: "Please enter a commission amount",
-        variant: "destructive",
       });
       return;
     }
@@ -768,20 +780,20 @@ export default function CompanyOfferCreate() {
     if (formData.commissionType !== "per_sale" && formData.commissionAmount) {
       const amount = parseFloat(formData.commissionAmount);
       if (isNaN(amount) || amount <= 0) {
-        toast({
+        setErrorDialog({
+          open: true,
           title: "Validation Error",
           description: "Commission amount must be greater than 0",
-          variant: "destructive",
         });
         return;
       }
     }
 
     if (videos.length < 6) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Videos Required",
         description: `Please upload at least 6 videos (currently: ${videos.length})`,
-        variant: "destructive",
       });
       return;
     }
@@ -1524,6 +1536,15 @@ export default function CompanyOfferCreate() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

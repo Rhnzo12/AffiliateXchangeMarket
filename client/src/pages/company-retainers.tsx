@@ -4,6 +4,7 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Plus, DollarSign, Video, Calendar, Users, Eye, Filter, X } from "lucide-react";
+import { Plus, DollarSign, Video, Calendar, Users, Eye, Filter, X, ChevronDown, ChevronUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -77,6 +78,18 @@ export default function CompanyRetainers() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    errorDetails?: string;
+  }>({
+    open: false,
+    title: "",
+    description: "",
+    errorDetails: "",
+  });
 
   const { data: contracts, isLoading } = useQuery<any[]>({
     queryKey: ["/api/company/retainer-contracts"],
@@ -178,10 +191,11 @@ export default function CompanyRetainers() {
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data || error?.message || "Failed to create retainer contract";
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error Creating Contract",
-        description: String(errorMessage),
-        variant: "destructive",
+        description: "We encountered an issue while creating your retainer contract. Please try again.",
+        errorDetails: String(errorMessage),
       });
     },
   });
@@ -344,13 +358,16 @@ export default function CompanyRetainers() {
                             {["1", "3", "6", "12"].map((value) => (
                               <label
                                 key={value}
-                                className="flex items-center justify-between gap-2 rounded-md border p-3 hover:border-primary cursor-pointer"
+                                className={`flex items-center gap-2 rounded-md border p-3 cursor-pointer transition-all ${
+                                  field.value === value
+                                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                    : "hover:border-primary hover:bg-accent"
+                                }`}
                               >
-                                <div className="flex items-center gap-2">
-                                  <RadioGroupItem value={value} />
-                                  <span className="font-medium">{value} month{value === "1" ? "" : "s"}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground">Contract length</span>
+                                <RadioGroupItem value={value} />
+                                <span className={`font-medium ${field.value === value ? "text-primary" : ""}`}>
+                                  {value} month{value === "1" ? "" : "s"}
+                                </span>
                               </label>
                             ))}
                           </RadioGroup>
@@ -441,180 +458,6 @@ export default function CompanyRetainers() {
                     </FormItem>
                     )}
                   />
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="minimumVideoLengthSeconds"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Minimum Video Length (seconds)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="45"
-                            data-testid="input-minimum-video-length"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          Set expectations like 45-60 seconds per video
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="postingSchedule"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Posting Schedule</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., 1 video every weekday"
-                            data-testid="input-posting-schedule"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          Outline cadence expectations for creators
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="contentApprovalRequired"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-1">
-                          <FormLabel className="text-base">Content approval required</FormLabel>
-                          <FormDescription>Review videos before they go live</FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid="switch-content-approval"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="exclusivityRequired"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-1">
-                          <FormLabel className="text-base">Exclusivity</FormLabel>
-                          <FormDescription>Prevent creators from working with competitors</FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid="switch-exclusivity"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="minimumVideoLengthSeconds"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Minimum Video Length (seconds)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="45"
-                            data-testid="input-minimum-video-length"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          Set expectations like 45-60 seconds per video
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="postingSchedule"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Posting Schedule</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., 1 video every weekday"
-                            data-testid="input-posting-schedule"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription className="text-xs">
-                          Outline cadence expectations for creators
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="contentApprovalRequired"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-1">
-                          <FormLabel className="text-base">Content approval required</FormLabel>
-                          <FormDescription>Review videos before they go live</FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid="switch-content-approval"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="exclusivityRequired"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-1">
-                          <FormLabel className="text-base">Exclusivity</FormLabel>
-                          <FormDescription>Prevent creators from working with competitors</FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            data-testid="switch-exclusivity"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <FormField
@@ -873,8 +716,19 @@ export default function CompanyRetainers() {
                 Reset
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
+              aria-label="Toggle filter visibility"
+              data-testid="button-toggle-filter"
+              className="sm:ml-2"
+            >
+              {isFilterCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+            </Button>
           </div>
 
+          {!isFilterCollapsed && (
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Search</label>
@@ -917,6 +771,7 @@ export default function CompanyRetainers() {
               </Select>
             </div>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1074,6 +929,15 @@ export default function CompanyRetainers() {
           ))}
         </div>
       )}
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

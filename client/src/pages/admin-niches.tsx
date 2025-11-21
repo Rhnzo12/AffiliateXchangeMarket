@@ -27,6 +27,7 @@ import {
 } from "../components/ui/table";
 import { Plus, Pencil, Trash2, Tags } from "lucide-react";
 import { TopNavBar } from "../components/TopNavBar";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function AdminNiches() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -36,6 +37,11 @@ export default function AdminNiches() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string; errorDetails?: string }>({
+    open: false,
+    title: "",
+    description: ""
+  });
 
   const { data: niches = [], isLoading: nichesLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/niches"],
@@ -68,10 +74,11 @@ export default function AdminNiches() {
       handleCloseDialog();
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message,
-        variant: "destructive",
+        description: "Failed to create niche",
+        errorDetails: error.message,
       });
     },
   });
@@ -102,10 +109,11 @@ export default function AdminNiches() {
       handleCloseDialog();
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message,
-        variant: "destructive",
+        description: "Failed to update niche",
+        errorDetails: error.message,
       });
     },
   });
@@ -133,10 +141,11 @@ export default function AdminNiches() {
       });
     },
     onError: (error: Error) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
-        description: error.message,
-        variant: "destructive",
+        description: "Failed to delete niche",
+        errorDetails: error.message,
       });
     },
   });
@@ -165,10 +174,10 @@ export default function AdminNiches() {
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: "Niche name is required",
-        variant: "destructive",
       });
       return;
     }
@@ -377,6 +386,16 @@ export default function AdminNiches() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

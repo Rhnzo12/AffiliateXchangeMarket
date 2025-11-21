@@ -25,11 +25,12 @@ const buttonVariants = cva(
       // Heights are set as "min" heights, because sometimes Ai will place large amount of content
       // inside buttons. With a min-height they will look appropriate with small amounts of content,
       // but will expand to fit large amounts of content.
+      // Updated to meet iOS/Android touch target guidelines (44px minimum)
       size: {
-        default: "min-h-9 px-4 py-2",
-        sm: "min-h-8 rounded-md px-3 text-xs",
-        lg: "min-h-10 rounded-md px-8",
-        icon: "h-9 w-9",
+        default: "min-h-11 px-4 py-2", // 44px - meets mobile touch target
+        sm: "min-h-10 rounded-md px-3 text-xs", // 40px - improved for mobile
+        lg: "min-h-12 rounded-md px-8", // 48px - comfortable touch target
+        icon: "h-11 w-11", // 44px - meets mobile touch target
       },
     },
     defaultVariants: {

@@ -6,6 +6,7 @@ import { Building2, Sparkles } from "lucide-react";
 import { apiRequest } from "../lib/queryClient";
 import { useToast } from "../hooks/use-toast";
 import { useLocation } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function Onboarding() {
   const [, setLocation] = useLocation();
@@ -13,6 +14,11 @@ export default function Onboarding() {
   const { toast } = useToast();
   const [selectedRole, setSelectedRole] = useState<'creator' | 'company' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   const handleRoleSelection = async () => {
     if (!selectedRole) return;
@@ -38,10 +44,10 @@ export default function Onboarding() {
       // Force page reload to refresh user session and redirect to appropriate dashboard
       window.location.href = selectedRole === 'creator' ? '/browse' : '/company/dashboard';
     } catch (error: any) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to set role",
-        variant: "destructive",
       });
       setIsSubmitting(false);
     }
@@ -151,6 +157,14 @@ export default function Onboarding() {
           </Button>
         </div>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

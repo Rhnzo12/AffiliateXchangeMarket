@@ -39,22 +39,6 @@ export function AppSidebar() {
   const { isMobile, setOpenMobile } = useSidebar();
   const currentYear = new Date().getFullYear();
 
-  // Fetch conversations to get unread count
-  const { data: conversations } = useQuery<any[]>({
-    queryKey: ["/api/conversations"],
-    enabled: !!user,
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
-
-  // Calculate total unread messages
-  const unreadCount = conversations?.reduce((total, conv) => {
-    if (user?.role === 'company') {
-      return total + (conv.companyUnreadCount || 0);
-    } else {
-      return total + (conv.creatorUnreadCount || 0);
-    }
-  }, 0) || 0;
-
   // Close sidebar on mobile when navigation link is clicked
   const handleNavClick = () => {
     if (isMobile) {
@@ -87,11 +71,6 @@ export function AppSidebar() {
       title: "Analytics",
       url: "/analytics",
       icon: TrendingUp,
-    },
-    {
-      title: "Messages",
-      url: "/messages",
-      icon: MessageSquare,
     },
     {
       title: "Favorites",
@@ -140,11 +119,6 @@ export function AppSidebar() {
       title: "Analytics",
       url: "/company/analytics",
       icon: TrendingUp,
-    },
-    {
-      title: "Messages",
-      url: "/company/messages",
-      icon: MessageSquare,
     },
     {
       title: "Reviews",
@@ -251,21 +225,7 @@ export function AppSidebar() {
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                       >
                     <Link href={item.url} onClick={handleNavClick}>
-                      {item.title === "Messages" ? (
-                        <div className="relative inline-flex">
-                          <item.icon className="h-4 w-4" />
-                          {unreadCount > 0 && (
-                            <Badge
-                              variant="destructive"
-                              className="absolute -top-2 -right-2 h-3.5 min-w-3.5 px-0 flex items-center justify-center text-[9px] font-bold leading-none rounded-full border border-background"
-                            >
-                              {unreadCount > 9 ? '9+' : unreadCount}
-                            </Badge>
-                          )}
-                        </div>
-                      ) : (
-                        <item.icon className="h-4 w-4" />
-                      )}
+                      <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>

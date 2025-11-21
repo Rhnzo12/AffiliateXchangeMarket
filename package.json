@@ -12,6 +12,7 @@
     "migrate:attachments": "node --import tsx server/migrations/add-message-attachments.ts",
     "migrate:new-fields": "node --import tsx server/migrations/add-conversation-offer-company-fields.ts",
     "migrate:creator-requirements": "tsx --env-file=.env scripts/run-migration-011.ts",
+    "migrate:stripe-connect": "tsx --env-file=.env scripts/run-migration-013.ts",
     "update:offer-requirements": "tsx --env-file=.env scripts/update-offer-requirements.ts",
     "check:offer-requirements": "tsx --env-file=.env scripts/check-offer-requirements.ts",
     "test:api-offer": "tsx --env-file=.env scripts/test-api-offer.ts",
@@ -26,7 +27,7 @@
     "test:scheduler": "tsx --env-file=.env scripts/test-scheduler.ts"
   },
   "dependencies": {
-    "@google-cloud/storage": "^7.17.2",
+    "@google-cloud/storage": "^7.17.3",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
@@ -96,6 +97,7 @@
     "lucide-react": "^0.453.0",
     "memoizee": "^0.4.17",
     "memorystore": "^1.6.7",
+    "multer": "^2.0.2",
     "next-themes": "^0.4.6",
     "openid-client": "^6.8.1",
     "passport": "^0.7.0",

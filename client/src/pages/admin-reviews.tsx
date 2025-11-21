@@ -13,6 +13,7 @@ import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { Input } from "../components/ui/input";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import {
   Select,
   SelectContent,
@@ -34,19 +35,24 @@ export default function AdminReviews() {
   const [visibilityFilter, setVisibilityFilter] = useState("all");
   const [ratingFilter, setRatingFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({ open: false, title: "", description: "" });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const { data: reviews = [], isLoading: loadingReviews } = useQuery<any[]>({
     queryKey: ["/api/admin/reviews"],
@@ -127,10 +133,10 @@ export default function AdminReviews() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to hide review",
-        variant: "destructive",
       });
     },
   });
@@ -148,10 +154,10 @@ export default function AdminReviews() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to delete review",
-        variant: "destructive",
       });
     },
   });
@@ -171,10 +177,10 @@ export default function AdminReviews() {
       setAdminNote("");
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to save note",
-        variant: "destructive",
       });
     },
   });
@@ -194,10 +200,10 @@ export default function AdminReviews() {
       setEditedReview(null);
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update review",
-        variant: "destructive",
       });
     },
   });
@@ -215,10 +221,10 @@ export default function AdminReviews() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to approve review",
-        variant: "destructive",
       });
     },
   });
@@ -696,6 +702,14 @@ export default function AdminReviews() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

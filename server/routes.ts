@@ -2366,6 +2366,239 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/payment-settings/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const paymentMethodId = req.params.id;
+
+      // Get all payment settings for the user
+      const allSettings = await storage.getPaymentSettings(userId);
+
+      // Find the payment method to delete
+      const settingToDelete = allSettings.find(s => s.id === paymentMethodId);
+
+      if (!settingToDelete) {
+        return res.status(404).send("Payment method not found");
+      }
+
+      // Verify the payment method belongs to the user
+      if (settingToDelete.userId !== userId) {
+        return res.status(403).send("Unauthorized");
+      }
+
+      // If deleting the primary payment method and there are other methods, set a new primary
+      if (settingToDelete.isDefault && allSettings.length > 1) {
+        // Find another payment method to set as primary (first one that's not being deleted)
+        const newPrimary = allSettings.find(s => s.id !== paymentMethodId);
+        if (newPrimary) {
+          await storage.setPrimaryPaymentMethod(userId, newPrimary.id);
+        }
+      }
+
+      // Delete the payment method
+      await storage.deletePaymentSetting(paymentMethodId);
+
+      res.json({ success: true, message: "Payment method deleted successfully" });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.put("/api/payment-settings/:id/set-primary", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const paymentMethodId = req.params.id;
+
+      // Get all payment settings for the user
+      const allSettings = await storage.getPaymentSettings(userId);
+
+      // Find the payment method to set as primary
+      const settingToSetPrimary = allSettings.find(s => s.id === paymentMethodId);
+
+      if (!settingToSetPrimary) {
+        return res.status(404).send("Payment method not found");
+      }
+
+      // Verify the payment method belongs to the user
+      if (settingToSetPrimary.userId !== userId) {
+        return res.status(403).send("Unauthorized");
+      }
+
+      // Set as primary
+      await storage.setPrimaryPaymentMethod(userId, paymentMethodId);
+
+      res.json({ success: true, message: "Primary payment method updated successfully" });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Update payment setting (e.g., add stripeAccountId to existing e-transfer)
+  app.put("/api/payment-settings/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const paymentMethodId = req.params.id;
+      const { stripeAccountId } = req.body;
+
+      // Get all payment settings for the user
+      const allSettings = await storage.getPaymentSettings(userId);
+
+      // Find the payment method to update
+      const settingToUpdate = allSettings.find(s => s.id === paymentMethodId);
+
+      if (!settingToUpdate) {
+        return res.status(404).send("Payment method not found");
+      }
+
+      // Verify the payment method belongs to the user
+      if (settingToUpdate.userId !== userId) {
+        return res.status(403).send("Unauthorized");
+      }
+
+      // Update the payment setting with stripeAccountId
+      await storage.updatePaymentSetting(paymentMethodId, { stripeAccountId });
+
+      res.json({ success: true, message: "Payment method updated successfully" });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Stripe Connect routes for e-transfer setup
+  app.post("/api/stripe-connect/create-account", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUserById(userId);
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
+      const { stripeConnectService } = await import('./stripeConnectService');
+
+      // Create Stripe Connect account
+      const result = await stripeConnectService.createConnectedAccount(
+        userId,
+        user.email,
+        'CA' // Default to Canada for e-transfers
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({
+        success: true,
+        accountId: result.accountId
+      });
+    } catch (error: any) {
+      console.error('[Stripe Connect] Create account error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/stripe-connect/onboarding-link", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { accountId, returnUrl, refreshUrl } = req.body;
+
+      if (!accountId) {
+        return res.status(400).send("accountId is required");
+      }
+
+      // Verify the account belongs to this user
+      const paymentSettings = await storage.getPaymentSettings(userId);
+      const userOwnsAccount = paymentSettings.some(ps => ps.stripeAccountId === accountId);
+
+      if (!userOwnsAccount) {
+        return res.status(403).send("Unauthorized - account does not belong to this user");
+      }
+
+      const { stripeConnectService } = await import('./stripeConnectService');
+
+      const result = await stripeConnectService.createAccountLink(
+        accountId,
+        returnUrl || `${process.env.BASE_URL || 'http://localhost:5000'}/settings/payment?stripe_onboarding=success`,
+        refreshUrl || `${process.env.BASE_URL || 'http://localhost:5000'}/settings/payment?stripe_onboarding=refresh`
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({
+        success: true,
+        url: result.url
+      });
+    } catch (error: any) {
+      console.error('[Stripe Connect] Onboarding link error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/stripe-connect/account-status/:accountId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { accountId } = req.params;
+
+      // Verify the account belongs to this user
+      const paymentSettings = await storage.getPaymentSettings(userId);
+      const userOwnsAccount = paymentSettings.some(ps => ps.stripeAccountId === accountId);
+
+      if (!userOwnsAccount) {
+        return res.status(403).send("Unauthorized - account does not belong to this user");
+      }
+
+      const { stripeConnectService } = await import('./stripeConnectService');
+
+      const result = await stripeConnectService.checkAccountStatus(accountId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[Stripe Connect] Account status error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/stripe-connect/dashboard-link", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { accountId } = req.body;
+
+      if (!accountId) {
+        return res.status(400).send("accountId is required");
+      }
+
+      // Verify the account belongs to this user
+      const paymentSettings = await storage.getPaymentSettings(userId);
+      const userOwnsAccount = paymentSettings.some(ps => ps.stripeAccountId === accountId);
+
+      if (!userOwnsAccount) {
+        return res.status(403).send("Unauthorized - account does not belong to this user");
+      }
+
+      const { stripeConnectService } = await import('./stripeConnectService');
+
+      const result = await stripeConnectService.createLoginLink(accountId);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({
+        success: true,
+        url: result.url
+      });
+    } catch (error: any) {
+      console.error('[Stripe Connect] Dashboard link error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Payment routes for creators
   app.get("/api/payments/creator", requireAuth, requireRole('creator'), async (req, res) => {
     try {
@@ -2494,10 +2727,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { paymentProcessor } = await import('./paymentProcessor');
 
         // Validate creator has payment settings configured
+        console.log(`[Payment] Validating payment settings for creator ${payment.creatorId}...`);
         const validation = await paymentProcessor.validateCreatorPaymentSettings(payment.creatorId);
         if (!validation.valid) {
+          console.error(`[Payment] ERROR: Payment validation failed: ${validation.error}`);
           return res.status(400).send(validation.error);
         }
+        console.log(`[Payment] Validation passed, proceeding with payment...`);
 
         // Actually send the money via PayPal/bank/crypto/etc.
         // Use the appropriate processor based on payment type
@@ -2526,11 +2762,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const companyUser = await storage.getUserById(companyProfile.userId);
 
               if (companyUser) {
+                // Get the payment method name from the creator's settings
+                let paymentMethodName = 'payment account';
+                try {
+                  const creatorPaymentSettings = await storage.getPaymentSettings(payment.creatorId);
+                  if (creatorPaymentSettings && creatorPaymentSettings.length > 0) {
+                    const defaultMethod = creatorPaymentSettings.find(ps => ps.isDefault) || creatorPaymentSettings[0];
+                    const methodNames: Record<string, string> = {
+                      'paypal': 'PayPal account',
+                      'etransfer': 'Stripe account',
+                      'wire': 'bank account',
+                      'crypto': 'crypto wallet'
+                    };
+                    paymentMethodName = methodNames[defaultMethod.payoutMethod] || 'payment account';
+                  }
+                } catch (error) {
+                  // If we can't determine the method, use generic message
+                  console.warn('[Payment] Could not determine payment method name:', error);
+                }
+
                 await notificationService.sendNotification(
                   companyUser.id,
                   'payment_failed_insufficient_funds',
                   'Payment Processing Failed - Insufficient Funds',
-                  `The payment request for $${payment.netAmount} could not be processed due to insufficient funds in your PayPal account.`,
+                  `The payment request for $${payment.netAmount} could not be processed due to insufficient funds in your ${paymentMethodName}.`,
                   {
                     userName: companyUser.firstName || companyUser.username,
                     amount: `$${payment.netAmount}`,
@@ -2671,11 +2926,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).send("Company user not found");
       }
 
+      // Get the payment method name from the creator's settings
+      let paymentMethodName = 'payment account';
+      try {
+        const creatorPaymentSettings = await storage.getPaymentSettings(payment.creatorId);
+        if (creatorPaymentSettings && creatorPaymentSettings.length > 0) {
+          const defaultMethod = creatorPaymentSettings.find(ps => ps.isDefault) || creatorPaymentSettings[0];
+          const methodNames: Record<string, string> = {
+            'paypal': 'PayPal account',
+            'etransfer': 'Stripe account',
+            'wire': 'bank account',
+            'crypto': 'crypto wallet'
+          };
+          paymentMethodName = methodNames[defaultMethod.payoutMethod] || 'payment account';
+        }
+      } catch (error) {
+        // If we can't determine the method, use generic message
+        console.warn('[Payment] Could not determine payment method name:', error);
+      }
+
       await notificationService.sendNotification(
         companyUser.id,
         'payment_failed_insufficient_funds',
         'Payment Processing Failed - Insufficient Funds',
-        `The payment request for $${payment.netAmount} could not be processed due to insufficient funds in your PayPal account.`,
+        `The payment request for $${payment.netAmount} could not be processed due to insufficient funds in your ${paymentMethodName}.`,
         {
           userName: companyUser.firstName || companyUser.username,
           amount: `$${payment.netAmount}`,

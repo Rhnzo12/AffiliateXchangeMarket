@@ -449,6 +449,7 @@ export const paymentSettings = pgTable("payment_settings", {
   paypalEmail: varchar("paypal_email"),
   cryptoWalletAddress: varchar("crypto_wallet_address"),
   cryptoNetwork: varchar("crypto_network"),
+  stripeAccountId: varchar("stripe_account_id"), // Stripe Connect account ID for e-transfers
   taxInformation: jsonb("tax_information"),
   isDefault: boolean("is_default").default(false),
   createdAt: timestamp("created_at").defaultNow(),

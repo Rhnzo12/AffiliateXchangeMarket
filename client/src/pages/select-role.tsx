@@ -4,11 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { useToast } from "../hooks/use-toast";
 import { Zap, User, Building2 } from "lucide-react";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 export default function SelectRole() {
   const [selectedRole, setSelectedRole] = useState<"creator" | "company">("creator");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
+    open: false,
+    title: "",
+    description: "",
+  });
 
   const handleSubmit = async () => {
     setIsLoading(true);
@@ -43,10 +49,10 @@ export default function SelectRole() {
         }
       }, 1000);
     } catch (error: any) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message,
-        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -130,6 +136,14 @@ export default function SelectRole() {
           </CardContent>
         </Card>
       </div>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

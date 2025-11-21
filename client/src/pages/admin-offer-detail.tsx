@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest, queryClient } from "../lib/queryClient";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   draft: { label: "Draft", variant: "outline" },
@@ -58,19 +59,24 @@ export default function AdminOfferDetail() {
   const [editNotes, setEditNotes] = useState("");
   const [feeDialog, setFeeDialog] = useState(false);
   const [listingFee, setListingFee] = useState("");
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+  }>({ open: false, title: "", description: "" });
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, authLoading]);
 
   const { data: offerData, isLoading } = useQuery({
     queryKey: [`/api/admin/offers/${offerId}`],
@@ -110,10 +116,10 @@ export default function AdminOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to approve offer",
-        variant: "destructive",
       });
     },
   });
@@ -134,10 +140,10 @@ export default function AdminOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to reject offer",
-        variant: "destructive",
       });
     },
   });
@@ -157,10 +163,10 @@ export default function AdminOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to request edits",
-        variant: "destructive",
       });
     },
   });
@@ -179,10 +185,10 @@ export default function AdminOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update feature status",
-        variant: "destructive",
       });
     },
   });
@@ -201,10 +207,10 @@ export default function AdminOfferDetail() {
       navigate("/admin/offers");
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to remove offer",
-        variant: "destructive",
       });
     },
   });
@@ -224,10 +230,10 @@ export default function AdminOfferDetail() {
       });
     },
     onError: (error: any) => {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Error",
         description: error.message || "Failed to update listing fee",
-        variant: "destructive",
       });
     },
   });
@@ -687,6 +693,14 @@ export default function AdminOfferDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        variant="error"
+      />
     </div>
   );
 }

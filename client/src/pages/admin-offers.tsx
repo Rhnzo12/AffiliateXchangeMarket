@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { TopNavBar } from "../components/TopNavBar";
 import { useLocation, useRoute } from "wouter";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   draft: { label: "Draft", variant: "outline" },
@@ -58,19 +59,24 @@ export default function AdminOffers() {
     commissionType: "",
     search: "",
   });
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string; errorDetails?: string }>({
+    open: false,
+    title: "",
+    description: ""
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Unauthorized",
         description: "You are logged out. Logging in again...",
-        variant: "destructive",
       });
       setTimeout(() => {
         window.location.href = "/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   const queryParams = new URLSearchParams();
   if (filters.status) queryParams.append("status", filters.status);
@@ -340,6 +346,16 @@ export default function AdminOffers() {
           )}
         </CardContent>
       </Card>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

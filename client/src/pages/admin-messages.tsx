@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
+import { proxiedSrc } from "../lib/image";
 
 interface EnhancedMessage {
   id: string;
@@ -312,7 +313,7 @@ export default function AdminMessages() {
                                         className="block"
                                       >
                                         <img
-                                          src={url}
+                                          src={proxiedSrc(url)}
                                           alt={`Attachment ${idx + 1}`}
                                           className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
                                           style={{ maxHeight: '300px' }}

@@ -31,6 +31,8 @@ import {
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { MessageTemplates } from "../components/MessageTemplates";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 type MessageStatus = "sending" | "sent" | "failed";
 
@@ -65,7 +67,8 @@ export default function Messages() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [attachmentPreviews, setAttachmentPreviews] = useState<string[]>([]);
-  
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+
   // Image viewer state
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -136,10 +139,9 @@ export default function Messages() {
         description: "Image is being downloaded",
       });
     } catch (error) {
-      toast({
+      setErrorDialog({
         title: "Download failed",
-        description: "Failed to download image",
-        variant: "destructive",
+        message: "Failed to download image",
       });
     }
   };
@@ -444,19 +446,17 @@ export default function Messages() {
 
     const validFiles = fileArray.filter(file => {
       if (!file.type.startsWith('image/')) {
-        toast({
+        setErrorDialog({
           title: "Invalid file type",
-          description: `${file.name} is not an image file`,
-          variant: "destructive",
+          message: `${file.name} is not an image file`,
         });
         return false;
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        toast({
+        setErrorDialog({
           title: "File too large",
-          description: `${file.name} exceeds 5MB limit`,
-          variant: "destructive",
+          message: `${file.name} exceeds 5MB limit`,
         });
         return false;
       }
@@ -468,10 +468,9 @@ export default function Messages() {
 
     const remainingSlots = 3 - selectedFiles.length;
     if (validFiles.length > remainingSlots) {
-      toast({
+      setErrorDialog({
         title: "Too many files",
-        description: `You can only attach up to 3 images per message`,
-        variant: "destructive",
+        message: `You can only attach up to 3 images per message`,
       });
       validFiles.splice(remainingSlots);
     }
@@ -499,10 +498,9 @@ export default function Messages() {
   if (files.length === 0) return [];
 
   if (!selectedConversation || !user?.id || !user?.role) {
-    toast({
+    setErrorDialog({
       title: "Upload Failed",
-      description: "Missing conversation or user information",
-      variant: "destructive",
+      message: "Missing conversation or user information",
     });
     return [];
   }
@@ -563,10 +561,9 @@ export default function Messages() {
     return uploadedUrls;
   } catch (error) {
     console.error("File upload error:", error);
-    toast({
+    setErrorDialog({
       title: "Upload Failed",
-      description: "Failed to upload attachments. Please try again.",
-      variant: "destructive",
+      message: "Failed to upload attachments. Please try again.",
     });
     throw error;
   } finally {
@@ -620,10 +617,9 @@ export default function Messages() {
         setMessageText(messageContent);
         setSelectedFiles(filesToUpload);
         setAttachmentPreviews(previewsToRestore);
-        toast({
+        setErrorDialog({
           title: "Connection Error",
-          description: "Real-time messaging is not connected. Trying to reconnect...",
-          variant: "destructive",
+          message: "Real-time messaging is not connected. Trying to reconnect...",
         });
       }
     } catch (error) {
@@ -779,12 +775,12 @@ export default function Messages() {
             </div>
           )}
 
-          <div 
+          <div
             className="max-w-[90vw] max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={currentImages[currentImageIndex]}
+              src={proxiedSrc(currentImages[currentImageIndex])}
               alt={`Image ${currentImageIndex + 1}`}
               className="max-w-full max-h-[90vh] object-contain transition-transform duration-200"
               style={{ transform: `scale(${imageZoom})` }}
@@ -996,7 +992,7 @@ export default function Messages() {
                                     className="block w-full text-left"
                                   >
                                     <img
-                                      src={url}
+                                      src={proxiedSrc(url)}
                                       alt={`Attachment ${idx + 1}`}
                                       className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
                                       style={{ maxHeight: '300px' }}
@@ -1155,6 +1151,13 @@ export default function Messages() {
         </Card>
       </div>
       </div>
+
+      <GenericErrorDialog
+        isOpen={!!errorDialog}
+        onClose={() => setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        message={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
 }

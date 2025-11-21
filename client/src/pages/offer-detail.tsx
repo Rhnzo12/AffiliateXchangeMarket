@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { isUnauthorizedError } from "../lib/authUtils";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -143,6 +144,7 @@ export default function OfferDetail() {
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [activeSection, setActiveSection] = useState("overview");
   const [isScrolling, setIsScrolling] = useState(false);
+  const [errorDialog, setErrorDialog] = useState({ open: false, title: "Error", description: "An error occurred", errorDetails: "" });
 
   // Refs for sections
   const overviewRef = useRef<HTMLDivElement>(null);
@@ -153,16 +155,17 @@ export default function OfferDetail() {
   // Auth check
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      toast({
+      setErrorDialog({
+        open: true,
         title: "Authentication Required",
         description: "Please log in to view offer details.",
-        variant: "destructive",
+        errorDetails: "You must be logged in to access this page.",
       });
       setTimeout(() => {
         window.location.href = "/api/login";
       }, 500);
     }
-  }, [isAuthenticated, isLoading, toast]);
+  }, [isAuthenticated, isLoading]);
 
   // Improved scroll spy with IntersectionObserver
   useEffect(() => {
@@ -361,20 +364,22 @@ export default function OfferDetail() {
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "Session expired. Please log in again.",
-          variant: "destructive",
+        setErrorDialog({
+          open: true,
+          title: "Session Expired",
+          description: "Your session has expired. Please log in again to continue.",
+          errorDetails: error.message || "Unauthorized access",
         });
         setTimeout(() => {
           window.location.href = "/api/login";
         }, 500);
         return;
       }
-      toast({
-        title: "Error",
-        description: "Failed to update favorites",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Favorites Error",
+        description: "Unable to update your favorites list. Please try again.",
+        errorDetails: error.message || "Failed to update favorites",
       });
     },
   });
@@ -407,10 +412,11 @@ export default function OfferDetail() {
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
-        toast({
-          title: "Unauthorized",
-          description: "Session expired. Please log in again.",
-          variant: "destructive",
+        setErrorDialog({
+          open: true,
+          title: "Session Expired",
+          description: "Your session has expired. Please log in again to continue.",
+          errorDetails: error.message || "Unauthorized access",
         });
         setTimeout(() => {
           window.location.href = "/api/login";
@@ -425,10 +431,11 @@ export default function OfferDetail() {
         return;
       }
 
-      toast({
-        title: "Error",
-        description: error.message || "Failed to submit application",
-        variant: "destructive",
+      setErrorDialog({
+        open: true,
+        title: "Application Error",
+        description: "Unable to submit your application. Please try again.",
+        errorDetails: error.message || "Failed to submit application",
       });
     },
   });
@@ -1662,6 +1669,16 @@ export default function OfferDetail() {
           scrollbar-width: none;
         }
       `}</style>
+
+      {/* Error Dialog */}
+      <GenericErrorDialog
+        open={errorDialog.open}
+        onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+        title={errorDialog.title}
+        description={errorDialog.description}
+        errorDetails={errorDialog.errorDetails}
+        variant="error"
+      />
     </div>
   );
 }

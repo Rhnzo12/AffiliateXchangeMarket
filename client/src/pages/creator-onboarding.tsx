@@ -4,6 +4,7 @@ import { useToast } from "../hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "../lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
+import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -24,7 +25,8 @@ import {
   X,
   ChevronsUpDown,
   Video,
-  CreditCard
+  CreditCard,
+  Info
 } from "lucide-react";
 
 const STEPS = [
@@ -43,6 +45,17 @@ export default function CreatorOnboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // Error dialog state
+  const [errorDialog, setErrorDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+  });
 
   // Step 1: Profile Image
   const [profileImageUrl, setProfileImageUrl] = useState("");
@@ -97,19 +110,19 @@ export default function CreatorOnboarding() {
     const isImage = imageExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (!isImage) {
-      toast({
+      setErrorDialog({
+        isOpen: true,
         title: "Invalid File Type",
-        description: "Please upload an image file (JPG, PNG, GIF, WebP)",
-        variant: "destructive",
+        message: "Please upload an image file (JPG, PNG, GIF, WebP)",
       });
       return;
     }
 
     if (file.size > 5242880) {
-      toast({
+      setErrorDialog({
+        isOpen: true,
         title: "File Too Large",
-        description: "Image file must be less than 5MB",
-        variant: "destructive",
+        message: "Image file must be less than 5MB",
       });
       return;
     }
@@ -170,10 +183,10 @@ export default function CreatorOnboarding() {
       });
     } catch (error) {
       console.error("Image upload error:", error);
-      toast({
+      setErrorDialog({
+        isOpen: true,
         title: "Upload Failed",
-        description: "Failed to upload image. Please try again.",
-        variant: "destructive",
+        message: "Failed to upload image. Please try again.",
       });
     } finally {
       setIsUploadingImage(false);
@@ -196,10 +209,10 @@ export default function CreatorOnboarding() {
     switch (step) {
       case 2:
         if (selectedNiches.length === 0) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Please Select Niches",
-            description: "Select at least one content niche to help us recommend relevant offers.",
-            variant: "destructive",
+            message: "Select at least one content niche to help us recommend relevant offers.",
           });
           return false;
         }
@@ -208,10 +221,10 @@ export default function CreatorOnboarding() {
       case 3: {
         const hasVideoPlatform = youtubeUrl || tiktokUrl || instagramUrl;
         if (!hasVideoPlatform) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Video Platform Required",
-            description: "Add at least one video platform (YouTube, TikTok, or Instagram) to continue.",
-            variant: "destructive",
+            message: "Add at least one video platform (YouTube, TikTok, or Instagram) to continue.",
           });
           return false;
         }
@@ -220,10 +233,10 @@ export default function CreatorOnboarding() {
 
       case 4:
         if (!paymentMethod) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Payment Method",
-            description: "Select how you'd like to get paid or choose to set it up later.",
-            variant: "destructive",
+            message: "Select how you'd like to get paid or choose to set it up later.",
           });
           return false;
         }
@@ -233,37 +246,37 @@ export default function CreatorOnboarding() {
         }
 
         if (paymentMethod === "etransfer" && !payoutEmail) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Payment details required",
-            description: "Add an e-transfer email to continue.",
-            variant: "destructive",
+            message: "Add an e-transfer email to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "wire" && (!bankRoutingNumber || !bankAccountNumber)) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Payment details required",
-            description: "Add your bank routing and account number to continue.",
-            variant: "destructive",
+            message: "Add your bank routing and account number to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "paypal" && !paypalEmail) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Payment details required",
-            description: "Add your PayPal email to continue.",
-            variant: "destructive",
+            message: "Add your PayPal email to continue.",
           });
           return false;
         }
 
         if (paymentMethod === "crypto" && (!cryptoWalletAddress || !cryptoNetwork)) {
-          toast({
+          setErrorDialog({
+            isOpen: true,
             title: "Payment details required",
-            description: "Add your wallet address and network to continue.",
-            variant: "destructive",
+            message: "Add your wallet address and network to continue.",
           });
           return false;
         }
@@ -344,10 +357,10 @@ export default function CreatorOnboarding() {
       }, 1000);
     } catch (error: any) {
       console.error("Onboarding error:", error);
-      toast({
+      setErrorDialog({
+        isOpen: true,
         title: "Error",
-        description: error.message || "Failed to save profile. Please try again.",
-        variant: "destructive",
+        message: error.message || "Failed to save profile. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -673,6 +686,15 @@ export default function CreatorOnboarding() {
                       value={payoutEmail}
                       onChange={(e) => setPayoutEmail(e.target.value)}
                     />
+                    <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 mt-2">
+                      <div className="flex gap-2">
+                        <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="text-sm text-blue-900">
+                          <p className="font-semibold mb-1">Payment Requirements:</p>
+                          <p className="text-xs">E-Transfer payments via Stripe require a minimum transaction amount of <strong>$1.00 CAD</strong>. Payments below this amount cannot be processed.</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </button>
@@ -957,6 +979,13 @@ export default function CreatorOnboarding() {
           <p>You can always update your profile later in Settings</p>
         </div>
       </div>
+
+      <GenericErrorDialog
+        isOpen={errorDialog.isOpen}
+        onClose={() => setErrorDialog({ isOpen: false, title: "", message: "" })}
+        title={errorDialog.title}
+        message={errorDialog.message}
+      />
     </div>
   );
 }
