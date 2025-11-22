@@ -169,32 +169,24 @@ export default function CompanyOnboarding() {
 
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "image/jpeg",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      setLogoUrl(cloudinaryResponse.secure_url);
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      setLogoUrl(uploadedUrl);
 
       toast({
         title: "Success!",
@@ -255,32 +247,24 @@ export default function CompanyOnboarding() {
 
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "application/octet-stream",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      setVerificationDocumentUrl(cloudinaryResponse.secure_url);
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      setVerificationDocumentUrl(uploadedUrl);
 
       toast({
         title: "Success!",

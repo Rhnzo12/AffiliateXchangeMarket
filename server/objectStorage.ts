@@ -1,6 +1,7 @@
-import { v2 as cloudinary } from 'cloudinary';
+import { Storage } from '@google-cloud/storage';
 import { Response } from "express";
 import { randomUUID } from "crypto";
+import * as path from "path";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -9,12 +10,27 @@ import {
   setObjectAclPolicy,
 } from "./objectAcl";
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// Configure Google Cloud Storage
+let storage: Storage;
+try {
+  const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
+  if (keyFilePath) {
+    storage = new Storage({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+      keyFilename: keyFilePath,
+    });
+  } else {
+    // Fallback to default credentials (useful for GCP environments)
+    storage = new Storage({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+    });
+  }
+} catch (error) {
+  console.error('Error initializing Google Cloud Storage:', error);
+  throw error;
+}
+
+const BUCKET_NAME = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
 
 export class ObjectNotFoundError extends Error {
   constructor() {
@@ -27,12 +43,60 @@ export class ObjectNotFoundError extends Error {
 export class ObjectStorageService {
   constructor() {}
 
-  getCloudinaryFolder(): string {
-    return process.env.CLOUDINARY_FOLDER || "affiliatexchange/videos";
+  getStorageFolder(): string {
+    return process.env.GCS_FOLDER || "affiliatexchange/videos";
   }
 
-  getCloudinaryUploadPreset(): string {
-    return process.env.CLOUDINARY_UPLOAD_PRESET || "";
+  private getBucket() {
+    return storage.bucket(BUCKET_NAME);
+  }
+
+  private getContentType(fileName: string, resourceType: string = 'auto'): string {
+    const ext = path.extname(fileName).toLowerCase();
+
+    // If resourceType is explicitly set, use it
+    if (resourceType === 'video') {
+      const videoTypes: { [key: string]: string } = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.avi': 'video/x-msvideo',
+        '.mkv': 'video/x-matroska',
+      };
+      return videoTypes[ext] || 'video/mp4';
+    }
+
+    if (resourceType === 'image') {
+      const imageTypes: { [key: string]: string } = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml',
+      };
+      return imageTypes[ext] || 'image/jpeg';
+    }
+
+    // Auto-detect based on extension
+    const types: { [key: string]: string } = {
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    };
+
+    return types[ext] || 'application/octet-stream';
   }
 
   async getObjectEntityUploadURL(customFolder?: string, resourceType: string = 'auto'): Promise<{
@@ -42,62 +106,46 @@ export class ObjectStorageService {
     timestamp?: number;
     apiKey?: string;
     folder?: string;
+    contentType?: string;
+    fields?: { [key: string]: string };
   }> {
-    const timestamp = Math.round(Date.now() / 1000);
-    const folder = customFolder || this.getCloudinaryFolder();
-    const uploadPreset = this.getCloudinaryUploadPreset();
+    const folder = customFolder || this.getStorageFolder();
 
-    // Construct the upload URL with the correct resource type
-    const baseUrl = `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}`;
-    const uploadUrl = `${baseUrl}/${resourceType}/upload`;
-
-    // Build params to sign - do NOT include resource_type when it's in the URL path
-    const paramsToSign: any = {
-      timestamp,
-      folder,
-    };
-
-    // If a custom folder is specified, use signed upload instead of preset
-    // This ensures the folder parameter is respected and not overridden by preset config
-    if (customFolder) {
-      const signature = cloudinary.utils.api_sign_request(
-        paramsToSign,
-        process.env.CLOUDINARY_API_SECRET || ""
-      );
-
-      console.log('[ObjectStorage] Using SIGNED upload for custom folder:', folder, 'resourceType:', resourceType);
-      return {
-        uploadUrl,
-        signature,
-        timestamp,
-        apiKey: process.env.CLOUDINARY_API_KEY,
-        folder,
-      };
+    // Generate filename with appropriate extension based on resource type
+    let fileExtension = '';
+    if (resourceType === 'image') {
+      fileExtension = '.jpg'; // Thumbnails are generated as JPEG
+    } else if (resourceType === 'video') {
+      fileExtension = '.mp4'; // Default video extension
     }
 
-    // Use upload preset for default uploads (offers)
-    if (uploadPreset) {
-      console.log('[ObjectStorage] Using PRESET upload for default folder:', folder, 'resourceType:', resourceType);
-      return {
-        uploadUrl,
-        uploadPreset,
-        folder,
-      };
-    }
+    const fileName = `${randomUUID()}${fileExtension}`;
+    const filePath = `${folder}/${fileName}`;
 
-    // Fallback to signed upload if no preset is configured
-    const signature = cloudinary.utils.api_sign_request(
-      paramsToSign,
-      process.env.CLOUDINARY_API_SECRET || ""
-    );
+    const bucket = this.getBucket();
+    const file = bucket.file(filePath);
 
-    console.log('[ObjectStorage] Using SIGNED upload (no preset):', folder, 'resourceType:', resourceType);
+    // Determine content type for the signed URL
+    const contentType = this.getContentType(fileName, resourceType);
+
+    // Generate signed URL for upload (valid for 15 minutes)
+    const [signedUrl] = await file.getSignedUrl({
+      version: 'v4',
+      action: 'write',
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+      contentType,
+    });
+
+    console.log('[ObjectStorage] Generated GCS signed upload URL for folder:', folder, 'resourceType:', resourceType, 'contentType:', contentType);
+
     return {
-      uploadUrl,
-      signature,
-      timestamp,
-      apiKey: process.env.CLOUDINARY_API_KEY,
+      uploadUrl: signedUrl,
       folder,
+      contentType, // Return the content type so frontend uses the exact same one
+      fields: {
+        key: filePath,
+        bucket: BUCKET_NAME,
+      },
     };
   }
 
@@ -109,13 +157,29 @@ export class ObjectStorageService {
       publicId?: string;
     }
   ): Promise<any> {
-    const uploadOptions = {
-      folder: options?.folder || this.getCloudinaryFolder(),
-      resource_type: options?.resourceType || 'auto',
-      public_id: options?.publicId,
-    };
+    const folder = options?.folder || this.getStorageFolder();
+    const fileName = options?.publicId || path.basename(filePath);
+    const destination = `${folder}/${fileName}`;
 
-    return await cloudinary.uploader.upload(filePath, uploadOptions);
+    const bucket = this.getBucket();
+    await bucket.upload(filePath, {
+      destination,
+      metadata: {
+        contentType: this.getContentType(filePath, options?.resourceType || 'auto'),
+      },
+    });
+
+    const file = bucket.file(destination);
+    const [metadata] = await file.getMetadata();
+
+    return {
+      public_id: destination,
+      secure_url: `https://storage.googleapis.com/${BUCKET_NAME}/${destination}`,
+      url: `https://storage.googleapis.com/${BUCKET_NAME}/${destination}`,
+      resource_type: options?.resourceType || 'auto',
+      format: path.extname(fileName).substring(1),
+      ...metadata,
+    };
   }
 
   async uploadBuffer(
@@ -126,21 +190,29 @@ export class ObjectStorageService {
       publicId?: string;
     }
   ): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: options?.folder || this.getCloudinaryFolder(),
-          resource_type: options?.resourceType || 'auto',
-          public_id: options?.publicId,
-        },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
+    const folder = options?.folder || this.getStorageFolder();
+    const fileName = options?.publicId || randomUUID();
+    const destination = `${folder}/${fileName}`;
 
-      uploadStream.end(buffer);
+    const bucket = this.getBucket();
+    const file = bucket.file(destination);
+
+    await file.save(buffer, {
+      metadata: {
+        contentType: this.getContentType(fileName, options?.resourceType || 'auto'),
+      },
     });
+
+    const [metadata] = await file.getMetadata();
+
+    return {
+      public_id: destination,
+      secure_url: `https://storage.googleapis.com/${BUCKET_NAME}/${destination}`,
+      url: `https://storage.googleapis.com/${BUCKET_NAME}/${destination}`,
+      resource_type: options?.resourceType || 'auto',
+      format: path.extname(fileName).substring(1),
+      ...metadata,
+    };
   }
 
   getVideoUrl(
@@ -151,23 +223,19 @@ export class ObjectStorageService {
       transformation?: any[];
     }
   ): string {
-    return cloudinary.url(publicId, {
-      resource_type: 'video',
-      quality: options?.quality || 'auto',
-      format: options?.format,
-      transformation: options?.transformation,
-    });
+    // GCS doesn't have built-in transformations like Cloudinary
+    // Return the direct URL to the video
+    return `https://storage.googleapis.com/${BUCKET_NAME}/${publicId}`;
   }
 
   getVideoThumbnail(publicId: string): string {
-    return cloudinary.url(publicId, {
-      resource_type: 'video',
-      format: 'jpg',
-      transformation: [
-        { width: 400, height: 300, crop: 'fill' },
-        { quality: 'auto' },
-      ],
-    });
+    // GCS doesn't auto-generate video thumbnails like Cloudinary
+    // You could either:
+    // 1. Store thumbnails separately when uploading
+    // 2. Use a video thumbnail service
+    // 3. Return a placeholder or the video URL itself
+    // For now, returning the video URL (browsers can show first frame)
+    return `https://storage.googleapis.com/${BUCKET_NAME}/${publicId}`;
   }
 
   async downloadObject(
@@ -176,22 +244,31 @@ export class ObjectStorageService {
     cacheTtlSec: number = 3600
   ) {
     try {
-      const folder = this.getCloudinaryFolder();
-      let videoUrl;
-      
-      try {
-        videoUrl = cloudinary.url(folder + '/' + publicId, {
-          resource_type: 'video',
-          secure: true,
-        });
-      } catch (error) {
-        videoUrl = cloudinary.url(publicId, {
-          resource_type: 'video',
-          secure: true,
-        });
+      const folder = this.getStorageFolder();
+      const bucket = this.getBucket();
+
+      // Try with folder prefix first
+      let file = bucket.file(`${folder}/${publicId}`);
+      let exists = await file.exists();
+
+      // If not found, try without folder prefix
+      if (!exists[0]) {
+        file = bucket.file(publicId);
+        exists = await file.exists();
       }
 
-      res.redirect(videoUrl);
+      if (!exists[0]) {
+        throw new ObjectNotFoundError();
+      }
+
+      // Generate a signed URL for temporary access
+      const [signedUrl] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + cacheTtlSec * 1000,
+      });
+
+      res.redirect(signedUrl);
     } catch (error) {
       console.error("Error getting video URL:", error);
       if (!res.headersSent) {
@@ -201,63 +278,78 @@ export class ObjectStorageService {
   }
 
   async deleteVideo(publicId: string): Promise<any> {
-    return await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'video',
-    });
+    return await this.deleteResource(publicId, 'video');
   }
 
   async deleteImage(publicId: string): Promise<any> {
-    return await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'image',
-    });
+    return await this.deleteResource(publicId, 'image');
   }
 
   async deleteResource(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<any> {
-    return await cloudinary.uploader.destroy(publicId, {
-      resource_type: resourceType,
-    });
+    const bucket = this.getBucket();
+    const file = bucket.file(publicId);
+
+    try {
+      await file.delete();
+      return { result: 'ok' };
+    } catch (error: any) {
+      if (error.code === 404) {
+        return { result: 'not found' };
+      }
+      throw error;
+    }
   }
 
   async deleteFolder(folderPath: string): Promise<any> {
     try {
-      // Delete all resources in the folder for each resource type we store
-      const deleteByType = async (resourceType: 'image' | 'video' | 'raw') =>
-        cloudinary.api.delete_resources_by_prefix(folderPath, {
-          resource_type: resourceType,
-          type: 'upload'
-        });
+      const bucket = this.getBucket();
 
-      const [imageResult] = await Promise.all([
-        deleteByType('image'),
-        deleteByType('video'),
-        deleteByType('raw')
-      ]);
+      // List all files in the folder
+      const [files] = await bucket.getFiles({
+        prefix: folderPath,
+      });
 
-      // Finally delete the folder itself. If it's already gone, ignore the error.
-      try {
-        await cloudinary.api.delete_folder(folderPath);
-      } catch (folderError: any) {
-        const message = folderError?.message || folderError?.error?.message || '';
-        // Cloudinary returns a not-found/does-not-exist message when the folder is already removed.
-        if (/not\s+found|does not exist|can't find folder/i.test(message)) {
-          console.info(`[ObjectStorage] Folder ${folderPath} does not exist; skipping deletion.`);
-        } else {
-          throw folderError;
-        }
-      }
+      // Delete all files
+      await Promise.all(files.map(file => file.delete()));
 
-      return imageResult;
+      console.info(`[ObjectStorage] Deleted ${files.length} files from folder ${folderPath}`);
+
+      return { deleted: files.length };
     } catch (error) {
-      // Surface richer error details to the caller so the logs are actionable.
-      const message = (error as any)?.message || (error as any)?.error?.message || JSON.stringify(error);
+      const message = (error as any)?.message || JSON.stringify(error);
       throw new Error(message);
     }
   }
 
   async getVideoInfo(publicId: string): Promise<any> {
-    return await cloudinary.api.resource(publicId, {
-      resource_type: 'video',
-    });
+    const bucket = this.getBucket();
+    const file = bucket.file(publicId);
+
+    try {
+      const [metadata] = await file.getMetadata();
+      const [exists] = await file.exists();
+
+      if (!exists) {
+        throw new ObjectNotFoundError();
+      }
+
+      return {
+        public_id: publicId,
+        format: path.extname(publicId).substring(1),
+        resource_type: metadata.contentType?.startsWith('video/') ? 'video' :
+                       metadata.contentType?.startsWith('image/') ? 'image' : 'raw',
+        bytes: metadata.size,
+        url: `https://storage.googleapis.com/${BUCKET_NAME}/${publicId}`,
+        secure_url: `https://storage.googleapis.com/${BUCKET_NAME}/${publicId}`,
+        created_at: metadata.timeCreated,
+        ...metadata,
+      };
+    } catch (error: any) {
+      if (error.code === 404 || error instanceof ObjectNotFoundError) {
+        throw new ObjectNotFoundError();
+      }
+      throw error;
+    }
   }
 
   async searchPublicObject(filePath: string): Promise<any | null> {
@@ -274,9 +366,9 @@ export class ObjectStorageService {
       throw new ObjectNotFoundError();
     }
     const publicId = objectPath.replace("/objects/", "");
-    
-    const folder = this.getCloudinaryFolder();
-    const fullPublicId = folder + '/' + publicId;
+
+    const folder = this.getStorageFolder();
+    const fullPublicId = `${folder}/${publicId}`;
 
     try {
       const info = await this.getVideoInfo(fullPublicId);
@@ -291,29 +383,23 @@ export class ObjectStorageService {
     }
   }
 
-  extractPublicIdFromUrl(cloudinaryUrl: string): string | null {
+  extractPublicIdFromUrl(gcsUrl: string): string | null {
     try {
-      if (!cloudinaryUrl.startsWith("https://res.cloudinary.com/")) {
+      // Handle GCS URLs: https://storage.googleapis.com/bucket-name/path/to/file.ext
+      if (!gcsUrl.startsWith("https://storage.googleapis.com/")) {
         return null;
       }
 
-      const url = new URL(cloudinaryUrl);
-      const pathParts = url.pathname.split('/');
+      const url = new URL(gcsUrl);
+      const pathParts = url.pathname.split('/').filter(p => p);
 
-      // Cloudinary URL format: /cloud_name/resource_type/upload/v{version}/folder/filename.ext
-      // We need to find the upload index and get everything after version
-      const uploadIndex = pathParts.indexOf('upload');
-      if (uploadIndex === -1) return null;
+      // First part is bucket name, rest is the file path
+      if (pathParts.length < 2) return null;
 
-      // Get parts after 'upload' and skip the version (vXXXXXXX)
-      const afterUpload = pathParts.slice(uploadIndex + 1);
-      const versionIndex = afterUpload.findIndex(part => part.startsWith('v') && /^v\d+$/.test(part));
-      const relevantParts = versionIndex >= 0 ? afterUpload.slice(versionIndex + 1) : afterUpload;
+      // Remove bucket name, keep the rest as public ID
+      const publicIdWithExt = pathParts.slice(1).join('/');
 
-      if (relevantParts.length === 0) return null;
-
-      // Join folder and filename, remove extension from last part
-      const publicIdWithExt = relevantParts.join('/');
+      // Remove extension from last part
       const lastDotIndex = publicIdWithExt.lastIndexOf('.');
       const publicId = lastDotIndex > 0 ? publicIdWithExt.substring(0, lastDotIndex) : publicIdWithExt;
 
@@ -325,11 +411,17 @@ export class ObjectStorageService {
   }
 
   normalizeObjectEntityPath(rawPath: string): string {
-    if (rawPath.startsWith("https://res.cloudinary.com/")) {
+    if (rawPath.startsWith("https://storage.googleapis.com/")) {
       const url = new URL(rawPath);
-      const pathParts = url.pathname.split('/');
-      const publicIdWithExt = pathParts.slice(-1)[0];
-      const publicId = publicIdWithExt.split('.')[0];
+      const pathParts = url.pathname.split('/').filter(p => p);
+
+      // Remove bucket name and get file path
+      if (pathParts.length < 2) return rawPath;
+
+      const filePath = pathParts.slice(1).join('/');
+      const fileName = pathParts[pathParts.length - 1];
+      const publicId = fileName.split('.')[0];
+
       return '/objects/' + publicId;
     }
     return rawPath;
@@ -356,10 +448,10 @@ export class ObjectStorageService {
   }
 
   getPublicObjectSearchPaths(): Array<string> {
-    return [this.getCloudinaryFolder()];
+    return [this.getStorageFolder()];
   }
 
   getPrivateObjectDir(): string {
-    return this.getCloudinaryFolder();
+    return this.getStorageFolder();
   }
 }

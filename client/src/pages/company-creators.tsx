@@ -29,6 +29,7 @@ import { Link, useLocation } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest } from "../lib/queryClient";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -615,7 +616,7 @@ export default function CompanyCreators() {
                           <td className="py-4 pr-4">
                             <div className="flex items-start gap-3">
                               <Avatar className="h-10 w-10">
-                                <AvatarImage src={application.creator?.profileImageUrl || undefined} />
+                                <AvatarImage src={proxiedSrc(application.creator?.profileImageUrl) || undefined} />
                                 <AvatarFallback>{creatorInitial}</AvatarFallback>
                               </Avatar>
                               <div>
@@ -765,9 +766,9 @@ export default function CompanyCreators() {
       )}
       <GenericErrorDialog
         open={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
-        message={errorDialog?.message || "An unexpected error occurred."}
+        description={errorDialog?.message || "An unexpected error occurred."}
       />
     </div>
   );

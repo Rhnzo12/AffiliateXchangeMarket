@@ -70,8 +70,6 @@ export default function AdminCompanyDetail() {
   const [, params] = useRoute("/admin/companies/:id");
   const companyId = params?.id;
 
-  console.log('[AdminCompanyDetail] Component loaded with companyId:', companyId);
-
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [activeTab, setActiveTab] = useState("details");
@@ -105,16 +103,18 @@ export default function AdminCompanyDetail() {
   });
 
   useEffect(() => {
-    if (company) {
-      console.log('[AdminCompanyDetail] Company data loaded:', {
-        id: company.id,
-        legalName: company.legalName,
-        status: company.status
+    if (error) {
+      setErrorDialog({
+        open: true,
+        title: "Error Loading Company",
+        description: "Failed to load company details. Please try again.",
       });
-    } else if (error) {
-      console.error('[AdminCompanyDetail] Error loading company:', error);
-    } else if (!loadingCompany && !company) {
-      console.warn('[AdminCompanyDetail] No company found for ID:', companyId);
+    } else if (!loadingCompany && !company && companyId) {
+      setErrorDialog({
+        open: true,
+        title: "Company Not Found",
+        description: "The requested company could not be found.",
+      });
     }
   }, [company, error, loadingCompany, companyId]);
 

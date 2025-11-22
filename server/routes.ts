@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request as ExpressRequest } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { parse as parseUrl } from "url";
@@ -16,6 +16,21 @@ import { NotificationService } from "./notifications/notificationService";
 import bcrypt from "bcrypt";
 import { PriorityListingScheduler } from "./priorityListingScheduler";
 import * as QRCode from "qrcode";
+// @ts-ignore - multer may not have types in all environments
+import multer from "multer";
+
+// Define multer file interface for type safety
+interface MulterFile {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+}
+
+// Extend Express Request type to include multer's file property
+type Request = ExpressRequest;
 import {
   insertCreatorProfileSchema,
   insertCompanyProfileSchema,
@@ -4533,14 +4548,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!file) {
         return res.status(404).json({ error: "File not found" });
       }
-      objectStorageService.downloadObject(file, res);
+      objectStorageService.downloadObject(filePath, res);
     } catch (error) {
       console.error("Error searching for public object:", error);
       return res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  // Simple image proxy for allowed external hosts (e.g., Cloudinary)
+  // Simple image proxy for allowed external hosts (e.g., GCS, Cloudinary)
   // This makes images same-origin and helps avoid browser tracking-prevention blocking
   app.get("/proxy/image", async (req, res) => {
     try {
@@ -4555,14 +4570,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only allow known safe hosts to avoid open proxy / SSRF
-      const allowedHosts = ["res.cloudinary.com", "cloudinary.com"];
+      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com", "googleapis.com"];
       const hostname = parsed.hostname || "";
       const allowed = allowedHosts.some((h) => hostname.endsWith(h));
       if (!allowed) return res.status(403).send("forbidden host");
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
 
-      const fetchRes = await fetch(url, { method: "GET" });
+      // For GCS URLs, generate a signed URL first (files are not public)
+      let fetchUrl = url;
+      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+        try {
+          // Extract the file path from GCS URL: https://storage.googleapis.com/bucket-name/path/to/file
+          const pathParts = parsed.pathname.split('/').filter(p => p);
+          if (pathParts.length >= 2) {
+            // Remove bucket name, keep the rest as file path
+            const filePath = pathParts.slice(1).join('/');
+
+            // Generate signed URL using ObjectStorageService
+            const { Storage } = await import('@google-cloud/storage');
+            const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
+            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+
+            let gcsStorage: any;
+            if (keyFilePath) {
+              gcsStorage = new Storage({ projectId, keyFilename: keyFilePath });
+            } else {
+              gcsStorage = new Storage({ projectId });
+            }
+
+            const [signedUrl] = await gcsStorage
+              .bucket(bucketName)
+              .file(filePath)
+              .getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 60 * 60 * 1000, // 1 hour
+              });
+
+            fetchUrl = signedUrl;
+            console.log('[Proxy Image] Generated signed URL for GCS file:', filePath);
+          }
+        } catch (signedUrlError) {
+          console.error('[Proxy Image] Failed to generate signed URL:', signedUrlError);
+          // Continue with original URL as fallback
+        }
+      }
+
+      const fetchRes = await fetch(fetchUrl, { method: "GET" });
       if (!fetchRes.ok) return res.status(fetchRes.status).send("failed to fetch image");
 
       const contentType = fetchRes.headers.get("content-type");
@@ -4596,12 +4652,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only allow known safe hosts to avoid open proxy / SSRF
-      const allowedHosts = ["res.cloudinary.com", "cloudinary.com"];
+      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com", "googleapis.com"];
       const hostname = parsed.hostname || "";
       const allowed = allowedHosts.some((h) => hostname.endsWith(h));
       if (!allowed) return res.status(403).send("forbidden host");
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
+
+      // For GCS URLs, generate a signed URL first (files are not public)
+      let fetchUrl = url;
+      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+        try {
+          // Extract the file path from GCS URL: https://storage.googleapis.com/bucket-name/path/to/file
+          const pathParts = parsed.pathname.split('/').filter(p => p);
+          if (pathParts.length >= 2) {
+            // Remove bucket name, keep the rest as file path
+            const filePath = pathParts.slice(1).join('/');
+
+            // Generate signed URL using ObjectStorageService
+            const { Storage } = await import('@google-cloud/storage');
+            const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
+            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+
+            let gcsStorage: any;
+            if (keyFilePath) {
+              gcsStorage = new Storage({ projectId, keyFilename: keyFilePath });
+            } else {
+              gcsStorage = new Storage({ projectId });
+            }
+
+            const [signedUrl] = await gcsStorage
+              .bucket(bucketName)
+              .file(filePath)
+              .getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 60 * 60 * 1000, // 1 hour
+              });
+
+            fetchUrl = signedUrl;
+            console.log('[Proxy Video] Generated signed URL for GCS file:', filePath);
+          }
+        } catch (signedUrlError) {
+          console.error('[Proxy Video] Failed to generate signed URL:', signedUrlError);
+          // Continue with original URL as fallback
+        }
+      }
 
       // Get the range header from the request (for video seeking)
       const range = req.headers.range;
@@ -4612,7 +4709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         headers['Range'] = range;
       }
 
-      const fetchRes = await fetch(url, {
+      const fetchRes = await fetch(fetchUrl, {
         method: "GET",
         headers
       });
@@ -4941,6 +5038,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const uploadParams = await objectStorageService.getObjectEntityUploadURL(folder, resourceType);
     console.log('[Upload API] Upload params returned:', uploadParams);
     res.json(uploadParams);
+  });
+
+  // Configure multer for file uploads (store in memory as buffer)
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 100 * 1024 * 1024, // 100MB limit
+    },
+  });
+
+  // Endpoint to generate signed URL for reading an existing file
+  app.get("/api/get-signed-url/:filename(*)", requireAuth, async (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const objectStorageService = new ObjectStorageService();
+
+      // Import Storage from @google-cloud/storage
+      const { Storage } = await import('@google-cloud/storage');
+
+      // Initialize Google Cloud Storage with service account key
+      const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
+      const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
+
+      let gcsStorage: any;
+      if (keyFilePath) {
+        gcsStorage = new Storage({
+          projectId,
+          keyFilename: keyFilePath,
+        });
+      } else {
+        gcsStorage = new Storage({ projectId });
+      }
+
+      const options = {
+        version: 'v4' as const,
+        action: 'read' as const,
+        expires: Date.now() + 60 * 60 * 1000, // 1 hour from now
+      };
+
+      const [url] = await gcsStorage
+        .bucket(bucketName)
+        .file(filename)
+        .getSignedUrl(options);
+
+      console.log('[Signed URL API] Generated signed URL for:', filename);
+      res.json({ url });
+    } catch (error: any) {
+      console.error('Error generating signed URL:', error);
+      res.status(500).json({ error: 'Failed to generate URL', details: error.message });
+    }
+  });
+
+  // Endpoint to upload a file directly and get its signed URL
+  app.post("/api/upload-file", requireAuth, upload.single('file'), async (req: ExpressRequest, res) => {
+    try {
+      // Type assertion for multer's file property
+      const multerReq = req as ExpressRequest & { file?: MulterFile };
+
+      if (!multerReq.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const file = multerReq.file;
+      const folder = req.body.folder || 'affiliatexchange/uploads';
+      const resourceType = req.body.resourceType || 'auto';
+
+      // Import Storage from @google-cloud/storage
+      const { Storage } = await import('@google-cloud/storage');
+
+      // Initialize Google Cloud Storage
+      const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
+      const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
+      const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
+
+      let gcsStorage: any;
+      if (keyFilePath) {
+        gcsStorage = new Storage({
+          projectId,
+          keyFilename: keyFilePath,
+        });
+      } else {
+        gcsStorage = new Storage({ projectId });
+      }
+
+      // Generate unique filename with original extension
+      const { randomUUID } = await import('crypto');
+      const ext = file.originalname.split('.').pop();
+      const filename = `${randomUUID()}.${ext}`;
+      const destination = `${folder}/${filename}`;
+
+      const blob = gcsStorage.bucket(bucketName).file(destination);
+
+      const blobStream = blob.createWriteStream({
+        resumable: false,
+        metadata: {
+          contentType: file.mimetype
+        }
+      });
+
+      blobStream.on('error', (err: any) => {
+        console.error('Error uploading file:', err);
+        res.status(500).json({ error: err.message });
+      });
+
+      blobStream.on('finish', async () => {
+        try {
+          // Generate signed URL for the uploaded file
+          const [url] = await blob.getSignedUrl({
+            version: 'v4',
+            action: 'read',
+            expires: Date.now() + 60 * 60 * 1000,
+          });
+
+          console.log('[Direct Upload API] File uploaded successfully:', destination);
+          res.json({
+            message: 'File uploaded successfully',
+            filename: destination,
+            originalName: file.originalname,
+            url: url,
+            publicUrl: `https://storage.googleapis.com/${bucketName}/${destination}`
+          });
+        } catch (error: any) {
+          console.error('Error generating signed URL after upload:', error);
+          res.status(500).json({ error: 'File uploaded but failed to generate signed URL' });
+        }
+      });
+
+      blobStream.end(file.buffer);
+    } catch (error: any) {
+      console.error('Error in direct upload:', error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   app.put("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {

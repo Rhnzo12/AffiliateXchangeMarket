@@ -9,6 +9,7 @@ server/public
 .env
 .env.local
 .env.production
+.storage-key.json
 
 # Google Cloud Storage Keys (NEVER commit these!)
 keys/

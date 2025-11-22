@@ -24,6 +24,7 @@ import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { ReviewPromptDialog } from "../components/ReviewPromptDialog";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 export default function CompanyApplications() {
   const { toast } = useToast();
@@ -402,7 +403,7 @@ export default function CompanyApplications() {
                 <div className="flex items-start justify-between gap-2 sm:gap-4">
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                     <Avatar className="h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0">
-                      <AvatarImage src={app.creator?.profileImageUrl} />
+                      <AvatarImage src={proxiedSrc(app.creator?.profileImageUrl)} />
                       <AvatarFallback>
                         {app.creator?.firstName?.[0] || 'C'}
                       </AvatarFallback>
@@ -663,7 +664,7 @@ export default function CompanyApplications() {
         open={!!errorDialog}
         onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
-        message={errorDialog?.message || "An unexpected error occurred"}
+        description={errorDialog?.message || "An unexpected error occurred"}
       />
     </div>
   );

@@ -668,8 +668,7 @@ export default function Browse() {
         </Tabs>
 
         {/* Category Pills - Horizontal Scroll */}
-        {/* Category Pills - Horizontal Scroll */}
-<ScrollArea orientation="horizontal" className="w-full pb-3">
+        <ScrollArea orientation="horizontal" className="w-full pb-3">
   <div className="flex gap-2 pb-1 pr-4 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
     {categoryOptions.map(({ label, value }) => (
       <button
@@ -965,7 +964,7 @@ export default function Browse() {
                         {!isRetainer && offer.company?.logoUrl && (
                           <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
                             <img
-                              src={offer.company.logoUrl}
+                              src={proxiedSrc(offer.company.logoUrl)}
                               alt={offer.company.tradeName}
                               className="h-full w-full object-cover"
                             />
@@ -1116,7 +1115,6 @@ export default function Browse() {
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                               referrerPolicy="no-referrer"
                               onError={(e) => {
-                                console.error(`Image failed to load: ${offer.title}`, offer.featuredImageUrl);
                                 (e.target as HTMLImageElement).style.display = 'none';
                                 const fallback = (e.target as HTMLImageElement).nextElementSibling;
                                 if (fallback) {
@@ -1168,7 +1166,7 @@ export default function Browse() {
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="font-semibold text-sm sm:text-base line-clamp-1 flex-1">{offer.title}</h3>
                           {!isRetainer && offer.company?.logoUrl && (
-                            <img src={offer.company.logoUrl} alt={offer.company.tradeName} className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover ring-2 ring-border flex-shrink-0" />
+                            <img src={proxiedSrc(offer.company.logoUrl)} alt={offer.company.tradeName} className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover ring-2 ring-border flex-shrink-0" />
                           )}
                         </div>
 
@@ -1269,7 +1267,6 @@ export default function Browse() {
                                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                       referrerPolicy="no-referrer"
                                       onError={(e) => {
-                                        console.error(`Image failed to load: ${offer.title}`, offer.featuredImageUrl);
                                         (e.target as HTMLImageElement).style.display = 'none';
                                         const fallback = (e.target as HTMLImageElement).nextElementSibling;
                                         if (fallback) {
@@ -1318,7 +1315,7 @@ export default function Browse() {
                               {offer.company?.logoUrl && (
                                 <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
                                   <img
-                                    src={offer.company.logoUrl}
+                                    src={proxiedSrc(offer.company.logoUrl)}
                                     alt={offer.company.tradeName}
                                     className="h-full w-full object-cover"
                                   />
@@ -1499,7 +1496,7 @@ export default function Browse() {
                                 {offer.company?.logoUrl && (
                                   <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
                                     <img
-                                      src={offer.company.logoUrl}
+                                      src={proxiedSrc(offer.company.logoUrl)}
                                       alt={offer.company.tradeName}
                                       className="h-full w-full object-cover"
                                     />

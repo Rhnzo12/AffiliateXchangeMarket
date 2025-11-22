@@ -6,6 +6,7 @@ import { Badge } from "../components/ui/badge";
 import { Separator } from "../components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { TopNavBar } from "../components/TopNavBar";
+import { proxiedSrc } from "../lib/image";
 import {
   Building2,
   Globe,
@@ -96,7 +97,7 @@ export default function CompanyProfile() {
         <CardContent className="pt-6">
           <div className="flex items-start gap-6">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={company.logoUrl || ''} alt={company.tradeName || company.legalName} />
+              <AvatarImage src={proxiedSrc(company.logoUrl) || ''} alt={company.tradeName || company.legalName} />
               <AvatarFallback className="text-2xl">
                 {(company.tradeName || company.legalName)?.[0] || 'C'}
               </AvatarFallback>

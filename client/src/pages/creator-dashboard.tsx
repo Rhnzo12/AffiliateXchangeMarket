@@ -254,10 +254,10 @@ export default function CreatorDashboard() {
       </Card>
 
       <GenericErrorDialog
-        isOpen={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title}
-        message={errorDialog?.message}
+        description={errorDialog?.message}
       />
     </div>
   );

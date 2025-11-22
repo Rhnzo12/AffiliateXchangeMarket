@@ -33,6 +33,7 @@ import { TopNavBar } from "../components/TopNavBar";
 import { MessageTemplates } from "../components/MessageTemplates";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
+import { MessageItemSkeleton } from "../components/skeletons";
 
 type MessageStatus = "sending" | "sent" | "failed";
 
@@ -366,19 +367,12 @@ export default function Messages() {
     };
   }, [isAuthenticated]);
 
-  const { data: conversations } = useQuery<any[]>({
+  const { data: conversations, isLoading: conversationsLoading } = useQuery<any[]>({
     queryKey: ["/api/conversations"],
     enabled: isAuthenticated,
   });
 
-  useEffect(() => {
-    if (conversations && conversations.length > 0) {
-      console.log('Conversations data:', conversations);
-      console.log('First conversation otherUser:', conversations[0]?.otherUser);
-    }
-  }, [conversations]);
-
-  const { data: messages = [] } = useQuery<EnhancedMessage[]>({
+  const { data: messages = [], isLoading: messagesLoading } = useQuery<EnhancedMessage[]>({
     queryKey: ["/api/messages", selectedConversation],
     enabled: !!selectedConversation && isAuthenticated,
   });
@@ -530,32 +524,24 @@ export default function Messages() {
 
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "application/octet-stream",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      uploadedUrls.push(cloudinaryResponse.secure_url);
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      uploadedUrls.push(uploadedUrl);
     }
 
     return uploadedUrls;
@@ -806,7 +792,13 @@ export default function Messages() {
               </Button>
             </div>
             <ScrollArea className="flex-1">
-              {!conversations || conversations.length === 0 ? (
+              {conversationsLoading ? (
+                <div className="divide-y">
+                  {[...Array(5)].map((_, i) => (
+                    <MessageItemSkeleton key={i} />
+                  ))}
+                </div>
+              ) : !conversations || conversations.length === 0 ? (
                 <div className="p-12 text-center">
                   <MessageSquare className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                   <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -841,7 +833,7 @@ export default function Messages() {
                       >
                         <div className="flex gap-3 items-start">
                           <Avatar className="h-12 w-12 sm:h-10 sm:w-10 shrink-0">
-                            <AvatarImage src={conversation.otherUser?.profileImageUrl || conversation.otherUser?.logoUrl} />
+                            <AvatarImage src={proxiedSrc(conversation.otherUser?.profileImageUrl || conversation.otherUser?.logoUrl)} />
                             <AvatarFallback>
                               {getAvatarFallback(conversation.otherUser)}
                             </AvatarFallback>
@@ -909,7 +901,7 @@ export default function Messages() {
                       <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <Avatar className="h-10 w-10 shrink-0">
-                      <AvatarImage src={otherUser?.profileImageUrl || otherUser?.logoUrl} />
+                      <AvatarImage src={proxiedSrc(otherUser?.profileImageUrl || otherUser?.logoUrl)} />
                       <AvatarFallback>
                         {getAvatarFallback(otherUser)}
                       </AvatarFallback>
@@ -948,6 +940,19 @@ export default function Messages() {
 
               <ScrollArea className="flex-1 p-4">
                 <div className="space-y-4">
+                  {messagesLoading ? (
+                    <div className="space-y-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex gap-2 justify-start">
+                          <div className="h-8 w-8 rounded-full bg-muted shrink-0" />
+                          <div className="bg-muted rounded-lg px-4 py-2.5 max-w-[70%] space-y-2">
+                            <div className="h-4 w-48 bg-muted-foreground/20 rounded animate-pulse" />
+                            <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {messages?.map((message, index) => {
                     const previousMessage = index > 0 ? messages[index - 1] : null;
                     const showDateSeparator = shouldShowDateSeparator(message, previousMessage);
@@ -969,7 +974,7 @@ export default function Messages() {
                         >
                           {!isOwnMessage && (
                             <Avatar className={`h-8 w-8 shrink-0 ${groupWithPrevious ? 'invisible' : ''}`}>
-                              <AvatarImage src={otherUser?.profileImageUrl || otherUser?.logoUrl} />
+                              <AvatarImage src={proxiedSrc(otherUser?.profileImageUrl || otherUser?.logoUrl)} />
                               <AvatarFallback className="text-xs">
                                 {getAvatarFallback(otherUser)}
                               </AvatarFallback>
@@ -1029,7 +1034,7 @@ export default function Messages() {
                   {isOtherUserTyping && (
                     <div className="flex gap-2 justify-start mt-4">
                       <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarImage src={otherUser?.profileImageUrl || otherUser?.logoUrl} />
+                        <AvatarImage src={proxiedSrc(otherUser?.profileImageUrl || otherUser?.logoUrl)} />
                         <AvatarFallback className="text-xs">
                           {getAvatarFallback(otherUser)}
                         </AvatarFallback>
@@ -1153,10 +1158,10 @@ export default function Messages() {
       </div>
 
       <GenericErrorDialog
-        isOpen={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
-        message={errorDialog?.message || "An error occurred"}
+        description={errorDialog?.message || "An error occurred"}
       />
     </div>
   );

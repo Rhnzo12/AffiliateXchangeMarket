@@ -59,11 +59,9 @@ export function CookieConsent() {
 
     // Apply preferences (in a real app, this would configure analytics/marketing tools)
     if (prefs.analytics) {
-      console.log("[Cookies] Analytics cookies enabled");
       // Enable Google Analytics, etc.
     }
     if (prefs.marketing) {
-      console.log("[Cookies] Marketing cookies enabled");
       // Enable marketing pixels, etc.
     }
   };

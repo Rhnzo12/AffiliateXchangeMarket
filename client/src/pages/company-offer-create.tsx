@@ -201,12 +201,16 @@ export default function CompanyOfferCreate() {
 
   const uploadWithProgress = (
     uploadUrl: string,
-    formData: FormData,
+    file: File,
+    bucket: string,
+    key: string,
+    contentType: string,
     onProgress: (progress: number) => void,
   ) => {
     return new Promise<any>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", uploadUrl);
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", contentType);
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -217,11 +221,9 @@ export default function CompanyOfferCreate() {
 
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText));
-          } catch (error) {
-            reject(error);
-          }
+          // GCS returns empty body, construct the URL from bucket and key
+          const uploadedUrl = `https://storage.googleapis.com/${bucket}/${key}`;
+          resolve({ secure_url: uploadedUrl });
         } else {
           reject(new Error("Upload failed"));
         }
@@ -229,7 +231,7 @@ export default function CompanyOfferCreate() {
 
       xhr.onerror = () => reject(new Error("Upload failed"));
 
-      xhr.send(formData);
+      xhr.send(file);
     });
   };
 
@@ -312,29 +314,18 @@ export default function CompanyOfferCreate() {
           });
           const thumbUploadData = await thumbUploadResponse.json();
 
-          const thumbFormData = new FormData();
-          thumbFormData.append('file', thumbnailFile);
-
-          if (thumbUploadData.uploadPreset) {
-            thumbFormData.append('upload_preset', thumbUploadData.uploadPreset);
-          } else if (thumbUploadData.signature) {
-            thumbFormData.append('signature', thumbUploadData.signature);
-            thumbFormData.append('timestamp', thumbUploadData.timestamp.toString());
-            thumbFormData.append('api_key', thumbUploadData.apiKey);
-          }
-
-          if (thumbUploadData.folder) {
-            thumbFormData.append('folder', thumbUploadData.folder);
-          }
-
+          // Upload thumbnail to Google Cloud Storage using signed URL
           const thumbUploadResult = await fetch(thumbUploadData.uploadUrl, {
-            method: "POST",
-            body: thumbFormData,
+            method: "PUT",
+            headers: {
+              "Content-Type": thumbUploadData.contentType || thumbnailFile.type || "image/jpeg",
+            },
+            body: thumbnailFile,
           });
 
           if (thumbUploadResult.ok) {
-            const thumbCloudinaryResponse = await thumbUploadResult.json();
-            const uploadedThumbnailUrl = thumbCloudinaryResponse.secure_url;
+            // Construct the public URL from the upload response
+            const uploadedThumbnailUrl = `https://storage.googleapis.com/${thumbUploadData.fields.bucket}/${thumbUploadData.fields.key}`;
 
             // Update offer with thumbnail URL
             await fetch(`/api/offers/${offerId}`, {
@@ -379,24 +370,13 @@ export default function CompanyOfferCreate() {
             });
             const uploadData = await uploadResponse.json();
 
-            const formData = new FormData();
-            formData.append('file', video.videoFile);
-
-            if (uploadData.uploadPreset) {
-              formData.append('upload_preset', uploadData.uploadPreset);
-            } else if (uploadData.signature) {
-              formData.append('signature', uploadData.signature);
-              formData.append('timestamp', uploadData.timestamp.toString());
-              formData.append('api_key', uploadData.apiKey);
-            }
-
-            if (uploadData.folder) {
-              formData.append('folder', uploadData.folder);
-            }
-
+            // Upload video to GCS with progress tracking
             const cloudinaryResponse = await uploadWithProgress(
               uploadData.uploadUrl,
-              formData,
+              video.videoFile,
+              uploadData.fields.bucket,
+              uploadData.fields.key,
+              uploadData.contentType || video.videoFile.type || "video/mp4",
               (progress) => {
                 setVideoUploadProgress(progress);
                 const progressValue = 20 + perVideoPortion * i + (perVideoPortion * progress) / 100;
@@ -422,29 +402,18 @@ export default function CompanyOfferCreate() {
               });
               const thumbUploadData = await thumbUploadResponse.json();
 
-              const thumbnailFormData = new FormData();
-              thumbnailFormData.append('file', thumbnailBlob, 'thumbnail.jpg');
-
-              if (thumbUploadData.uploadPreset) {
-                thumbnailFormData.append('upload_preset', thumbUploadData.uploadPreset);
-              } else if (thumbUploadData.signature) {
-                thumbnailFormData.append('signature', thumbUploadData.signature);
-                thumbnailFormData.append('timestamp', thumbUploadData.timestamp.toString());
-                thumbnailFormData.append('api_key', thumbUploadData.apiKey);
-              }
-
-              if (thumbUploadData.folder) {
-                thumbnailFormData.append('folder', thumbUploadData.folder);
-              }
-
+              // Upload thumbnail to Google Cloud Storage using signed URL
               const thumbnailUploadResult = await fetch(thumbUploadData.uploadUrl, {
-                method: "POST",
-                body: thumbnailFormData,
+                method: "PUT",
+                headers: {
+                  "Content-Type": thumbUploadData.contentType || "image/jpeg",
+                },
+                body: thumbnailBlob,
               });
 
               if (thumbnailUploadResult.ok) {
-                const thumbnailResponse = await thumbnailUploadResult.json();
-                uploadedThumbnailUrl = thumbnailResponse.secure_url;
+                // Construct the public URL from the upload response
+                uploadedThumbnailUrl = `https://storage.googleapis.com/${thumbUploadData.fields.bucket}/${thumbUploadData.fields.key}`;
               }
             } catch (thumbnailError) {
               console.error('Thumbnail generation error:', thumbnailError);

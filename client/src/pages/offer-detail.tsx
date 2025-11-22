@@ -541,8 +541,8 @@ export default function OfferDetail() {
                 <div className="flex justify-start -mt-16 sm:-mt-20 mb-6 ml-4">
                   <div className="relative">
                     <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-2xl ring-2 ring-primary/20">
-                      <AvatarImage 
-                        src={offer.company?.logoUrl} 
+                      <AvatarImage
+                        src={proxiedSrc(offer.company?.logoUrl)}
                         alt={offer.company?.tradeName}
                       />
                       <AvatarFallback className="text-3xl sm:text-4xl font-bold bg-gradient-to-br from-primary to-purple-600 text-white">

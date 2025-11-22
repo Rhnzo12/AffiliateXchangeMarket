@@ -37,6 +37,7 @@ import {
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   draft: { label: "Draft", variant: "outline" },
@@ -560,7 +561,7 @@ export default function AdminOfferDetail() {
                   {video.videoUrl ? (
                     <div className="aspect-video bg-muted flex items-center justify-center relative group">
                       <video
-                        src={video.videoUrl}
+                        src={proxiedSrc(video.videoUrl)}
                         controls
                         className="w-full h-full object-cover"
                       />

@@ -51,11 +51,20 @@ const formatCommission = (offer: any) => {
   if (!offer) return "$0";
 
   if (offer.commissionAmount) {
-    return `$${offer.commissionAmount.toFixed(2)}`;
+    const amount = typeof offer.commissionAmount === 'number'
+      ? offer.commissionAmount
+      : parseFloat(offer.commissionAmount);
+    return `$${amount.toFixed(2)}`;
   } else if (offer.commissionPercentage) {
-    return `${offer.commissionPercentage}%`;
+    const percentage = typeof offer.commissionPercentage === 'number'
+      ? offer.commissionPercentage
+      : parseFloat(offer.commissionPercentage);
+    return `${percentage}%`;
   } else if (offer.commissionRate) {
-    return `$${offer.commissionRate.toFixed(2)}`;
+    const rate = typeof offer.commissionRate === 'number'
+      ? offer.commissionRate
+      : parseFloat(offer.commissionRate);
+    return `$${rate.toFixed(2)}`;
   }
   return "$0";
 };
@@ -354,23 +363,8 @@ export default function CompanyOfferDetail() {
     setIsUploading(true);
 
     try {
-      // IMPORTANT: Use nested folder structure with company ID and offer ID
-      // This matches the lookup logic in /objects/ endpoint
-
-      // Log current state for debugging
-      console.log('[Video Upload] Starting upload with:', {
-        hasOffer: !!offer,
-        offerId: offerId,
-        companyId: offer?.companyId,
-      });
-
       // Validate we have the required IDs
       if (!offer?.companyId || !offerId) {
-        console.error('[Video Upload] Missing required IDs:', {
-          offer: offer ? 'exists' : 'null',
-          companyId: offer?.companyId || 'missing',
-          offerId: offerId || 'missing',
-        });
         setErrorDialog({
           open: true,
           title: "Upload Error",
@@ -381,9 +375,8 @@ export default function CompanyOfferDetail() {
         return;
       }
 
-      // Always use the nested folder structure: creatorlink/videos/{companyId}/{offerId}
+      // Use nested folder structure: creatorlink/videos/{companyId}/{offerId}
       const folder = `creatorlink/videos/${offer.companyId}/${offerId}`;
-      console.log('[Video Upload] Uploading to folder:', folder);
 
       const uploadResponse = await fetch("/api/objects/upload", {
         method: "POST",
@@ -393,29 +386,18 @@ export default function CompanyOfferDetail() {
       });
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "video/mp4",
+        },
+        body: file,
       });
 
       if (uploadResult.ok) {
-        const cloudinaryResponse = await uploadResult.json();
-        const uploadedVideoUrl = cloudinaryResponse.secure_url;
+        // Construct the public URL from the upload response
+        const uploadedVideoUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
 
         toast({
           title: "Video Uploaded",
@@ -436,29 +418,18 @@ export default function CompanyOfferDetail() {
           });
           const thumbUploadData = await thumbUploadResponse.json();
 
-          const thumbnailFormData = new FormData();
-          thumbnailFormData.append('file', thumbnailBlob, 'thumbnail.jpg');
-
-          if (thumbUploadData.uploadPreset) {
-            thumbnailFormData.append('upload_preset', thumbUploadData.uploadPreset);
-          } else if (thumbUploadData.signature) {
-            thumbnailFormData.append('signature', thumbUploadData.signature);
-            thumbnailFormData.append('timestamp', thumbUploadData.timestamp.toString());
-            thumbnailFormData.append('api_key', thumbUploadData.apiKey);
-          }
-
-          if (thumbUploadData.folder) {
-            thumbnailFormData.append('folder', thumbUploadData.folder);
-          }
-
+          // Upload thumbnail to Google Cloud Storage using signed URL
           const thumbnailUploadResult = await fetch(thumbUploadData.uploadUrl, {
-            method: "POST",
-            body: thumbnailFormData,
+            method: "PUT",
+            headers: {
+              "Content-Type": thumbUploadData.contentType || "image/jpeg",
+            },
+            body: thumbnailBlob,
           });
 
           if (thumbnailUploadResult.ok) {
-            const thumbnailResponse = await thumbnailUploadResult.json();
-            const uploadedThumbnailUrl = thumbnailResponse.secure_url;
+            // Construct the public URL from the upload response
+            const uploadedThumbnailUrl = `https://storage.googleapis.com/${thumbUploadData.fields.bucket}/${thumbUploadData.fields.key}`;
 
             setVideoUrl(uploadedVideoUrl);
             setThumbnailUrl(uploadedThumbnailUrl);
@@ -676,8 +647,9 @@ export default function CompanyOfferDetail() {
                   <div className="relative">
                     <Avatar className="h-32 w-32 sm:h-36 sm:w-36 border-4 border-background shadow-2xl ring-2 ring-primary/20">
                       <AvatarImage
-                        src={company?.logoUrl}
+                        src={proxiedSrc(company?.logoUrl)}
                         alt={companyName}
+                        referrerPolicy="no-referrer"
                       />
                       <AvatarFallback className="text-3xl sm:text-4xl font-bold bg-gradient-to-br from-primary to-purple-600 text-white">
                         {companyName[0]}

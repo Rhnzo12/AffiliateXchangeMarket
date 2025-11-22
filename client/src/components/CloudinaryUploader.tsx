@@ -15,6 +15,7 @@ interface CloudinaryUploadParams {
   timestamp?: number;
   apiKey?: string;
   folder?: string;
+  fields?: { [key: string]: string };
 }
 
 interface CloudinaryUploaderProps {
@@ -47,22 +48,25 @@ export function CloudinaryUploader({
       autoProceed: false,
     }).use(XHRUpload, {
       endpoint: "placeholder", // Will be updated before upload
-      method: "POST",
-      formData: true,
+      method: "PUT", // GCS uses PUT for signed URLs
+      formData: false, // GCS expects raw file data, not multipart form
       fieldName: "file",
-      responseType: "json",
-      getResponseData: (responseText: any) => {
-        try {
-            // some XHR implementations provide the parsed body, others a string
-            const response = typeof responseText === "string" ? JSON.parse(responseText) : responseText;
-          return {
-            ...response,
-            uploadURL: response.secure_url || response.url,
-          };
-        } catch (error) {
-          console.error("Failed to parse upload response", error);
-          return {};
-        }
+      responseType: "text",
+      getResponseData: (xhr: XMLHttpRequest) => {
+        // GCS returns empty body on success, construct response from request
+        const uploadUrl = xhr.responseURL || "";
+        // Extract the file path from the signed URL (before query params)
+        const url = uploadUrl.split('?')[0];
+        const pathParts = url.split('/').filter(p => p);
+        const bucket = pathParts[pathParts.length - 2] || '';
+        const filePath = pathParts.slice(pathParts.indexOf(bucket) + 1).join('/');
+
+        return {
+          public_id: filePath,
+          secure_url: url.split('?')[0],
+          url: url.split('?')[0],
+          uploadURL: url.split('?')[0],
+        };
       },
     })
   );
@@ -116,18 +120,25 @@ export function CloudinaryUploader({
 
             if (xhrUpload) {
               try {
-                xhrUpload.setOptions({ endpoint: params.uploadUrl });
+                xhrUpload.setOptions({
+                  endpoint: params.uploadUrl,
+                  method: "PUT",
+                  formData: false,
+                });
               } catch (e) {
                 // ignore setOptions typing/runtime mismatches
               }
             }
 
+            // For GCS, we use PUT with the file directly in the body
             const xhrOptions = {
               ...(file.xhrUpload ?? {}),
               endpoint: params.uploadUrl,
-              method: "POST",
-              formData: true,
-              fieldName: "file",
+              method: "PUT",
+              formData: false,
+              headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+              },
             };
 
             // setFileState XHR options can be typed differently across Uppy versions — cast to any
@@ -135,32 +146,19 @@ export function CloudinaryUploader({
               xhrUpload: xhrOptions,
             } as any);
 
+            // Store metadata for later use but don't send to GCS
+            // (GCS signed URLs don't accept form fields, the URL itself contains all auth)
             const meta: Record<string, string> = {};
-
-            if (params.uploadPreset) {
-              meta.upload_preset = params.uploadPreset;
-            } else {
-              if (params.signature) {
-                meta.signature = params.signature;
-              }
-              if (params.timestamp) {
-                meta.timestamp = params.timestamp.toString();
-              }
-              if (params.apiKey) {
-                meta.api_key = params.apiKey;
-              }
-            }
-
             if (params.folder) {
               meta.folder = params.folder;
             }
-
-            // Let Cloudinary detect the appropriate resource type (video/image)
-            meta.resource_type = "auto";
+            if (params.fields) {
+              Object.assign(meta, params.fields);
+            }
 
             uppy.setFileMeta(fileID, meta);
           } catch (error) {
-            console.error("Failed to prepare Cloudinary upload", error);
+            console.error("Failed to prepare GCS upload", error);
             uppy.info("Failed to prepare upload. Please try again.", "error", 5000);
             uppy.removeFile(fileID);
           }

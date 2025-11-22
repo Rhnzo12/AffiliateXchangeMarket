@@ -19,6 +19,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 export default function CompanyReviews() {
   const { toast } = useToast();
@@ -362,7 +363,7 @@ export default function CompanyReviews() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={review.creator?.profileImageUrl} />
+                      <AvatarImage src={proxiedSrc(review.creator?.profileImageUrl)} />
                       <AvatarFallback>
                         {review.creator?.firstName?.[0] || 'C'}
                       </AvatarFallback>

@@ -522,9 +522,10 @@ export default function CompanyOffers() {
                     {!isRetainer && offer.company?.logoUrl && (
                       <div className="absolute -bottom-7 left-4 h-14 w-14 rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
                         <img
-                          src={offer.company.logoUrl}
+                          src={proxiedSrc(offer.company.logoUrl)}
                           alt={offer.company.tradeName}
                           className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       </div>
                     )}
@@ -646,8 +647,8 @@ export default function CompanyOffers() {
 
       {/* Error Dialog */}
       <GenericErrorDialog
-        isOpen={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
         description={errorDialog?.description || "An error occurred"}
       />

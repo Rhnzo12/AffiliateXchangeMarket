@@ -148,7 +148,7 @@ export default function AdminMessages() {
                           <div className="flex gap-3 items-start">
                             <div className="relative">
                               <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={conversation.creator?.profileImageUrl} />
+                                <AvatarImage src={proxiedSrc(conversation.creator?.profileImageUrl)} />
                                 <AvatarFallback>
                                   {conversation.creator?.firstName?.[0] || 'C'}
                                 </AvatarFallback>
@@ -171,7 +171,7 @@ export default function AdminMessages() {
                           <div className="flex gap-3 items-start">
                             <div className="relative">
                               <Avatar className="h-10 w-10 shrink-0">
-                                <AvatarImage src={conversation.company?.logoUrl} />
+                                <AvatarImage src={proxiedSrc(conversation.company?.logoUrl)} />
                                 <AvatarFallback>
                                   {conversation.company?.name?.[0] || 'C'}
                                 </AvatarFallback>
@@ -282,7 +282,7 @@ export default function AdminMessages() {
                             }`}
                           >
                             <Avatar className={`h-8 w-8 shrink-0 ${groupWithPrevious ? 'invisible' : ''}`}>
-                              <AvatarImage src={sender?.profileImageUrl || sender?.logoUrl} />
+                              <AvatarImage src={proxiedSrc(sender?.profileImageUrl || sender?.logoUrl)} />
                               <AvatarFallback className="text-xs">
                                 {sender?.firstName?.[0] || sender?.name?.[0] || 'U'}
                               </AvatarFallback>

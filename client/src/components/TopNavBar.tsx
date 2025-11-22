@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
+import { proxiedSrc } from "../lib/image";
 
 interface TopNavBarProps {
   children?: React.ReactNode;
@@ -94,7 +95,7 @@ export function TopNavBar({ children }: TopNavBarProps) {
                 <button className="flex items-center gap-1.5 sm:gap-2 md:gap-3 hover:opacity-80 transition-opacity focus:outline-none">
                   <Avatar className="h-8 w-8 sm:h-9 sm:w-9 border-2 border-primary/20 flex-shrink-0">
                     <AvatarImage
-                      src={user?.profileImageUrl || ''}
+                      src={proxiedSrc(user?.profileImageUrl) || ''}
                       alt={user?.firstName || user?.email || 'User'}
                       referrerPolicy="no-referrer"
                     />

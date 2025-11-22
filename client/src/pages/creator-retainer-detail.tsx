@@ -163,36 +163,18 @@ export default function CreatorRetainerDetail() {
 
       console.log('[Retainer Upload] Upload parameters received:', uploadData);
 
-      // Create FormData for Cloudinary upload
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Add Cloudinary parameters
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-        console.log('[Retainer Upload] Folder parameter set to:', uploadData.folder);
-      }
-
-      console.log('[Retainer Upload] FormData entries:', Array.from(formData.entries()));
-
-      // Upload video to Cloudinary
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "video/mp4",
+        },
+        body: file,
       });
 
       if (uploadResult.ok) {
-        const cloudinaryResponse = await uploadResult.json();
-        console.log('[Retainer Upload] Cloudinary response:', cloudinaryResponse);
-        const uploadedVideoUrl = cloudinaryResponse.secure_url;
+        // Construct the public URL from the upload response
+        const uploadedVideoUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
         console.log('[Retainer Upload] Final video URL:', uploadedVideoUrl);
 
         setVideoUrl(uploadedVideoUrl);
@@ -1455,10 +1437,10 @@ export default function CreatorRetainerDetail() {
       )}
 
       <GenericErrorDialog
-        isOpen={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
-        message={errorDialog?.message || "An error occurred"}
+        description={errorDialog?.message || "An error occurred"}
       />
     </div>
   );

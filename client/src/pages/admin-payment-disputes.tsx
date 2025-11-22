@@ -34,6 +34,7 @@ import {
 import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 export default function AdminPaymentDisputes() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -187,7 +188,7 @@ export default function AdminPaymentDisputes() {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={payment.creator?.profileImageUrl} />
+                      <AvatarImage src={proxiedSrc(payment.creator?.profileImageUrl)} />
                       <AvatarFallback>
                         <User className="h-5 w-5" />
                       </AvatarFallback>
@@ -202,7 +203,7 @@ export default function AdminPaymentDisputes() {
 
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={payment.company?.logoUrl} />
+                      <AvatarImage src={proxiedSrc(payment.company?.logoUrl)} />
                       <AvatarFallback>
                         <Building2 className="h-5 w-5" />
                       </AvatarFallback>
@@ -350,10 +351,10 @@ export default function AdminPaymentDisputes() {
       </Dialog>
 
       <GenericErrorDialog
-        isOpen={!!errorDialog}
-        onClose={() => setErrorDialog(null)}
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
-        message={errorDialog?.message || "An unexpected error occurred"}
+        description={errorDialog?.message || "An unexpected error occurred"}
       />
     </div>
   );

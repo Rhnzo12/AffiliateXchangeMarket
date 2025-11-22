@@ -275,9 +275,10 @@ export default function Favorites() {
                       <h3 className="font-semibold line-clamp-1 flex-1">{offer.title}</h3>
                       {offer.company?.logoUrl && (
                         <img
-                          src={offer.company.logoUrl}
+                          src={proxiedSrc(offer.company.logoUrl)}
                           alt={offer.company.tradeName}
                           className="h-8 w-8 rounded-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       )}
                     </div>

@@ -34,6 +34,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Badge } from "../components/ui/badge";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { proxiedSrc } from "../lib/image";
 
 export default function Settings() {
   const { toast } = useToast();
@@ -308,34 +309,24 @@ export default function Settings() {
       
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Cloudinary
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "image/jpeg",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      const uploadedUrl = cloudinaryResponse.secure_url;
-      
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+
       // Set the logo URL
       setLogoUrl(uploadedUrl);
       
@@ -399,32 +390,24 @@ export default function Settings() {
 
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "image/jpeg",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      setProfileImageUrl(cloudinaryResponse.secure_url);
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      setProfileImageUrl(uploadedUrl);
 
       toast({
         title: "Success!",
@@ -490,32 +473,24 @@ export default function Settings() {
 
       const uploadData = await uploadResponse.json();
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      if (uploadData.uploadPreset) {
-        formData.append('upload_preset', uploadData.uploadPreset);
-      } else if (uploadData.signature) {
-        formData.append('signature', uploadData.signature);
-        formData.append('timestamp', uploadData.timestamp.toString());
-        formData.append('api_key', uploadData.apiKey);
-      }
-
-      if (uploadData.folder) {
-        formData.append('folder', uploadData.folder);
-      }
-
+      // Upload file to Google Cloud Storage using signed URL
       const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "POST",
-        body: formData,
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadData.contentType || file.type || "application/octet-stream",
+        },
+        body: file,
       });
 
       if (!uploadResult.ok) {
-        throw new Error("Failed to upload file");
+        const errorText = await uploadResult.text();
+        console.error("GCS upload error:", errorText);
+        throw new Error("Failed to upload file to storage");
       }
 
-      const cloudinaryResponse = await uploadResult.json();
-      setVerificationDocumentUrl(cloudinaryResponse.secure_url);
+      // Construct the public URL from the upload response
+      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      setVerificationDocumentUrl(uploadedUrl);
 
       toast({
         title: "Success!",
@@ -899,8 +874,6 @@ export default function Settings() {
 
       // Creator profile payload
       if (user?.role === 'creator') {
-        console.log("[Settings] Saving niches:", selectedNiches);
-
         payload = {
           bio,
           profileImageUrl: profileImageUrl || null,
@@ -937,10 +910,7 @@ export default function Settings() {
         };
       }
 
-      console.log("[Settings] API payload:", payload);
-
       const result = await apiRequest("PUT", "/api/profile", payload);
-      console.log("[Settings] API response:", result);
       return result;
     },
     onSuccess: () => {
@@ -954,8 +924,6 @@ export default function Settings() {
       });
     },
     onError: (error: Error) => {
-      console.log("[Settings] Error caught:", error);
-      console.log("[Settings] Error message:", error.message);
       setErrorDialog({
         title: "Error",
         message: error.message || "Failed to update profile",
@@ -997,7 +965,7 @@ export default function Settings() {
           <div className="flex items-center gap-4">
             <Avatar className="h-20 w-20">
               <AvatarImage
-                src={profileImageUrl || user?.profileImageUrl || ''}
+                src={proxiedSrc(profileImageUrl || user?.profileImageUrl) || ''}
                 alt={user?.firstName || 'User'}
                 referrerPolicy="no-referrer"
               />
@@ -1040,7 +1008,7 @@ export default function Settings() {
                     <div className="relative inline-block">
                       <div className="flex items-center gap-4 p-4 border rounded-lg">
                         <Avatar className="h-24 w-24">
-                          <AvatarImage src={logoUrl} alt={tradeName || 'Company logo'} />
+                          <AvatarImage src={proxiedSrc(logoUrl)} alt={tradeName || 'Company logo'} />
                           <AvatarFallback className="text-2xl">
                             {tradeName?.[0] || 'C'}
                           </AvatarFallback>
@@ -1414,7 +1382,7 @@ export default function Settings() {
                   <div className="relative inline-block">
                     <div className="flex items-center gap-4 p-4 border rounded-lg">
                       <Avatar className="h-24 w-24">
-                        <AvatarImage src={profileImageUrl} alt={user?.firstName || 'Creator profile'} />
+                        <AvatarImage src={proxiedSrc(profileImageUrl)} alt={user?.firstName || 'Creator profile'} />
                         <AvatarFallback className="text-2xl">
                           {user?.firstName?.[0] || user?.username?.[0] || 'C'}
                         </AvatarFallback>
@@ -2210,7 +2178,7 @@ export default function Settings() {
 
       <GenericErrorDialog
         open={!!errorDialog}
-        onOpenChange={() => setErrorDialog(null)}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
         description={errorDialog?.message || "An error occurred"}
       />

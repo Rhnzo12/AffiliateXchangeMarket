@@ -444,12 +444,6 @@ export default function ApplicationDetail() {
           </Card>
 
           {/* Tracking Link (if approved) */}
-          {(() => {
-            console.log('[QR Debug] Application status:', application.status);
-            console.log('[QR Debug] Tracking link:', application.trackingLink);
-            console.log('[QR Debug] Should show card?', (application.status === 'approved' || application.status === 'active') && application.trackingLink);
-            return null;
-          })()}
           {(application.status === 'approved' || application.status === 'active') && application.trackingLink && (
             <Card className="border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
               <CardHeader>
@@ -657,9 +651,10 @@ export default function ApplicationDetail() {
                 <div className="flex items-center gap-3">
                   {application.offer.company.logoUrl ? (
                     <img
-                      src={application.offer.company.logoUrl}
+                      src={proxiedSrc(application.offer.company.logoUrl)}
                       alt={application.offer.company.tradeName}
                       className="h-12 w-12 rounded-lg object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">

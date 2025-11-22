@@ -129,14 +129,6 @@ export function NotificationCenter() {
 
       // Only show toast if notification is unread (needs review)
       if (isNewCompanyRegistration && notification.linkUrl && !notification.isRead) {
-        console.log('[NotificationCenter] New company registration detected (needs review):', {
-          notificationId: notification.id,
-          linkUrl: notification.linkUrl,
-          companyName: notification.metadata?.companyName,
-          companyUserId: notification.metadata?.companyUserId,
-          isRead: notification.isRead
-        });
-
         toast({
           title: notification.title ?? "New Company Registration",
           description: notification.message,
@@ -144,12 +136,10 @@ export function NotificationCenter() {
             <ToastAction
               altText="Review Company"
               onClick={() => {
-                console.log('[NotificationCenter] Toast Review button clicked, navigating to:', notification.linkUrl);
-
                 // Mark notification as read
-                markAsRead(notification.id).catch(err =>
-                  console.error('[NotificationCenter] Failed to mark notification as read:', err)
-                );
+                markAsRead(notification.id).catch(() => {
+                  // Silently fail - the notification will still be marked as read when viewed
+                });
 
                 // Navigate to company details
                 setLocation(notification.linkUrl!);
