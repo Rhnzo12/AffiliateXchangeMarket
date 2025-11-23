@@ -55,7 +55,8 @@ export default function Messages() {
   
   const urlParams = new URLSearchParams(location.split('?')[1] || '');
   const conversationFromUrl = urlParams.get('conversation');
-  
+  const applicationFromUrl = urlParams.get('application');
+
   const [selectedConversation, setSelectedConversation] = useState<string | null>(conversationFromUrl);
   const [messageText, setMessageText] = useState("");
   const [isConnecting, setIsConnecting] = useState(false);
@@ -213,8 +214,27 @@ export default function Messages() {
   useEffect(() => {
     if (conversationFromUrl && conversationFromUrl !== selectedConversation) {
       setSelectedConversation(conversationFromUrl);
+      // Refetch conversations to ensure we have the latest data
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
     }
   }, [conversationFromUrl, selectedConversation]);
+
+  // Handle application parameter - find conversation by application ID
+  useEffect(() => {
+    if (applicationFromUrl) {
+      // Ensure conversations are fresh
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+
+      if (conversations && conversations.length > 0) {
+        const matchingConversation = conversations.find(
+          (conv: any) => conv.applicationId === applicationFromUrl
+        );
+        if (matchingConversation && matchingConversation.id !== selectedConversation) {
+          setSelectedConversation(matchingConversation.id);
+        }
+      }
+    }
+  }, [applicationFromUrl, conversations, selectedConversation]);
 
   useEffect(() => {
     audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvHZhjMICGS56+OcTgwOUKzk7rdkHQc2jdXy0IEsDipu0ObnllkTClGn4u2yaBcGLXjH8N+OSA==');
