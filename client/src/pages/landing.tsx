@@ -1,7 +1,7 @@
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { TrendingUp, Users, DollarSign, Shield, Zap, Target, Star, CheckCircle2 } from "lucide-react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
@@ -280,6 +280,18 @@ export default function Landing() {
             <div className="flex items-center gap-2">
               <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
               <span className="font-bold">AffiliateXchange</span>
+            </div>
+            <div className="flex gap-6 text-sm">
+              <Link href="/privacy-policy">
+                <a className="text-muted-foreground hover:text-foreground transition-colors">
+                  Privacy Policy
+                </a>
+              </Link>
+              <Link href="/terms-of-service">
+                <a className="text-muted-foreground hover:text-foreground transition-colors">
+                  Terms of Service
+                </a>
+              </Link>
             </div>
             <p className="text-sm text-muted-foreground">
               © 2025 AffiliateXchange. All rights reserved.

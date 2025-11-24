@@ -99,6 +99,13 @@ export default function AdminCompanyDetail() {
   // Fetch company details
   const { data: company, isLoading: loadingCompany, error } = useQuery<CompanyDetail>({
     queryKey: [`/api/admin/companies/${companyId}`],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/companies/${companyId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch company details");
+      return response.json();
+    },
     enabled: isAuthenticated && !!companyId,
   });
 
@@ -121,18 +128,39 @@ export default function AdminCompanyDetail() {
   // Fetch company offers
   const { data: offers = [], isLoading: loadingOffers } = useQuery<any[]>({
     queryKey: [`/api/admin/companies/${companyId}/offers`],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/companies/${companyId}/offers`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch company offers");
+      return response.json();
+    },
     enabled: isAuthenticated && !!companyId && activeTab === "offers",
   });
 
   // Fetch company payments
   const { data: payments = [], isLoading: loadingPayments } = useQuery<any[]>({
     queryKey: [`/api/admin/companies/${companyId}/payments`],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/companies/${companyId}/payments`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch company payments");
+      return response.json();
+    },
     enabled: isAuthenticated && !!companyId && activeTab === "payments",
   });
 
   // Fetch creator relationships
   const { data: relationships = [], isLoading: loadingRelationships } = useQuery<any[]>({
     queryKey: [`/api/admin/companies/${companyId}/creators`],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/companies/${companyId}/creators`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch company creators");
+      return response.json();
+    },
     enabled: isAuthenticated && !!companyId && activeTab === "creators",
   });
 

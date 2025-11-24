@@ -8,7 +8,7 @@ import { Badge } from "../components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
-import { Star, Eye, EyeOff, Trash2, FileText, CheckCircle2, AlertCircle, Filter, Search, X } from "lucide-react";
+import { Star, Eye, EyeOff, Trash2, FileText, CheckCircle2, AlertCircle, Filter, Search, X, MessageSquare } from "lucide-react";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
@@ -28,7 +28,9 @@ export default function AdminReviews() {
   const [selectedReview, setSelectedReview] = useState<any>(null);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isRespondDialogOpen, setIsRespondDialogOpen] = useState(false);
   const [adminNote, setAdminNote] = useState("");
+  const [adminResponse, setAdminResponse] = useState("");
   const [editedReview, setEditedReview] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -56,6 +58,13 @@ export default function AdminReviews() {
 
   const { data: reviews = [], isLoading: loadingReviews } = useQuery<any[]>({
     queryKey: ["/api/admin/reviews"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/reviews", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch reviews");
+      return response.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -229,10 +238,39 @@ export default function AdminReviews() {
     },
   });
 
+  const respondToReviewMutation = useMutation({
+    mutationFn: async ({ reviewId, response }: { reviewId: string; response: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/reviews/${reviewId}/respond`, { response });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reviews"] });
+      toast({
+        title: "Success",
+        description: "Platform response added successfully",
+      });
+      setIsRespondDialogOpen(false);
+      setAdminResponse("");
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to add platform response",
+      });
+    },
+  });
+
   const handleAddNote = (review: any) => {
     setSelectedReview(review);
     setAdminNote(review.adminNote || "");
     setIsNoteDialogOpen(true);
+  };
+
+  const handleRespond = (review: any) => {
+    setSelectedReview(review);
+    setAdminResponse(review.adminResponse || "");
+    setIsRespondDialogOpen(true);
   };
 
   const handleEdit = (review: any) => {
@@ -485,6 +523,15 @@ export default function AdminReviews() {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => handleRespond(review)}
+                      data-testid={`button-respond-${review.id}`}
+                    >
+                      <MessageSquare className="h-4 w-4 mr-1" />
+                      Respond
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => hideReviewMutation.mutate(review.id)}
                       disabled={hideReviewMutation.isPending}
                       data-testid={`button-hide-${review.id}`}
@@ -536,6 +583,17 @@ export default function AdminReviews() {
                     <div className="bg-muted p-3 rounded-md">
                       <h4 className="text-sm font-medium mb-1">Company Response:</h4>
                       <p className="text-sm">{review.companyResponse}</p>
+                    </div>
+                  )}
+                  {review.adminResponse && (
+                    <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+                      <h4 className="text-sm font-medium mb-1 text-blue-900 dark:text-blue-100">Platform Response:</h4>
+                      <p className="text-sm text-blue-800 dark:text-blue-200">{review.adminResponse}</p>
+                      {review.respondedAt && (
+                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                          Responded on {new Date(review.respondedAt).toLocaleDateString()}
+                        </p>
+                      )}
                     </div>
                   )}
                   {review.adminNote && (
@@ -698,6 +756,50 @@ export default function AdminReviews() {
               data-testid="button-save-edit"
             >
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Platform Response Dialog */}
+      <Dialog open={isRespondDialogOpen} onOpenChange={setIsRespondDialogOpen}>
+        <DialogContent data-testid="dialog-platform-response">
+          <DialogHeader>
+            <DialogTitle>Platform Response</DialogTitle>
+            <DialogDescription>
+              Add an official platform response to this review (visible to all users)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="adminResponse">Response</Label>
+              <Textarea
+                id="adminResponse"
+                value={adminResponse}
+                onChange={(e) => setAdminResponse(e.target.value)}
+                placeholder="Enter your official platform response..."
+                rows={4}
+                data-testid="textarea-admin-response"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsRespondDialogOpen(false)}
+              data-testid="button-cancel-response"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => selectedReview && respondToReviewMutation.mutate({
+                reviewId: selectedReview.id,
+                response: adminResponse
+              })}
+              disabled={respondToReviewMutation.isPending || !adminResponse.trim()}
+              data-testid="button-save-response"
+            >
+              Save Response
             </Button>
           </DialogFooter>
         </DialogContent>

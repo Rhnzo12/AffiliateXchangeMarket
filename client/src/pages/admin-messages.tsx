@@ -43,11 +43,28 @@ export default function AdminMessages() {
 
   const { data: conversations = [] } = useQuery<any[]>({
     queryKey: ["/api/admin/conversations", searchQuery],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      const url = `/api/admin/conversations${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch conversations");
+      return response.json();
+    },
     enabled: isAuthenticated && user?.role === 'admin',
   });
 
   const { data: messages = [] } = useQuery<EnhancedMessage[]>({
     queryKey: ["/api/admin/messages", selectedConversation],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/messages?conversationId=${selectedConversation}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      return response.json();
+    },
     enabled: !!selectedConversation && isAuthenticated && user?.role === 'admin',
   });
 

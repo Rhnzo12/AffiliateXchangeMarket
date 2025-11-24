@@ -45,6 +45,13 @@ export default function AdminNiches() {
 
   const { data: niches = [], isLoading: nichesLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/niches"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/niches", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch niches");
+      return response.json();
+    },
     enabled: isAuthenticated && user?.role === 'admin',
   });
 

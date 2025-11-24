@@ -8,7 +8,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { db } from "./db";
-import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages } from "../shared/schema";
+import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { checkClickFraud, logFraudDetection } from "./fraudDetection";
@@ -44,10 +44,22 @@ import {
   insertPaymentSettingSchema,
   adminReviewUpdateSchema,
   adminNoteSchema,
+  adminResponseSchema,
   createRetainerContractSchema,
   insertRetainerApplicationSchema,
   insertRetainerDeliverableSchema,
+  insertBannedKeywordSchema,
+  insertContentFlagSchema,
 } from "../shared/schema";
+import {
+  checkContent,
+  flagContent,
+  moderateReview,
+  moderateMessage,
+  reviewFlaggedContent,
+  getPendingFlags,
+  getFlagStatistics,
+} from "./moderation/moderationService";
 
 // Alias for convenience
 const requireAuth = isAuthenticated;
@@ -2122,6 +2134,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const message = await storage.createMessage(validated);
+
+      // Auto-moderate message for banned content
+      try {
+        await moderateMessage(message.id);
+      } catch (moderationError) {
+        console.error('[Moderation] Error auto-moderating message:', moderationError);
+        // Don't fail the message creation if moderation fails
+      }
+
       res.json(message);
     } catch (error: any) {
       console.error('[POST /api/messages] Error:', error);
@@ -2280,6 +2301,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const review = await storage.createReview(validated);
+
+      // Auto-moderate review for banned content and low ratings
+      try {
+        await moderateReview(review.id);
+      } catch (moderationError) {
+        console.error('[Moderation] Error auto-moderating review:', moderationError);
+        // Don't fail the review creation if moderation fails
+      }
+
       res.json(review);
     } catch (error: any) {
       res.status(500).send(error.message);
@@ -4087,6 +4117,237 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put("/api/admin/reviews/:id/respond", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const reviewId = req.params.id;
+      const validated = adminResponseSchema.parse(req.body);
+
+      // Verify the review exists
+      const review = await storage.getReview(reviewId);
+      if (!review) {
+        return res.status(404).send("Review not found");
+      }
+
+      const updatedReview = await storage.respondToReview(reviewId, validated.response, userId);
+      res.json(updatedReview);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).send(error.errors[0]?.message || "Invalid request");
+      }
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Content Moderation routes
+
+  // Banned Keywords Management
+  app.post("/api/admin/moderation/keywords", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const validated = insertBannedKeywordSchema.parse(req.body);
+
+      const [keyword] = await db.insert(bannedKeywords).values({
+        ...validated,
+        createdBy: userId,
+      }).returning();
+
+      res.json(keyword);
+    } catch (error: any) {
+      console.error('[Moderation] Error creating banned keyword:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/admin/moderation/keywords", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const isActive = req.query.isActive as string | undefined;
+
+      let query = db.select().from(bannedKeywords).$dynamic();
+
+      if (category) {
+        query = query.where(eq(bannedKeywords.category, category as any));
+      }
+
+      if (isActive !== undefined) {
+        query = query.where(eq(bannedKeywords.isActive, isActive === 'true'));
+      }
+
+      const keywords = await query;
+      res.json(keywords);
+    } catch (error: any) {
+      console.error('[Moderation] Error fetching banned keywords:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.put("/api/admin/moderation/keywords/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const validated = insertBannedKeywordSchema.parse(req.body);
+
+      const [keyword] = await db
+        .update(bannedKeywords)
+        .set({
+          ...validated,
+          updatedAt: new Date(),
+        })
+        .where(eq(bannedKeywords.id, req.params.id))
+        .returning();
+
+      if (!keyword) {
+        return res.status(404).send("Keyword not found");
+      }
+
+      res.json(keyword);
+    } catch (error: any) {
+      console.error('[Moderation] Error updating banned keyword:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.delete("/api/admin/moderation/keywords/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      await db.delete(bannedKeywords).where(eq(bannedKeywords.id, req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[Moderation] Error deleting banned keyword:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.patch("/api/admin/moderation/keywords/:id/toggle", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const keyword = await db.query.bannedKeywords.findFirst({
+        where: eq(bannedKeywords.id, req.params.id),
+      });
+
+      if (!keyword) {
+        return res.status(404).send("Keyword not found");
+      }
+
+      const [updated] = await db
+        .update(bannedKeywords)
+        .set({
+          isActive: !keyword.isActive,
+          updatedAt: new Date(),
+        })
+        .where(eq(bannedKeywords.id, req.params.id))
+        .returning();
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error('[Moderation] Error toggling banned keyword:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Content Flags Management
+  app.get("/api/admin/moderation/flags", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const contentType = req.query.contentType as string | undefined;
+
+      let query = db.query.contentFlags.findMany({
+        with: {
+          user: {
+            columns: {
+              id: true,
+              username: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+        orderBy: (contentFlags, { desc }) => [desc(contentFlags.createdAt)],
+      });
+
+      let flags = await query;
+
+      // Filter in memory since drizzle-orm query builder is limited
+      if (status) {
+        flags = flags.filter(f => f.status === status);
+      }
+      if (contentType) {
+        flags = flags.filter(f => f.contentType === contentType);
+      }
+
+      res.json(flags);
+    } catch (error: any) {
+      console.error('[Moderation] Error fetching content flags:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/admin/moderation/flags/pending", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const flags = await getPendingFlags();
+      res.json(flags);
+    } catch (error: any) {
+      console.error('[Moderation] Error fetching pending flags:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/admin/moderation/flags/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const flag = await db.query.contentFlags.findFirst({
+        where: eq(contentFlags.id, req.params.id),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              username: true,
+              email: true,
+              role: true,
+            },
+          },
+        },
+      });
+
+      if (!flag) {
+        return res.status(404).send("Content flag not found");
+      }
+
+      res.json(flag);
+    } catch (error: any) {
+      console.error('[Moderation] Error fetching content flag:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.patch("/api/admin/moderation/flags/:id/review", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { status, adminNotes, actionTaken } = req.body;
+
+      if (!status || !['reviewed', 'dismissed', 'action_taken'].includes(status)) {
+        return res.status(400).send("Invalid status. Must be: reviewed, dismissed, or action_taken");
+      }
+
+      await reviewFlaggedContent(req.params.id, userId, status, adminNotes, actionTaken);
+
+      const flag = await db.query.contentFlags.findFirst({
+        where: eq(contentFlags.id, req.params.id),
+      });
+
+      res.json(flag);
+    } catch (error: any) {
+      console.error('[Moderation] Error reviewing content flag:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.get("/api/admin/moderation/statistics", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const stats = await getFlagStatistics();
+      res.json(stats);
+    } catch (error: any) {
+      console.error('[Moderation] Error fetching moderation statistics:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Audit Log routes
   app.get("/api/admin/audit-logs", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -4589,14 +4850,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             // Generate signed URL using ObjectStorageService
             const { Storage } = await import('@google-cloud/storage');
-            const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
             const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
             const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
 
             let gcsStorage: any;
-            if (keyFilePath) {
-              gcsStorage = new Storage({ projectId, keyFilename: keyFilePath });
-            } else {
+            // Option 1: Use credentials from JSON string (best for production/Render)
+            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+            if (credentialsJson) {
+              const credentials = JSON.parse(credentialsJson);
+              gcsStorage = new Storage({
+                projectId: projectId || credentials.project_id,
+                credentials,
+              });
+            }
+            // Option 2: Use key file path (for local development)
+            else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+              gcsStorage = new Storage({
+                projectId,
+                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+              });
+            }
+            // Option 3: Fallback to default credentials (useful for GCP environments)
+            else {
               gcsStorage = new Storage({ projectId });
             }
 
@@ -4671,14 +4946,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             // Generate signed URL using ObjectStorageService
             const { Storage } = await import('@google-cloud/storage');
-            const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
             const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
             const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
 
             let gcsStorage: any;
-            if (keyFilePath) {
-              gcsStorage = new Storage({ projectId, keyFilename: keyFilePath });
-            } else {
+            // Option 1: Use credentials from JSON string (best for production/Render)
+            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+            if (credentialsJson) {
+              const credentials = JSON.parse(credentialsJson);
+              gcsStorage = new Storage({
+                projectId: projectId || credentials.project_id,
+                credentials,
+              });
+            }
+            // Option 2: Use key file path (for local development)
+            else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+              gcsStorage = new Storage({
+                projectId,
+                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+              });
+            }
+            // Option 3: Fallback to default credentials (useful for GCP environments)
+            else {
               gcsStorage = new Storage({ projectId });
             }
 
@@ -5058,17 +5347,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { Storage } = await import('@google-cloud/storage');
 
       // Initialize Google Cloud Storage with service account key
-      const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
 
       let gcsStorage: any;
-      if (keyFilePath) {
+      // Option 1: Use credentials from JSON string (best for production/Render)
+      const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+      if (credentialsJson) {
+        const credentials = JSON.parse(credentialsJson);
+        gcsStorage = new Storage({
+          projectId: projectId || credentials.project_id,
+          credentials,
+        });
+      }
+      // Option 2: Use key file path (for local development)
+      else if (process.env.GOOGLE_CLOUD_KEYFILE) {
         gcsStorage = new Storage({
           projectId,
-          keyFilename: keyFilePath,
+          keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
         });
-      } else {
+      }
+      // Option 3: Fallback to default credentials (useful for GCP environments)
+      else {
         gcsStorage = new Storage({ projectId });
       }
 
@@ -5109,17 +5409,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { Storage } = await import('@google-cloud/storage');
 
       // Initialize Google Cloud Storage
-      const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
 
       let gcsStorage: any;
-      if (keyFilePath) {
+      // Option 1: Use credentials from JSON string (best for production/Render)
+      const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+      if (credentialsJson) {
+        const credentials = JSON.parse(credentialsJson);
+        gcsStorage = new Storage({
+          projectId: projectId || credentials.project_id,
+          credentials,
+        });
+      }
+      // Option 2: Use key file path (for local development)
+      else if (process.env.GOOGLE_CLOUD_KEYFILE) {
         gcsStorage = new Storage({
           projectId,
-          keyFilename: keyFilePath,
+          keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
         });
-      } else {
+      }
+      // Option 3: Fallback to default credentials (useful for GCP environments)
+      else {
         gcsStorage = new Storage({ projectId });
       }
 

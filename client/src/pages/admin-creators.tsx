@@ -48,6 +48,13 @@ export default function AdminCreators() {
 
   const { data: creators = [], isLoading: loadingCreators } = useQuery<any[]>({
     queryKey: ["/api/admin/creators"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/creators", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch creators");
+      return response.json();
+    },
     enabled: isAuthenticated,
   });
 

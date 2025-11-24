@@ -47,6 +47,13 @@ export default function AdminPaymentDisputes() {
 
   const { data: disputedPayments = [], isLoading: paymentsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/payments/disputed"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/payments/disputed", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch disputed payments");
+      return response.json();
+    },
     enabled: isAuthenticated && user?.role === 'admin',
   });
 

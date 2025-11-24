@@ -106,6 +106,9 @@ const REVIEW_OPTIONAL_COLUMNS = [
   "support_rating",
   "company_response",
   "company_responded_at",
+  "admin_response",
+  "responded_at",
+  "responded_by",
   "is_edited",
   "admin_note",
   "is_approved",
@@ -241,6 +244,9 @@ function buildEphemeralReview(review: InsertReview): Review {
     supportRating: partial.supportRating ?? null,
     companyResponse: partial.companyResponse ?? null,
     companyRespondedAt: partial.companyRespondedAt ?? null,
+    adminResponse: partial.adminResponse ?? null,
+    respondedAt: partial.respondedAt ?? null,
+    respondedBy: partial.respondedBy ?? null,
     isEdited: partial.isEdited ?? false,
     adminNote: partial.adminNote ?? null,
     isApproved: partial.isApproved ?? true,
@@ -510,6 +516,12 @@ function mapLegacyReviewRow(row: any, columns: Set<string>): Review {
       columns.has("company_responded_at") && row.company_responded_at
         ? coerceDate(row.company_responded_at)
         : null,
+    adminResponse: columns.has("admin_response") ? row.admin_response ?? null : null,
+    respondedAt:
+      columns.has("responded_at") && row.responded_at
+        ? coerceDate(row.responded_at)
+        : null,
+    respondedBy: columns.has("responded_by") ? row.responded_by ?? null : null,
     isEdited:
       columns.has("is_edited")
         ? coerceBoolean(row.is_edited, false)
@@ -2680,6 +2692,36 @@ export class DatabaseStorage implements IStorage {
       if (isMissingRelationError(error, "reviews")) {
         console.warn(
           "[Storage] reviews relation missing while approving review - treating as no-op.",
+        );
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async respondToReview(id: string, response: string, adminId: string): Promise<Review | undefined> {
+    try {
+      const result = await db
+        .update(reviews)
+        .set({
+          adminResponse: response,
+          respondedAt: new Date(),
+          respondedBy: adminId,
+          updatedAt: new Date(),
+        })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn(
+          "[Storage] reviews column mismatch while responding to review - treating as no-op.",
+        );
+        return undefined;
+      }
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn(
+          "[Storage] reviews relation missing while responding to review - treating as no-op.",
         );
         return undefined;
       }

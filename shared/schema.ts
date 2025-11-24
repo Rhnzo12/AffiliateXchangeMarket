@@ -11,6 +11,7 @@ import {
   decimal,
   boolean,
   pgEnum,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -58,8 +59,12 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'deliverable_rejected',
   'revision_requested',
   'email_verification',
-  'password_reset'
+  'password_reset',
+  'content_flagged'
 ]);
+export const keywordCategoryEnum = pgEnum('keyword_category', ['profanity', 'spam', 'legal', 'harassment', 'custom']);
+export const contentTypeEnum = pgEnum('content_type', ['message', 'review']);
+export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed', 'action_taken']);
 
 // Session storage table (Required for Replit Auth)
 export const sessions = pgTable(
@@ -343,6 +348,9 @@ export const reviews = pgTable("reviews", {
   supportRating: integer("support_rating"),
   companyResponse: text("company_response"),
   companyRespondedAt: timestamp("company_responded_at"),
+  adminResponse: text("admin_response"),
+  respondedAt: timestamp("responded_at"),
+  respondedBy: varchar("responded_by").references(() => users.id, { onDelete: 'set null' }),
   isEdited: boolean("is_edited").default(false),
   adminNote: text("admin_note"),
   isApproved: boolean("is_approved").default(true),
@@ -667,6 +675,53 @@ export const systemSettingsRelations = relations(systemSettings, ({ one }) => ({
   }),
 }));
 
+// Banned Keywords
+export const bannedKeywords = pgTable("banned_keywords", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  keyword: varchar("keyword", { length: 255 }).notNull(),
+  category: keywordCategoryEnum("category").notNull().default('custom'),
+  isActive: boolean("is_active").notNull().default(true),
+  severity: integer("severity").notNull().default(1), // 1-5, where 5 is most severe
+  description: text("description"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const bannedKeywordsRelations = relations(bannedKeywords, ({ one }) => ({
+  creator: one(users, {
+    fields: [bannedKeywords.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// Content Flags
+export const contentFlags = pgTable("content_flags", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentType: contentTypeEnum("content_type").notNull(),
+  contentId: varchar("content_id").notNull(), // ID of message or review
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }), // User who created the flagged content
+  flagReason: text("flag_reason").notNull(), // Why it was flagged
+  matchedKeywords: text("matched_keywords").array().default(sql`ARRAY[]::text[]`), // Which keywords triggered the flag
+  status: flagStatusEnum("status").notNull().default('pending'),
+  reviewedBy: uuid("reviewed_by").references(() => users.id, { onDelete: 'set null' }),
+  reviewedAt: timestamp("reviewed_at"),
+  adminNotes: text("admin_notes"),
+  actionTaken: text("action_taken"), // What action was taken (e.g., content removed, user warned, etc.)
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const contentFlagsRelations = relations(contentFlags, ({ one }) => ({
+  user: one(users, {
+    fields: [contentFlags.userId],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [contentFlags.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
 // Notifications
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -809,9 +864,10 @@ export const createOfferSchema = createInsertSchema(offers).omit({ id: true, com
 export const insertOfferVideoSchema = createInsertSchema(offerVideos).omit({ id: true, createdAt: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, trackingLink: true, trackingCode: true, autoApprovalScheduledAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
-export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true, updatedAt: true, companyResponse: true, companyRespondedAt: true, isEdited: true, adminNote: true, isApproved: true, approvedBy: true, approvedAt: true, isHidden: true });
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true, updatedAt: true, companyResponse: true, companyRespondedAt: true, adminResponse: true, respondedAt: true, respondedBy: true, isEdited: true, adminNote: true, isApproved: true, approvedBy: true, approvedAt: true, isHidden: true });
 export const adminReviewUpdateSchema = createInsertSchema(reviews).pick({ reviewText: true, overallRating: true, paymentSpeedRating: true, communicationRating: true, offerQualityRating: true, supportRating: true }).partial();
 export const adminNoteSchema = z.object({ note: z.string() });
+export const adminResponseSchema = z.object({ response: z.string().min(1, "Response text is required") });
 export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true, createdAt: true });
 export const insertPaymentSettingSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true, updatedAt: true, initiatedAt: true, completedAt: true, failedAt: true, refundedAt: true });
@@ -884,6 +940,8 @@ export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: tru
 export const insertPlatformSettingSchema = createInsertSchema(platformSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertNicheSchema = createInsertSchema(niches).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPlatformFundingAccountSchema = createInsertSchema(platformFundingAccounts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertBannedKeywordSchema = createInsertSchema(bannedKeywords).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertContentFlagSchema = createInsertSchema(contentFlags).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -931,3 +989,7 @@ export type Niche = typeof niches.$inferSelect;
 export type InsertNiche = z.infer<typeof insertNicheSchema>;
 export type PlatformFundingAccount = typeof platformFundingAccounts.$inferSelect;
 export type InsertPlatformFundingAccount = z.infer<typeof insertPlatformFundingAccountSchema>;
+export type BannedKeyword = typeof bannedKeywords.$inferSelect;
+export type InsertBannedKeyword = z.infer<typeof insertBannedKeywordSchema>;
+export type ContentFlag = typeof contentFlags.$inferSelect;
+export type InsertContentFlag = z.infer<typeof insertContentFlagSchema>;

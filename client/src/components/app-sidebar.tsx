@@ -31,6 +31,7 @@ import {
   Sliders,
   AlertCircle,
   Tags,
+  ShieldAlert,
 } from "lucide-react";
 
 export function AppSidebar() {
@@ -157,6 +158,11 @@ export function AppSidebar() {
       title: "Review Management",
       url: "/admin/reviews",
       icon: Star,
+    },
+    {
+      title: "Content Moderation",
+      url: "/admin/moderation",
+      icon: ShieldAlert,
     },
     {
       title: "Message Monitoring",

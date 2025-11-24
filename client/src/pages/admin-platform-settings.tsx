@@ -45,6 +45,13 @@ export default function AdminPlatformSettings() {
 
   const { data: settings, isLoading } = useQuery<PlatformSetting[]>({
     queryKey: ["/api/admin/settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/settings", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch platform settings");
+      return response.json();
+    },
   });
 
   const updateMutation = useMutation({

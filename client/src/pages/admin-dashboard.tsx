@@ -41,6 +41,13 @@ export default function AdminDashboard() {
 
   const { data: stats, isLoading: statsLoading } = useQuery<any>({
     queryKey: ["/api/admin/stats"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/stats", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch admin stats");
+      return response.json();
+    },
     enabled: isAuthenticated,
   });
 

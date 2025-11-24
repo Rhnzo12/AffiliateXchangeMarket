@@ -1366,6 +1366,26 @@ export default function OfferDetail() {
                           </div>
                         </div>
                       )}
+
+                      {/* Platform Response */}
+                      {review.adminResponse && (
+                        <div className="mt-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                          <div className="flex items-start gap-3">
+                            <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                              <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium text-sm mb-2 text-blue-900 dark:text-blue-100">Platform Response</p>
+                              <p className="text-sm text-blue-800 dark:text-blue-200">{review.adminResponse}</p>
+                              {review.respondedAt && (
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                                  Responded on {new Date(review.respondedAt).toLocaleDateString()}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -13,20 +13,33 @@ import {
 // Configure Google Cloud Storage
 let storage: Storage;
 try {
-  const keyFilePath = process.env.GOOGLE_CLOUD_KEYFILE;
-  if (keyFilePath) {
+  // Option 1: Use credentials from JSON string (best for production/Render)
+  const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+  if (credentialsJson) {
+    const credentials = JSON.parse(credentialsJson);
+    storage = new Storage({
+      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || credentials.project_id,
+      credentials,
+    });
+    console.log('[GCS] ✓ Initialized with credentials from GOOGLE_CLOUD_CREDENTIALS_JSON');
+  }
+  // Option 2: Use key file path (for local development)
+  else if (process.env.GOOGLE_CLOUD_KEYFILE) {
     storage = new Storage({
       projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-      keyFilename: keyFilePath,
+      keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
     });
-  } else {
-    // Fallback to default credentials (useful for GCP environments)
+    console.log('[GCS] ✓ Initialized with key file from GOOGLE_CLOUD_KEYFILE');
+  }
+  // Option 3: Fallback to default credentials (useful for GCP environments)
+  else {
     storage = new Storage({
       projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
     });
+    console.log('[GCS] ⚠️  Initialized with default credentials (may fail if not in GCP environment)');
   }
 } catch (error) {
-  console.error('Error initializing Google Cloud Storage:', error);
+  console.error('[GCS] ❌ Error initializing Google Cloud Storage:', error);
   throw error;
 }
 

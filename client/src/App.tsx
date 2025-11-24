@@ -46,6 +46,8 @@ import AdminPlatformSettings from "./pages/admin-platform-settings";
 import AdminMessages from "./pages/admin-messages";
 import AdminPaymentDisputes from "./pages/admin-payment-disputes";
 import AdminNiches from "./pages/admin-niches";
+import AdminKeywordManagement from "./pages/admin-keyword-management";
+import AdminModerationDashboard from "./pages/admin-moderation-dashboard";
 import Onboarding from "./pages/onboarding";
 import CreatorOnboarding from "./pages/creator-onboarding";
 import CompanyOnboarding from "./pages/company-onboarding";
@@ -53,6 +55,8 @@ import CompanyProfile from "./pages/company-profile";
 import Login from "./pages/login";
 import Register from "./pages/register";
 import SelectRole from "./pages/select-role";
+import PrivacyPolicy from "./pages/privacy-policy";
+import TermsOfService from "./pages/terms-of-service";
 
 // Public routes that don't require authentication
 function PublicRouter() {
@@ -62,6 +66,8 @@ function PublicRouter() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/select-role" component={SelectRole} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
       <Route component={Landing} />
     </Switch>
   );
@@ -162,6 +168,9 @@ function ProtectedRouter() {
                     <Route path="/admin/niches" component={AdminNiches} />
                     <Route path="/admin/audit-logs" component={AdminAuditLogs} />
                     <Route path="/admin/platform-settings" component={AdminPlatformSettings} />
+                    <Route path="/admin/moderation" component={AdminModerationDashboard} />
+                    <Route path="/admin/moderation/dashboard" component={AdminModerationDashboard} />
+                    <Route path="/admin/moderation/keywords" component={AdminKeywordManagement} />
                     <Route path="/admin/users" component={AdminDashboard} />
                     <Route path="/admin/payment-settings" component={PaymentSettings} />
                     <Route path="/payments/:id" component={PaymentDetail} />
@@ -175,6 +184,8 @@ function ProtectedRouter() {
                 <Route path="/payment-settings" component={PaymentSettings} />
                 <Route path="/payments/:id" component={PaymentDetail} />
                 <Route path="/company-profile/:id" component={CompanyProfile} />
+                <Route path="/privacy-policy" component={PrivacyPolicy} />
+                <Route path="/terms-of-service" component={TermsOfService} />
 
                 {/* Fallback */}
                 <Route component={NotFound} />
@@ -192,7 +203,7 @@ function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   // Define public routes
-  const publicRoutes = ['/login', '/register', '/select-role'];
+  const publicRoutes = ['/login', '/register', '/select-role', '/privacy-policy', '/terms-of-service'];
   const isPublicRoute = publicRoutes.includes(location);
 
   // While loading, show a loading state

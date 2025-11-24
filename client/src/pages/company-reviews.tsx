@@ -452,6 +452,20 @@ export default function CompanyReviews() {
                     Respond to Review
                   </Button>
                 )}
+
+                {review.adminResponse && (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      Platform Response
+                    </div>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">{review.adminResponse}</p>
+                    {review.respondedAt && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                        Responded {formatDistanceToNow(new Date(review.respondedAt), { addSuffix: true })}
+                      </p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

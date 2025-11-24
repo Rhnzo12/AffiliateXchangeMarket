@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+import { Checkbox } from "../components/ui/checkbox";
 import { useToast } from "../hooks/use-toast";
 import { Zap, Mail } from "lucide-react";
 import { Link } from "wouter";
@@ -20,6 +21,9 @@ const registerSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   role: z.enum(["creator", "company"]),
+  acceptTerms: z.boolean().refine((val) => val === true, {
+    message: "You must accept the Terms of Service and Privacy Policy",
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -47,6 +51,7 @@ export default function Register() {
       firstName: "",
       lastName: "",
       role: "creator",
+      acceptTerms: false,
     },
   });
 
@@ -247,6 +252,39 @@ export default function Register() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="acceptTerms"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-accept-terms"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="text-sm font-normal">
+                          I agree to the{" "}
+                          <Link href="/terms-of-service">
+                            <a className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+                              Terms of Service
+                            </a>
+                          </Link>
+                          {" "}and{" "}
+                          <Link href="/privacy-policy">
+                            <a className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
+                              Privacy Policy
+                            </a>
+                          </Link>
+                        </FormLabel>
+                        <FormMessage />
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -284,6 +322,22 @@ export default function Register() {
               <Link href="/login" className="text-primary hover:underline" data-testid="link-login">
                 Sign in
               </Link>
+            </div>
+
+            <div className="mt-4 pt-4 border-t text-center text-xs text-muted-foreground">
+              <div className="flex justify-center gap-4">
+                <Link href="/privacy-policy">
+                  <a className="hover:text-foreground transition-colors">
+                    Privacy Policy
+                  </a>
+                </Link>
+                <span>•</span>
+                <Link href="/terms-of-service">
+                  <a className="hover:text-foreground transition-colors">
+                    Terms of Service
+                  </a>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
