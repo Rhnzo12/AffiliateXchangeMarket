@@ -60,11 +60,23 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'revision_requested',
   'email_verification',
   'password_reset',
-  'content_flagged'
+  'content_flagged',
+  'high_risk_company',
+  'account_deletion_otp',
+  'password_change_otp'
 ]);
 export const keywordCategoryEnum = pgEnum('keyword_category', ['profanity', 'spam', 'legal', 'harassment', 'custom']);
 export const contentTypeEnum = pgEnum('content_type', ['message', 'review']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed', 'action_taken']);
+export const emailTemplateCategoryEnum = pgEnum('email_template_category', [
+  'application',
+  'payment',
+  'offer',
+  'company',
+  'system',
+  'moderation',
+  'authentication'
+]);
 
 // Session storage table (Required for Replit Auth)
 export const sessions = pgTable(
@@ -94,6 +106,14 @@ export const users = pgTable("users", {
   emailVerificationTokenExpiry: timestamp("email_verification_token_expiry"),
   passwordResetToken: varchar("password_reset_token"),
   passwordResetTokenExpiry: timestamp("password_reset_token_expiry"),
+  accountDeletionOtp: varchar("account_deletion_otp"),
+  accountDeletionOtpExpiry: timestamp("account_deletion_otp_expiry"),
+  passwordChangeOtp: varchar("password_change_otp"),
+  passwordChangeOtpExpiry: timestamp("password_change_otp_expiry"),
+  // Two-Factor Authentication fields
+  twoFactorSecret: varchar("two_factor_secret", { length: 64 }),
+  twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
+  twoFactorBackupCodes: text("two_factor_backup_codes"), // JSON array of hashed backup codes
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -136,6 +156,9 @@ export const creatorProfilesRelations = relations(creatorProfiles, ({ one }) => 
   }),
 }));
 
+// Website verification method enum
+export const websiteVerificationMethodEnum = pgEnum('website_verification_method', ['meta_tag', 'dns_txt']);
+
 // Company profiles
 export const companyProfiles = pgTable("company_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -157,6 +180,13 @@ export const companyProfiles = pgTable("company_profiles", {
   twitterUrl: varchar("twitter_url"),
   facebookUrl: varchar("facebook_url"),
   instagramUrl: varchar("instagram_url"),
+  // Website verification fields
+  websiteVerificationToken: varchar("website_verification_token"),
+  websiteVerified: boolean("website_verified").notNull().default(false),
+  websiteVerificationMethod: websiteVerificationMethodEnum("website_verification_method"),
+  websiteVerifiedAt: timestamp("website_verified_at"),
+  // Per-company fee override (null means use default platform fee)
+  customPlatformFeePercentage: decimal("custom_platform_fee_percentage", { precision: 5, scale: 4 }),
   status: companyStatusEnum("status").notNull().default('pending'),
   approvedAt: timestamp("approved_at"),
   rejectionReason: text("rejection_reason"),
@@ -170,6 +200,26 @@ export const companyProfilesRelations = relations(companyProfiles, ({ one, many 
     references: [users.id],
   }),
   offers: many(offers),
+  verificationDocuments: many(companyVerificationDocuments),
+}));
+
+// Company Verification Documents (for multiple document uploads)
+export const companyVerificationDocuments = pgTable("company_verification_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  companyId: varchar("company_id").notNull().references(() => companyProfiles.id, { onDelete: 'cascade' }),
+  documentUrl: varchar("document_url").notNull(),
+  documentName: varchar("document_name").notNull(),
+  documentType: varchar("document_type").notNull(), // 'pdf', 'image'
+  fileSize: integer("file_size"), // in bytes
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const companyVerificationDocumentsRelations = relations(companyVerificationDocuments, ({ one }) => ({
+  company: one(companyProfiles, {
+    fields: [companyVerificationDocuments.companyId],
+    references: [companyProfiles.id],
+  }),
 }));
 
 // Offers
@@ -320,6 +370,7 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   attachments: text("attachments").array().default(sql`ARRAY[]::text[]`),
   isRead: boolean("is_read").default(false),
+  deletedFor: text("deleted_for").array().default(sql`ARRAY[]::text[]`), // Array of user IDs who deleted "for me"
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -851,6 +902,138 @@ export const platformFundingAccountsRelations = relations(platformFundingAccount
   }),
 }));
 
+// Email Templates (for admin-managed email templates)
+export const emailTemplates = pgTable("email_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(), // Unique identifier for template lookup
+  category: emailTemplateCategoryEnum("category").notNull(),
+  subject: varchar("subject", { length: 200 }).notNull(),
+  htmlContent: text("html_content").notNull(),
+  visualData: jsonb("visual_data"), // Visual email builder data (blocks, header, etc.)
+  description: text("description"), // Admin-facing description of when this template is used
+  availableVariables: text("available_variables").array().default(sql`ARRAY[]::text[]`), // List of variables like {{userName}}, {{offerTitle}}
+  isActive: boolean("is_active").notNull().default(true),
+  isSystem: boolean("is_system").notNull().default(false), // System templates cannot be deleted
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const emailTemplatesRelations = relations(emailTemplates, ({ one }) => ({
+  creator: one(users, {
+    fields: [emailTemplates.createdBy],
+    references: [users.id],
+  }),
+  updater: one(users, {
+    fields: [emailTemplates.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+// Platform Health Monitoring Tables (Section 4.3.G)
+
+// API Metrics - aggregated API performance data
+export const apiMetrics = pgTable("api_metrics", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  endpoint: varchar("endpoint", { length: 255 }).notNull(),
+  method: varchar("method", { length: 10 }).notNull(),
+  date: timestamp("date").notNull(),
+  hour: integer("hour").notNull().default(0),
+  totalRequests: integer("total_requests").notNull().default(0),
+  successfulRequests: integer("successful_requests").notNull().default(0),
+  errorRequests: integer("error_requests").notNull().default(0),
+  avgResponseTimeMs: decimal("avg_response_time_ms", { precision: 10, scale: 2 }).default('0'),
+  minResponseTimeMs: integer("min_response_time_ms").default(0),
+  maxResponseTimeMs: integer("max_response_time_ms").default(0),
+  p50ResponseTimeMs: integer("p50_response_time_ms").default(0),
+  p95ResponseTimeMs: integer("p95_response_time_ms").default(0),
+  p99ResponseTimeMs: integer("p99_response_time_ms").default(0),
+  error4xxCount: integer("error_4xx_count").default(0),
+  error5xxCount: integer("error_5xx_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// API Error Logs - individual error occurrences
+export const apiErrorLogs = pgTable("api_error_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  endpoint: varchar("endpoint", { length: 255 }).notNull(),
+  method: varchar("method", { length: 10 }).notNull(),
+  statusCode: integer("status_code").notNull(),
+  errorMessage: text("error_message"),
+  errorStack: text("error_stack"),
+  requestId: varchar("request_id", { length: 100 }),
+  userId: varchar("user_id", { length: 255 }),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  requestBody: jsonb("request_body"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const apiErrorLogsRelations = relations(apiErrorLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [apiErrorLogs.userId],
+    references: [users.id],
+  }),
+}));
+
+// Storage Metrics - daily storage usage tracking
+export const storageMetrics = pgTable("storage_metrics", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: timestamp("date").notNull().unique(),
+  totalFiles: integer("total_files").notNull().default(0),
+  totalStorageBytes: decimal("total_storage_bytes", { precision: 20, scale: 0 }).notNull().default('0'),
+  videoFiles: integer("video_files").notNull().default(0),
+  videoStorageBytes: decimal("video_storage_bytes", { precision: 20, scale: 0 }).notNull().default('0'),
+  imageFiles: integer("image_files").notNull().default(0),
+  imageStorageBytes: decimal("image_storage_bytes", { precision: 20, scale: 0 }).notNull().default('0'),
+  documentFiles: integer("document_files").notNull().default(0),
+  documentStorageBytes: decimal("document_storage_bytes", { precision: 20, scale: 0 }).notNull().default('0'),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Video Hosting Costs - daily cost tracking
+export const videoHostingCosts = pgTable("video_hosting_costs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: timestamp("date").notNull().unique(),
+  totalVideos: integer("total_videos").notNull().default(0),
+  totalVideoStorageGb: decimal("total_video_storage_gb", { precision: 12, scale: 4 }).notNull().default('0'),
+  totalBandwidthGb: decimal("total_bandwidth_gb", { precision: 12, scale: 4 }).notNull().default('0'),
+  storageCostUsd: decimal("storage_cost_usd", { precision: 10, scale: 4 }).notNull().default('0'),
+  bandwidthCostUsd: decimal("bandwidth_cost_usd", { precision: 10, scale: 4 }).notNull().default('0'),
+  transcodingCostUsd: decimal("transcoding_cost_usd", { precision: 10, scale: 4 }).notNull().default('0'),
+  totalCostUsd: decimal("total_cost_usd", { precision: 10, scale: 4 }).notNull().default('0'),
+  costPerVideoUsd: decimal("cost_per_video_usd", { precision: 10, scale: 4 }).notNull().default('0'),
+  viewsCount: integer("views_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Platform Health Snapshots - periodic health status
+export const platformHealthSnapshots = pgTable("platform_health_snapshots", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  overallHealthScore: integer("overall_health_score").notNull().default(100),
+  apiHealthScore: integer("api_health_score").notNull().default(100),
+  storageHealthScore: integer("storage_health_score").notNull().default(100),
+  databaseHealthScore: integer("database_health_score").notNull().default(100),
+  avgResponseTimeMs: decimal("avg_response_time_ms", { precision: 10, scale: 2 }).default('0'),
+  errorRatePercent: decimal("error_rate_percent", { precision: 5, scale: 2 }).default('0'),
+  activeUsersCount: integer("active_users_count").default(0),
+  requestsPerMinute: integer("requests_per_minute").default(0),
+  memoryUsagePercent: decimal("memory_usage_percent", { precision: 5, scale: 2 }).default('0'),
+  cpuUsagePercent: decimal("cpu_usage_percent", { precision: 5, scale: 2 }).default('0'),
+  diskUsagePercent: decimal("disk_usage_percent", { precision: 5, scale: 2 }).default('0'),
+  databaseConnections: integer("database_connections").default(0),
+  uptimeSeconds: decimal("uptime_seconds", { precision: 20, scale: 0 }).default('0'),
+  alerts: jsonb("alerts").default(sql`'[]'::jsonb`),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Type exports for Replit Auth
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -942,6 +1125,15 @@ export const insertNicheSchema = createInsertSchema(niches).omit({ id: true, cre
 export const insertPlatformFundingAccountSchema = createInsertSchema(platformFundingAccounts).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertBannedKeywordSchema = createInsertSchema(bannedKeywords).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertContentFlagSchema = createInsertSchema(contentFlags).omit({ id: true, createdAt: true });
+export const insertCompanyVerificationDocumentSchema = createInsertSchema(companyVerificationDocuments).omit({ id: true, createdAt: true, uploadedAt: true });
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Platform Health Monitoring insert schemas
+export const insertApiMetricsSchema = createInsertSchema(apiMetrics).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertApiErrorLogSchema = createInsertSchema(apiErrorLogs).omit({ id: true, timestamp: true });
+export const insertStorageMetricsSchema = createInsertSchema(storageMetrics).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVideoHostingCostsSchema = createInsertSchema(videoHostingCosts).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPlatformHealthSnapshotSchema = createInsertSchema(platformHealthSnapshots).omit({ id: true, createdAt: true });
 
 // Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -993,3 +1185,17 @@ export type BannedKeyword = typeof bannedKeywords.$inferSelect;
 export type InsertBannedKeyword = z.infer<typeof insertBannedKeywordSchema>;
 export type ContentFlag = typeof contentFlags.$inferSelect;
 export type InsertContentFlag = z.infer<typeof insertContentFlagSchema>;
+export type CompanyVerificationDocument = typeof companyVerificationDocuments.$inferSelect;
+export type InsertCompanyVerificationDocument = z.infer<typeof insertCompanyVerificationDocumentSchema>;
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+export type ApiMetrics = typeof apiMetrics.$inferSelect;
+export type InsertApiMetrics = z.infer<typeof insertApiMetricsSchema>;
+export type ApiErrorLog = typeof apiErrorLogs.$inferSelect;
+export type InsertApiErrorLog = z.infer<typeof insertApiErrorLogSchema>;
+export type StorageMetrics = typeof storageMetrics.$inferSelect;
+export type InsertStorageMetrics = z.infer<typeof insertStorageMetricsSchema>;
+export type VideoHostingCosts = typeof videoHostingCosts.$inferSelect;
+export type InsertVideoHostingCosts = z.infer<typeof insertVideoHostingCostsSchema>;
+export type PlatformHealthSnapshot = typeof platformHealthSnapshots.$inferSelect;
+export type InsertPlatformHealthSnapshot = z.infer<typeof insertPlatformHealthSnapshotSchema>;

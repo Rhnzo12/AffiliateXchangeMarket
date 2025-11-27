@@ -428,7 +428,9 @@ export default function CreatorRetainerDetail() {
   const contractMonthlyAmount = Number(contract.monthlyAmount) || 0;
   const contractVideosPerMonth = Math.max(1, Number(contract.videosPerMonth) || 1);
   const basePerVideo = contractMonthlyAmount / contractVideosPerMonth;
-  const platformFee = contractMonthlyAmount * 0.07;
+  // Default total fee estimate (4% platform + 3% processing). Actual fees may vary for partnership companies.
+  const DEFAULT_TOTAL_FEE = 0.07;
+  const platformFee = contractMonthlyAmount * DEFAULT_TOTAL_FEE;
   const creatorTakeHome = Math.max(contractMonthlyAmount - platformFee, 0);
   const hasRetainerTiers = Array.isArray(contract.retainerTiers) && contract.retainerTiers.length > 0;
 

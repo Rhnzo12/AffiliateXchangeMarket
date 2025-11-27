@@ -57,6 +57,24 @@ export default function CompanyApplications() {
     enabled: isAuthenticated,
   });
 
+  // Fetch company's fee info
+  interface CompanyFeeInfo {
+    platformFeePercentage: number;
+    platformFeeDisplay: string;
+    processingFeePercentage: number;
+    processingFeeDisplay: string;
+    totalFeePercentage: number;
+    totalFeeDisplay: string;
+    creatorPayoutPercentage: number;
+    creatorPayoutDisplay: string;
+    isCustomFee: boolean;
+  }
+
+  const { data: feeInfo } = useQuery<CompanyFeeInfo>({
+    queryKey: ["/api/company/fee"],
+    enabled: isAuthenticated,
+  });
+
   const totalApplications = applications.length;
 
   const uniqueStatuses = useMemo(
@@ -622,9 +640,12 @@ export default function CompanyApplications() {
 
             <div className="bg-muted/50 p-3 rounded-md space-y-1">
               <p className="text-xs font-medium">Fee Breakdown:</p>
-              <p className="text-xs text-muted-foreground">• Platform Fee: 4%</p>
-              <p className="text-xs text-muted-foreground">• Stripe Fee: 3%</p>
-              <p className="text-xs text-muted-foreground">• Creator Receives: 93%</p>
+              <p className="text-xs text-muted-foreground">
+                • Platform Fee: {feeInfo?.platformFeeDisplay || '4%'}
+                {feeInfo?.isCustomFee && <span className="text-blue-600 ml-1">(Custom)</span>}
+              </p>
+              <p className="text-xs text-muted-foreground">• Processing Fee: {feeInfo?.processingFeeDisplay || '3%'}</p>
+              <p className="text-xs text-muted-foreground">• Creator Receives: {feeInfo?.creatorPayoutDisplay || '93%'}</p>
             </div>
           </div>
 

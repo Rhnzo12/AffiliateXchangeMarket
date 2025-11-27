@@ -102,7 +102,25 @@ const statusConfig: Record<PaymentStatus, { bg: string; text: string; icon: type
   refunded: { bg: "bg-gray-100", text: "text-gray-800", icon: AlertTriangle, label: "Refunded" },
 };
 
-function StatusBadge({ status }: { status: PaymentStatus }) {
+// Helper to check if a payment is disputed (failed with "Disputed:" in description)
+function isDisputedPayment(payment: CreatorPayment): boolean {
+  return payment.status === "failed" &&
+    (payment.description?.toLowerCase().includes("disputed:") ?? false);
+}
+
+function StatusBadge({ status, isDisputed = false }: { status: PaymentStatus; isDisputed?: boolean }) {
+  // Show disputed badge if payment is disputed
+  if (isDisputed) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800"
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Disputed
+      </span>
+    );
+  }
+
   const config = statusConfig[status];
   const Icon = config.icon;
   return (
@@ -117,11 +135,21 @@ function StatusBadge({ status }: { status: PaymentStatus }) {
 
 function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
   const { toast } = useToast();
-  const { totalEarnings, pendingEarnings, completedEarnings, processingEarnings } = useMemo(() => {
+  const { totalEarnings, pendingEarnings, completedEarnings, processingEarnings, disputedEarnings } = useMemo(() => {
     const totals = payments.reduce(
       (acc, payment) => {
         const amount = parseFloat(payment.netAmount);
+        const disputed = isDisputedPayment(payment);
+
+        // Track disputed payments separately - do NOT include in total earnings
+        if (disputed) {
+          acc.disputedEarnings += amount;
+          return acc; // Skip adding to totalEarnings
+        }
+
+        // Only add non-disputed payments to total earnings
         acc.totalEarnings += amount;
+
         if (payment.status === "completed") {
           acc.completedEarnings += amount;
         }
@@ -133,7 +161,7 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
         }
         return acc;
       },
-      { totalEarnings: 0, pendingEarnings: 0, completedEarnings: 0, processingEarnings: 0 }
+      { totalEarnings: 0, pendingEarnings: 0, completedEarnings: 0, processingEarnings: 0, disputedEarnings: 0 }
     );
 
     return totals;
@@ -206,6 +234,17 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
           <div className="text-3xl font-bold text-gray-900">${completedEarnings.toFixed(2)}</div>
           <div className="mt-1 text-xs text-gray-500">Completed</div>
         </div>
+
+        {disputedEarnings > 0 && (
+          <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-orange-700">Disputed</span>
+              <AlertTriangle className="h-5 w-5 text-orange-600" />
+            </div>
+            <div className="text-3xl font-bold text-orange-900">${disputedEarnings.toFixed(2)}</div>
+            <div className="mt-1 text-xs text-orange-700">Awaiting admin resolution</div>
+          </div>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
@@ -237,7 +276,7 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
                     Gross
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Platform Fee (4%)
+                    Platform Fee
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Processing (3%)
@@ -278,7 +317,7 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
                       ${parseFloat(payment.netAmount).toFixed(2)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <StatusBadge status={payment.status} />
+                      <StatusBadge status={payment.status} isDisputed={isDisputedPayment(payment)} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                       {payment.completedAt
@@ -390,11 +429,11 @@ function PaymentMethodSettings({
                     needsStripeSetup ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <CreditCard className={`h-5 w-5 ${needsStripeSetup ? 'text-yellow-600' : 'text-gray-400'}`} />
-                      <div>
-                        <div className="font-medium capitalize text-gray-900 flex items-center gap-2">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <CreditCard className={`h-5 w-5 flex-shrink-0 ${needsStripeSetup ? 'text-yellow-600' : 'text-gray-400'}`} />
+                      <div className="min-w-0">
+                        <div className="font-medium capitalize text-gray-900 flex flex-wrap items-center gap-2">
                           {method.payoutMethod.replace("_", " ")}
                           {needsStripeSetup && (
                             <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
@@ -402,10 +441,10 @@ function PaymentMethodSettings({
                             </Badge>
                           )}
                         </div>
-                        <div className="text-sm text-gray-600">{getDisplayValue(method)}</div>
+                        <div className="text-sm text-gray-600 truncate">{getDisplayValue(method)}</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
                       {method.isDefault ? (
                         <Badge>Default</Badge>
                       ) : (
@@ -414,7 +453,7 @@ function PaymentMethodSettings({
                             variant="outline"
                             size="sm"
                             onClick={() => onSetPrimary(method)}
-                            className="text-sm"
+                            className="text-sm whitespace-nowrap"
                           >
                             Set as Primary
                           </Button>
@@ -433,15 +472,15 @@ function PaymentMethodSettings({
                     </div>
                   </div>
                   {needsStripeSetup && (
-                    <div className="mt-3 pt-3 border-t border-yellow-200 flex items-center justify-between">
+                    <div className="mt-3 pt-3 border-t border-yellow-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2 text-sm text-yellow-800">
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                         <span>Stripe Connect setup required to process payments</span>
                       </div>
                       <Button
                         size="sm"
                         onClick={() => onUpgradeETransfer && onUpgradeETransfer(method)}
-                        className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                        className="bg-yellow-600 hover:bg-yellow-700 text-white w-full sm:w-auto"
                       >
                         Complete Setup
                       </Button>
@@ -575,7 +614,7 @@ function PaymentMethodSettings({
           <div className="space-y-2 text-sm text-blue-800">
             <div className="flex justify-between">
               <span>Platform Fee:</span>
-              <span className="font-medium">4% of gross earnings</span>
+              <span className="font-medium">Varies by company (default 4%)</span>
             </div>
             <div className="flex justify-between">
               <span>Processing Fee:</span>
@@ -583,8 +622,11 @@ function PaymentMethodSettings({
             </div>
             <div className="mt-2 flex justify-between border-t-2 border-blue-300 pt-2 font-bold">
               <span>Total Deduction:</span>
-              <span>7% of gross earnings</span>
+              <span>Platform fee + 3% processing</span>
             </div>
+            <p className="mt-2 text-xs text-blue-600">
+              Note: Platform fees may vary by company partnership agreements.
+            </p>
           </div>
         </div>
       )}
@@ -753,29 +795,29 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
             </div>
           ) : (
             filteredPendingPayouts.map((payout) => (
-              <div key={payout.id} className="p-6 transition hover:bg-gray-50">
-                <div className="mb-4 flex items-start justify-between">
-                  <div>
-                    <div className="mb-2 flex items-center gap-3">
-                      <h4 className="font-bold text-gray-900">
+              <div key={payout.id} className="p-4 sm:p-6 transition hover:bg-gray-50">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
+                      <h4 className="font-bold text-gray-900 break-words">
                         {payout.description || `Payment ${payout.id.slice(0, 8)}`}
                       </h4>
-                      <StatusBadge status={payout.status} />
+                      <StatusBadge status={payout.status} isDisputed={isDisputedPayment(payout as CreatorPayment)} />
                     </div>
                     <p className="text-sm text-gray-600">
                       Created: {new Date(payout.createdAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900">
+                  <div className="text-left sm:text-right flex-shrink-0">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900">
                       ${parseFloat(payout.grossAmount).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">Creator payment</div>
                   </div>
                 </div>
 
-                <div className="mb-4 rounded-lg bg-gray-50 p-4">
-                  <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-3">
+                <div className="mb-4 rounded-lg bg-gray-50 p-3 sm:p-4">
+                  <div className="grid grid-cols-1 gap-3 sm:gap-4 text-sm sm:grid-cols-3">
                     <div>
                       <div className="mb-1 text-gray-600">Creator Payment</div>
                       <div className="font-medium text-gray-900">
@@ -783,13 +825,17 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
                       </div>
                     </div>
                     <div>
-                      <div className="mb-1 text-gray-600">Platform Fee (4%)</div>
+                      <div className="mb-1 text-gray-600">
+                        Platform Fee ({parseFloat(payout.grossAmount) > 0 ? ((parseFloat(payout.platformFeeAmount) / parseFloat(payout.grossAmount)) * 100).toFixed(0) : '4'}%)
+                      </div>
                       <div className="font-medium text-gray-900">
                         ${parseFloat(payout.platformFeeAmount).toFixed(2)}
                       </div>
                     </div>
                     <div>
-                      <div className="mb-1 text-gray-600">Processing (3%)</div>
+                      <div className="mb-1 text-gray-600">
+                        Processing ({parseFloat(payout.grossAmount) > 0 ? ((parseFloat(payout.stripeFeeAmount) / parseFloat(payout.grossAmount)) * 100).toFixed(0) : '3'}%)
+                      </div>
                       <div className="font-medium text-gray-900">
                         ${parseFloat(payout.stripeFeeAmount).toFixed(2)}
                       </div>
@@ -797,7 +843,7 @@ function CompanyPayoutApproval({ payouts }: { payouts: CreatorPayment[] }) {
                   </div>
                 </div>
 
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                   <Button
                     className="flex-1 gap-2 bg-green-600 text-white hover:bg-green-700"
                     onClick={() => approvePaymentMutation.mutate(payout.id)}
@@ -1037,7 +1083,7 @@ function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
                       ${(parseFloat(payout.platformFeeAmount) + parseFloat(payout.stripeFeeAmount)).toFixed(2)}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
-                      <StatusBadge status={payout.status} />
+                      <StatusBadge status={payout.status} isDisputed={isDisputedPayment(payout as CreatorPayment)} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                       {payout.completedAt
@@ -1467,7 +1513,7 @@ function AdminPaymentDashboard({
                     </td>
                     <td className="whitespace-nowrap px-6 py-4">
                       <Link href={`/payments/${payment.id}`} className="block">
-                        <StatusBadge status={payment.status} />
+                        <StatusBadge status={payment.status} isDisputed={isDisputedPayment(payment as CreatorPayment)} />
                       </Link>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
@@ -2665,10 +2711,10 @@ export default function PaymentSettings() {
         {role === "creator" && (
           <>
             <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
-              <div className="flex border-b border-gray-200">
+              <div className="flex overflow-x-auto border-b border-gray-200">
                 <button
                   onClick={() => setActiveTab("overview")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "overview"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2678,7 +2724,7 @@ export default function PaymentSettings() {
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "settings"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2719,10 +2765,10 @@ export default function PaymentSettings() {
         {role === "company" && (
           <>
             <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
-              <div className="flex border-b border-gray-200">
+              <div className="flex overflow-x-auto border-b border-gray-200">
                 <button
                   onClick={() => setActiveTab("overview")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "overview"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2732,7 +2778,7 @@ export default function PaymentSettings() {
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "settings"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2742,7 +2788,7 @@ export default function PaymentSettings() {
                 </button>
                 <button
                   onClick={() => setActiveTab("approvals")}
-                  className={`relative px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`relative whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "approvals"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2790,10 +2836,10 @@ export default function PaymentSettings() {
         {role === "admin" && (
           <>
             <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
-              <div className="flex border-b border-gray-200">
+              <div className="flex overflow-x-auto border-b border-gray-200">
                 <button
                   onClick={() => setActiveTab("dashboard")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "dashboard"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"
@@ -2803,7 +2849,7 @@ export default function PaymentSettings() {
                 </button>
                 <button
                   onClick={() => setActiveTab("settings")}
-                  className={`px-6 py-4 text-sm font-medium transition-colors ${
+                  className={`whitespace-nowrap px-3 sm:px-6 py-3 sm:py-4 text-sm font-medium transition-colors ${
                     activeTab === "settings"
                       ? "border-b-2 border-blue-600 text-blue-600"
                       : "text-gray-600 hover:text-gray-900"

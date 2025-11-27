@@ -1,15 +1,32 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { queryClient } from "../lib/queryClient";
+import { queryClient, apiRequest } from "../lib/queryClient";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Badge } from "../components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import {
   Send,
   MessageSquare,
@@ -26,7 +43,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  MoreVertical,
+  Trash2
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
@@ -76,7 +95,15 @@ export default function Messages() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [currentImages, setCurrentImages] = useState<string[]>([]);
   const [imageZoom, setImageZoom] = useState(1);
-  
+
+  // Message delete state
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    messageId: string | null;
+    isOwnMessage: boolean;
+    deleteType: 'for-me' | 'for-both' | null;
+  }>({ open: false, messageId: null, isOwnMessage: false, deleteType: null });
+
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -372,6 +399,66 @@ export default function Messages() {
     enabled: !!selectedConversation && isAuthenticated,
   });
 
+  // Delete message mutations
+  const deleteForMeMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await apiRequest("DELETE", `/api/messages/${messageId}/for-me`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversation] });
+      toast({
+        title: "Message deleted",
+        description: "Message has been deleted for you",
+      });
+      setDeleteDialog({ open: false, messageId: null, isOwnMessage: false, deleteType: null });
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Delete failed",
+        message: error.message || "Failed to delete message",
+      });
+    },
+  });
+
+  const deleteForBothMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      return await apiRequest("DELETE", `/api/messages/${messageId}/for-both`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversation] });
+      toast({
+        title: "Message deleted",
+        description: "Message has been deleted for everyone",
+      });
+      setDeleteDialog({ open: false, messageId: null, isOwnMessage: false, deleteType: null });
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Delete failed",
+        message: error.message || "Failed to delete message",
+      });
+    },
+  });
+
+  const handleDeleteMessage = () => {
+    if (!deleteDialog.messageId || !deleteDialog.deleteType) return;
+
+    if (deleteDialog.deleteType === 'for-me') {
+      deleteForMeMutation.mutate(deleteDialog.messageId);
+    } else if (deleteDialog.deleteType === 'for-both') {
+      deleteForBothMutation.mutate(deleteDialog.messageId);
+    }
+  };
+
+  const openDeleteDialog = (messageId: string, isOwnMessage: boolean, deleteType: 'for-me' | 'for-both') => {
+    setDeleteDialog({
+      open: true,
+      messageId,
+      isOwnMessage,
+      deleteType,
+    });
+  };
+
   // Handle conversation parameter from URL
   useEffect(() => {
     if (conversationFromUrl && conversationFromUrl !== selectedConversation) {
@@ -381,19 +468,52 @@ export default function Messages() {
     }
   }, [conversationFromUrl, selectedConversation]);
 
-  // Handle application parameter - find conversation by application ID
+  // Handle application parameter - find or create conversation by application ID
+  const [conversationStarted, setConversationStarted] = useState(false);
+
   useEffect(() => {
-    if (applicationFromUrl && conversations && conversations.length > 0) {
-      const matchingConversation = conversations.find(
-        (conv: any) => conv.applicationId === applicationFromUrl
-      );
-      if (matchingConversation && matchingConversation.id !== selectedConversation) {
-        setSelectedConversation(matchingConversation.id);
-        // Refetch conversations to ensure we have the latest data
-        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+    const startConversation = async () => {
+      if (!applicationFromUrl || !isAuthenticated || conversationsLoading) return;
+
+      // First check if we already have a matching conversation
+      if (conversations && conversations.length > 0) {
+        const matchingConversation = conversations.find(
+          (conv: any) => conv.applicationId === applicationFromUrl
+        );
+        if (matchingConversation) {
+          if (matchingConversation.id !== selectedConversation) {
+            setSelectedConversation(matchingConversation.id);
+          }
+          return;
+        }
       }
-    }
-  }, [applicationFromUrl, conversations, selectedConversation]);
+
+      // Prevent multiple API calls
+      if (conversationStarted) return;
+      setConversationStarted(true);
+
+      // If no matching conversation found, try to create/get one
+      try {
+        const response = await apiRequest("POST", "/api/conversations/start", {
+          applicationId: applicationFromUrl,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.conversationId) {
+            // Refresh conversations list and select the new conversation
+            await queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+            setSelectedConversation(data.conversationId);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to start conversation:', error);
+        setConversationStarted(false); // Allow retry on error
+      }
+    };
+
+    startConversation();
+  }, [applicationFromUrl, conversations, conversationsLoading, selectedConversation, isAuthenticated, conversationStarted]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -929,7 +1049,7 @@ export default function Messages() {
                         {getDisplayName(otherUser)}
                       </h3>
                       <p className="text-sm text-muted-foreground truncate">
-                        {conversations?.find((c: any) => c.id === selectedConversation)?.offer?.title}
+                        {conversations?.find((c: any) => c.id === selectedConversation)?.offerTitle}
                       </p>
                     </div>
                   </div>
@@ -988,7 +1108,7 @@ export default function Messages() {
                         <div
                           className={`flex gap-2 ${isOwnMessage ? 'justify-end' : 'justify-start'} ${
                             groupWithPrevious ? 'mt-1' : 'mt-4'
-                          }`}
+                          } group`}
                         >
                           {!isOwnMessage && (
                             <Avatar className={`h-8 w-8 shrink-0 ${groupWithPrevious ? 'invisible' : ''}`}>
@@ -997,6 +1117,40 @@ export default function Messages() {
                                 {getAvatarFallback(otherUser)}
                               </AvatarFallback>
                             </Avatar>
+                          )}
+
+                          {/* Delete menu for own messages - appears on left */}
+                          {isOwnMessage && (
+                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => openDeleteDialog(message.id, true, 'for-me')}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete for me
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => openDeleteDialog(message.id, true, 'for-both')}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete for everyone
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           )}
 
                           <div
@@ -1044,11 +1198,37 @@ export default function Messages() {
                               )}
                             </div>
                           </div>
+
+                          {/* Delete menu for received messages - appears on right */}
+                          {!isOwnMessage && (
+                            <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                  <DropdownMenuItem
+                                    onClick={() => openDeleteDialog(message.id, false, 'for-me')}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete for me
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
                   })}
-                  
+
                   {isOtherUserTyping && (
                     <div className="flex gap-2 justify-start mt-4">
                       <Avatar className="h-8 w-8 shrink-0">
@@ -1174,6 +1354,42 @@ export default function Messages() {
         </Card>
       </div>
       </div>
+
+      {/* Delete Message Confirmation Dialog */}
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => !open && setDeleteDialog({ open: false, messageId: null, isOwnMessage: false, deleteType: null })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Message</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog.deleteType === 'for-both'
+                ? "This message will be deleted for everyone in this conversation. This action cannot be undone."
+                : "This message will be deleted for you only. The other person will still be able to see it."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteForMeMutation.isPending || deleteForBothMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteMessage}
+              disabled={deleteForMeMutation.isPending || deleteForBothMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {(deleteForMeMutation.isPending || deleteForBothMutation.isPending) ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <GenericErrorDialog
         open={!!errorDialog}

@@ -59,7 +59,7 @@ export default function AdminMessages() {
   const { data: messages = [] } = useQuery<EnhancedMessage[]>({
     queryKey: ["/api/admin/messages", selectedConversation],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/messages?conversationId=${selectedConversation}`, {
+      const response = await fetch(`/api/admin/messages/${selectedConversation}`, {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to fetch messages");

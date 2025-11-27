@@ -24,7 +24,9 @@ import {
   Download,
   PauseCircle,
   CheckCircle2,
+  FileText,
 } from "lucide-react";
+import { exportCreatorListPDF, type CreatorExportData } from "../lib/export-utils";
 import { Link, useLocation } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest } from "../lib/queryClient";
@@ -338,6 +340,21 @@ export default function CompanyCreators() {
     setJoinDateFilter("all");
   };
 
+  const prepareCreatorExportData = (): CreatorExportData[] => {
+    return filteredApplications.map((application) => ({
+      id: application.id,
+      name: `${application.creator?.firstName || ""} ${application.creator?.lastName || ""}`.trim() || "Unknown",
+      email: application.creator?.email || "",
+      offer: application.offer?.title || "",
+      status: formatStatusLabel(application.status),
+      performance: formatPerformanceLabel(application.performanceTier),
+      clicks: application.clicks,
+      conversions: application.conversions,
+      earnings: application.earnings,
+      joinDate: application.joinDate ? application.joinDate.toISOString().split("T")[0] : "",
+    }));
+  };
+
   const exportCreatorCsv = () => {
     if (filteredApplications.length === 0) {
       toast({
@@ -391,6 +408,50 @@ export default function CompanyCreators() {
     });
   };
 
+  const exportCreatorPdf = () => {
+    if (filteredApplications.length === 0) {
+      toast({
+        title: "Nothing to export",
+        description: "Adjust filters to show some creators first.",
+      });
+      return;
+    }
+
+    try {
+      const data = prepareCreatorExportData();
+
+      // Build filter description
+      const filterParts: string[] = [];
+      if (offerFilter !== "all") {
+        const offerTitle = uniqueOfferOptions.find(([id]) => id === offerFilter)?.[1];
+        if (offerTitle) filterParts.push(`Offer: ${offerTitle}`);
+      }
+      if (statusFilter !== "all") filterParts.push(`Status: ${formatStatusLabel(statusFilter)}`);
+      if (performanceFilter !== "all") filterParts.push(`Performance: ${performanceFilter}`);
+      if (searchTerm) filterParts.push(`Search: "${searchTerm}"`);
+
+      const filterInfo = filterParts.length > 0
+        ? `Filters: ${filterParts.join(" | ")}`
+        : `Showing ${totalVisibleCreators} of ${totalCreators} creators`;
+
+      exportCreatorListPDF(data, {
+        title: "Creator Management Report",
+        filterInfo,
+      });
+
+      toast({
+        title: "PDF exported",
+        description: "Your creator roster has been downloaded as PDF.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Unable to generate PDF report. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -413,6 +474,10 @@ export default function CompanyCreators() {
           <Button variant="outline" onClick={exportCreatorCsv} className="gap-2">
             <Download className="h-4 w-4" />
             Export CSV
+          </Button>
+          <Button variant="outline" onClick={exportCreatorPdf} className="gap-2">
+            <FileText className="h-4 w-4" />
+            PDF Report
           </Button>
         </div>
       </div>

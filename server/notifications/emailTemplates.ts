@@ -9,6 +9,8 @@ interface EmailTemplateData {
   grossAmount?: string;
   platformFee?: string;
   processingFee?: string;
+  platformFeePercentage?: string;  // e.g., "4%"
+  processingFeePercentage?: string; // e.g., "3%"
   transactionId?: string;
   reviewRating?: number;
   reviewText?: string;
@@ -17,6 +19,12 @@ interface EmailTemplateData {
   linkUrl?: string;
   verificationUrl?: string;
   resetUrl?: string;
+  otpCode?: string;
+  // High-risk company fields
+  companyId?: string;
+  riskScore?: number;
+  riskLevel?: string;
+  riskIndicators?: string[];
 }
 
 const baseStyles = `
@@ -208,11 +216,11 @@ export function paymentReceivedEmail(data: EmailTemplateData): { subject: string
                   <td style="padding: 12px 0; font-weight: 600; color: #111827; text-align: right;">${data.grossAmount}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #D1D5DB;">
-                  <td style="padding: 12px 0; color: #DC2626;">Platform Fee (4%)</td>
+                  <td style="padding: 12px 0; color: #DC2626;">Platform Fee (${data.platformFeePercentage || '4%'})</td>
                   <td style="padding: 12px 0; font-weight: 600; color: #DC2626; text-align: right;">-${data.platformFee}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #D1D5DB;">
-                  <td style="padding: 12px 0; color: #DC2626;">Processing Fee (3%)</td>
+                  <td style="padding: 12px 0; color: #DC2626;">Processing Fee (${data.processingFeePercentage || '3%'})</td>
                   <td style="padding: 12px 0; font-weight: 600; color: #DC2626; text-align: right;">-${data.processingFee}</td>
                 </tr>
                 <tr style="background-color: #ECFDF5;">
@@ -225,7 +233,7 @@ export function paymentReceivedEmail(data: EmailTemplateData): { subject: string
             <div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
               <p style="margin: 0; font-size: 14px; color: #1E40AF;">
                 💡 <strong>How fees are calculated:</strong><br>
-                Platform fee (4%) and processing fee (3%) are automatically deducted from your gross earnings. The remaining amount is what you receive.
+                Platform fee (${data.platformFeePercentage || '4%'}) and processing fee (${data.processingFeePercentage || '3%'}) are automatically deducted from your gross earnings. The remaining amount is what you receive.
               </p>
             </div>
           ` : ''}
@@ -288,11 +296,11 @@ export function paymentApprovedEmail(data: EmailTemplateData): { subject: string
                   <td style="padding: 12px 0; font-weight: 600; color: #111827; text-align: right;">${data.grossAmount}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #D1D5DB;">
-                  <td style="padding: 12px 0; color: #7C3AED;">Platform Fee (4%)</td>
+                  <td style="padding: 12px 0; color: #7C3AED;">Platform Fee (${data.platformFeePercentage || '4%'})</td>
                   <td style="padding: 12px 0; font-weight: 600; color: #7C3AED; text-align: right;">${data.platformFee}</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #D1D5DB;">
-                  <td style="padding: 12px 0; color: #7C3AED;">Processing Fee (3%)</td>
+                  <td style="padding: 12px 0; color: #7C3AED;">Processing Fee (${data.processingFeePercentage || '3%'})</td>
                   <td style="padding: 12px 0; font-weight: 600; color: #7C3AED; text-align: right;">${data.processingFee}</td>
                 </tr>
                 <tr style="background-color: #ECFDF5;">
@@ -811,6 +819,289 @@ export function passwordResetEmail(data: EmailTemplateData): { subject: string; 
         </div>
         <div class="footer">
           <p>This is an automated email from Affiliate Marketplace.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function accountDeletionOtpEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Account Deletion Verification Code`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #EF4444;">
+          <h1>Account Deletion Request</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>We received a request to delete your Affiliate Marketplace account. To confirm this action, please use the verification code below:</p>
+
+          <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 20px; margin: 20px 0; border-radius: 4px; text-align: center;">
+            <p style="margin: 0 0 10px 0; font-size: 14px; color: #991B1B; font-weight: 600;">Your Verification Code</p>
+            <p style="margin: 0; font-size: 36px; font-weight: bold; color: #DC2626; letter-spacing: 8px; font-family: monospace;">${data.otpCode}</p>
+          </div>
+
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: #92400E;">⚠️ Important:</p>
+            <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #78350F;">
+              <li style="margin-bottom: 8px;">This code will expire in <strong>15 minutes</strong></li>
+              <li style="margin-bottom: 8px;">Account deletion is permanent and cannot be undone</li>
+              <li style="margin-bottom: 0;">All your data, applications, and messages will be permanently deleted</li>
+            </ul>
+          </div>
+
+          <p style="color: #6B7280; font-size: 14px;">If you didn't request to delete your account, please ignore this email and consider changing your password for security.</p>
+
+          <div style="background-color: #F3F4F6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #374151;">For security reasons, we require this verification code to ensure that only you can delete your account.</p>
+          </div>
+        </div>
+        <div class="footer">
+          <p>This is an automated email from Affiliate Marketplace.</p>
+          <p>If you need assistance, please contact our support team.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function passwordChangeOtpEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Password Change Verification Code`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #F59E0B;">
+          <h1>Password Change Request</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>We received a request to change your Affiliate Marketplace account password. To confirm this action, please use the verification code below:</p>
+
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 20px; margin: 20px 0; border-radius: 4px; text-align: center;">
+            <p style="margin: 0 0 10px 0; font-size: 14px; color: #92400E; font-weight: 600;">Your Verification Code</p>
+            <p style="margin: 0; font-size: 36px; font-weight: bold; color: #D97706; letter-spacing: 8px; font-family: monospace;">${data.otpCode}</p>
+          </div>
+
+          <div style="background-color: #DBEAFE; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: #1E40AF;">ℹ️ Important:</p>
+            <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E3A8A;">
+              <li style="margin-bottom: 8px;">This code will expire in <strong>15 minutes</strong></li>
+              <li style="margin-bottom: 8px;">Enter this code to complete your password change</li>
+              <li style="margin-bottom: 0;">Keep this code confidential and do not share it with anyone</li>
+            </ul>
+          </div>
+
+          <p style="color: #6B7280; font-size: 14px;">If you didn't request a password change, please ignore this email and consider securing your account by changing your password immediately.</p>
+
+          <div style="background-color: #F3F4F6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #374151;">For security reasons, we require this verification code to ensure that only you can change your account password.</p>
+          </div>
+        </div>
+        <div class="footer">
+          <p>This is an automated email from Affiliate Marketplace.</p>
+          <p>If you need assistance, please contact our support team.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+interface ContentFlaggedEmailData extends EmailTemplateData {
+  contentType?: string;
+  matchedKeywords?: string[];
+  reviewStatus?: string;
+  actionTaken?: string;
+}
+
+export function contentFlaggedEmail(data: ContentFlaggedEmailData): { subject: string; html: string } {
+  const contentType = data.contentType || 'content';
+  const isReviewComplete = data.reviewStatus && data.reviewStatus !== 'pending';
+
+  let subject: string;
+  let headerColor: string;
+  let headerTitle: string;
+  let bodyContent: string;
+
+  if (isReviewComplete) {
+    // Review completed notification
+    switch (data.reviewStatus) {
+      case 'dismissed':
+        subject = `Content Review Complete - No Issues Found`;
+        headerColor = '#10B981';
+        headerTitle = 'Review Complete';
+        bodyContent = `
+          <p>Good news! Your ${contentType} has been reviewed by our moderation team and <strong>no issues were found</strong>.</p>
+          <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #065F46;">✓ The flag on your content has been dismissed. No further action is required.</p>
+          </div>
+        `;
+        break;
+      case 'action_taken':
+        subject = `Content Moderation Notice`;
+        headerColor = '#EF4444';
+        headerTitle = 'Moderation Action Taken';
+        bodyContent = `
+          <p>Your ${contentType} has been reviewed by our moderation team and action has been taken.</p>
+          ${data.actionTaken ? `
+            <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px;">
+              <p style="margin: 0; font-weight: 600; color: #991B1B;">Action Taken:</p>
+              <p style="margin: 10px 0 0 0; color: #7F1D1D;">${data.actionTaken}</p>
+            </div>
+          ` : ''}
+          <p style="color: #6B7280; font-size: 14px;">Please review our <a href="/terms-of-service">community guidelines</a> to ensure your future content complies with our policies.</p>
+        `;
+        break;
+      default:
+        subject = `Content Review Complete`;
+        headerColor = '#3B82F6';
+        headerTitle = 'Review Complete';
+        bodyContent = `
+          <p>Your ${contentType} has been reviewed by our moderation team.</p>
+          <div style="background-color: #DBEAFE; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #1E40AF;">The review has been completed. No further action is required from you at this time.</p>
+          </div>
+        `;
+    }
+  } else {
+    // Content flagged notification
+    subject = `Your ${contentType} is Under Review`;
+    headerColor = '#F59E0B';
+    headerTitle = 'Content Under Review';
+
+    const keywordsList = data.matchedKeywords && data.matchedKeywords.length > 0
+      ? data.matchedKeywords.join(', ')
+      : 'potential policy violation';
+
+    bodyContent = `
+      <p>Your ${contentType} has been flagged for review by our moderation system.</p>
+
+      <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-weight: 600; color: #92400E;">Reason for Review:</p>
+        <p style="margin: 10px 0 0 0; color: #78350F;">${keywordsList}</p>
+      </div>
+
+      <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #374151;">What happens next?</h3>
+        <ul style="margin: 0; padding-left: 20px; color: #6B7280;">
+          <li style="margin-bottom: 8px;">Our moderation team will review your content</li>
+          <li style="margin-bottom: 8px;">You will be notified once the review is complete</li>
+          <li style="margin-bottom: 0;">If any action is required, we will provide detailed information</li>
+        </ul>
+      </div>
+
+      <p style="color: #6B7280; font-size: 14px;">If you believe this flag was made in error, please wait for the review to complete. Our team carefully reviews all flagged content.</p>
+    `;
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: ${headerColor};">
+          <h1>${headerTitle}</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          ${bodyContent}
+          <a href="${data.linkUrl || '/notifications'}" class="button" style="background-color: ${headerColor};">View Details</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="/settings">notification preferences</a> anytime.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function highRiskCompanyEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const riskLevel = data.riskLevel || 'high';
+  const riskScore = data.riskScore || 0;
+  const companyName = data.companyName || 'Unknown Company';
+
+  const subject = `High Risk Alert: ${companyName} requires fee review`;
+
+  const indicatorsList = data.riskIndicators && data.riskIndicators.length > 0
+    ? data.riskIndicators.map(ind => `<li style="margin-bottom: 8px;">${ind}</li>`).join('')
+    : '<li>Multiple risk factors detected</li>';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #EF4444;">
+          <h1>High Risk Company Alert</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>A company has been flagged as <strong>high risk</strong> and may require a platform fee adjustment.</p>
+
+          <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 20px; margin: 20px 0; border-radius: 4px;">
+            <h3 style="margin: 0 0 10px 0; color: #991B1B;">Company: ${companyName}</h3>
+            <div style="display: flex; align-items: center; gap: 15px;">
+              <div>
+                <p style="margin: 0 0 5px 0; font-size: 14px; color: #7F1D1D;">Risk Score</p>
+                <p style="margin: 0; font-size: 28px; font-weight: bold; color: #DC2626;">${riskScore}/100</p>
+              </div>
+              <div style="flex: 1;">
+                <div style="background-color: #FCA5A5; border-radius: 4px; height: 8px; overflow: hidden;">
+                  <div style="background-color: #EF4444; height: 100%; width: ${riskScore}%;"></div>
+                </div>
+              </div>
+              <span class="badge badge-danger">${riskLevel.toUpperCase()} RISK</span>
+            </div>
+          </div>
+
+          <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #374151;">Risk Indicators:</h3>
+            <ul style="margin: 0; padding-left: 20px; color: #6B7280;">
+              ${indicatorsList}
+            </ul>
+          </div>
+
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: #92400E;">Recommended Action:</p>
+            <p style="margin: 10px 0 0 0; color: #78350F;">Review this company's risk indicators and consider adjusting their platform fee to mitigate risk.</p>
+          </div>
+
+          <a href="${data.linkUrl || '/admin/companies'}" class="button" style="background-color: #EF4444;">Review Company</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="/settings">notification preferences</a> anytime.</p>
         </div>
       </div>
     </body>

@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -19,6 +19,8 @@ import { Badge } from "../components/ui/badge";
 import { Switch } from "../components/ui/switch";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
+import { Settings, DollarSign, Gauge } from "lucide-react";
 
 interface PlatformSetting {
   id: string;
@@ -141,32 +143,53 @@ export default function AdminPlatformSettings() {
     return key.includes("mode") || key.includes("enabled") || key.includes("disabled");
   };
 
-  return (
-    <div className="space-y-6">
-      <TopNavBar />
-      <div>
-        <h1 className="text-3xl font-bold">Platform Settings</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure platform-wide settings and policies
-        </p>
-      </div>
+  // Define navigation sections based on grouped settings
+  const adminSettingsSections: SettingsSection[] = useMemo(() => {
+    if (!groupedSettings) return [];
 
-      {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          Loading settings...
+    const categoryIcons: Record<string, React.ReactNode> = {
+      general: <Settings className="h-4 w-4" />,
+      fees: <DollarSign className="h-4 w-4" />,
+      limits: <Gauge className="h-4 w-4" />,
+    };
+
+    return Object.keys(groupedSettings).map((category) => ({
+      id: `admin-${category}`,
+      label: getCategoryTitle(category),
+      icon: categoryIcons[category] || <Settings className="h-4 w-4" />,
+    }));
+  }, [groupedSettings]);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <TopNavBar />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:pl-2 lg:pr-8 py-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Platform Settings</h1>
+          <p className="text-muted-foreground mt-1">
+            Configure platform-wide settings and policies
+          </p>
         </div>
-      ) : !groupedSettings || Object.keys(groupedSettings).length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          No settings found
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {Object.entries(groupedSettings).map(([category, categorySettings]) => (
-            <Card key={category}>
-              <CardHeader>
-                <CardTitle>{getCategoryTitle(category)}</CardTitle>
-                <CardDescription>{getCategoryDescription(category)}</CardDescription>
-              </CardHeader>
+
+        {isLoading ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Loading settings...
+          </div>
+        ) : !groupedSettings || Object.keys(groupedSettings).length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No settings found
+          </div>
+        ) : (
+          <div className="flex gap-6">
+            <SettingsNavigation sections={adminSettingsSections} />
+
+            <div className="flex-1 space-y-6 min-w-0 max-w-4xl">
+              {Object.entries(groupedSettings).map(([category, categorySettings]) => (
+                <Card key={category} id={`admin-${category}`} className="scroll-mt-24">
+                  <CardHeader>
+                    <CardTitle>{getCategoryTitle(category)}</CardTitle>
+                    <CardDescription>{getCategoryDescription(category)}</CardDescription>
+                  </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {categorySettings.map((setting) => (
@@ -222,12 +245,13 @@ export default function AdminPlatformSettings() {
                   ))}
                 </div>
               </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* Edit Dialog */}
+        {/* Edit Dialog */}
       <Dialog open={!!editingSetting && !isBooleanSetting(editingSetting?.key || "")} onOpenChange={(open) => !open && setEditingSetting(null)}>
         <DialogContent>
           <DialogHeader>
@@ -286,14 +310,15 @@ export default function AdminPlatformSettings() {
         </DialogContent>
       </Dialog>
 
-      <GenericErrorDialog
-        open={errorDialog.open}
-        onOpenChange={(open) => setErrorDialog({ open })}
-        title={errorDialog.title}
-        description={errorDialog.description}
-        errorDetails={errorDialog.errorDetails}
-        variant="error"
-      />
+        <GenericErrorDialog
+          open={errorDialog.open}
+          onOpenChange={(open) => setErrorDialog({ open })}
+          title={errorDialog.title}
+          description={errorDialog.description}
+          errorDetails={errorDialog.errorDetails}
+          variant="error"
+        />
+      </div>
     </div>
   );
 }

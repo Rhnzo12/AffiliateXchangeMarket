@@ -86,6 +86,12 @@ export const AuditActions = {
   CREATE_NICHE: 'create_niche',
   UPDATE_NICHE: 'update_niche',
   DELETE_NICHE: 'delete_niche',
+
+  // Email Template actions
+  CREATE_EMAIL_TEMPLATE: 'create_email_template',
+  UPDATE_EMAIL_TEMPLATE: 'update_email_template',
+  DELETE_EMAIL_TEMPLATE: 'delete_email_template',
+  DUPLICATE_EMAIL_TEMPLATE: 'duplicate_email_template',
 } as const;
 
 /**
@@ -100,4 +106,5 @@ export const EntityTypes = {
   APPLICATION: 'application',
   PLATFORM_SETTINGS: 'platform_settings',
   NICHE: 'niche',
+  EMAIL_TEMPLATE: 'email_template',
 } as const;

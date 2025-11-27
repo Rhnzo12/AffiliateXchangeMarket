@@ -112,7 +112,7 @@ export class ObjectStorageService {
     return types[ext] || 'application/octet-stream';
   }
 
-  async getObjectEntityUploadURL(customFolder?: string, resourceType: string = 'auto'): Promise<{
+  async getObjectEntityUploadURL(customFolder?: string, resourceType: string = 'auto', clientContentType?: string, originalFileName?: string): Promise<{
     uploadUrl: string;
     uploadPreset?: string;
     signature?: string;
@@ -124,9 +124,12 @@ export class ObjectStorageService {
   }> {
     const folder = customFolder || this.getStorageFolder();
 
-    // Generate filename with appropriate extension based on resource type
+    // Generate filename with appropriate extension based on resource type or original filename
     let fileExtension = '';
-    if (resourceType === 'image') {
+    if (originalFileName) {
+      // Preserve the original file extension
+      fileExtension = path.extname(originalFileName).toLowerCase();
+    } else if (resourceType === 'image') {
       fileExtension = '.jpg'; // Thumbnails are generated as JPEG
     } else if (resourceType === 'video') {
       fileExtension = '.mp4'; // Default video extension
@@ -138,8 +141,8 @@ export class ObjectStorageService {
     const bucket = this.getBucket();
     const file = bucket.file(filePath);
 
-    // Determine content type for the signed URL
-    const contentType = this.getContentType(fileName, resourceType);
+    // Use client-provided content type if available, otherwise detect from filename
+    const contentType = clientContentType || this.getContentType(fileName, resourceType);
 
     // Generate signed URL for upload (valid for 15 minutes)
     const [signedUrl] = await file.getSignedUrl({
@@ -149,7 +152,7 @@ export class ObjectStorageService {
       contentType,
     });
 
-    console.log('[ObjectStorage] Generated GCS signed upload URL for folder:', folder, 'resourceType:', resourceType, 'contentType:', contentType);
+    console.log('[ObjectStorage] Generated GCS signed upload URL for folder:', folder, 'resourceType:', resourceType, 'contentType:', contentType, 'extension:', fileExtension);
 
     return {
       uploadUrl: signedUrl,

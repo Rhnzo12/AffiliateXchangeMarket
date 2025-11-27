@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -11,7 +11,9 @@ import { Textarea } from "../components/ui/textarea";
 import { Separator } from "../components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
-import { Upload, Building2, X, ChevronsUpDown, Download, Trash2, Shield, AlertTriangle, Video, Globe, FileText } from "lucide-react";
+import { Upload, Building2, X, ChevronsUpDown, Download, Trash2, Shield, AlertTriangle, Video, Globe, FileText, Plus, Eye, ShieldCheck, User, Mail, Key, KeyRound, LogOut } from "lucide-react";
+import { TwoFactorSetup } from "../components/TwoFactorSetup";
+import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +24,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -35,6 +43,15 @@ import { Badge } from "../components/ui/badge";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
+
+type VerificationDocument = {
+  id: string;
+  documentUrl: string;
+  documentName: string;
+  documentType: string;
+  fileSize: number | null;
+  uploadedAt?: string;
+};
 
 export default function Settings() {
   const { toast } = useToast();
@@ -68,7 +85,8 @@ export default function Settings() {
   const [twitterUrl, setTwitterUrl] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
   const [companyInstagramUrl, setCompanyInstagramUrl] = useState("");
-  const [verificationDocumentUrl, setVerificationDocumentUrl] = useState("");
+  const [verificationDocumentUrl, setVerificationDocumentUrl] = useState(""); // Keep for backward compatibility
+  const [verificationDocuments, setVerificationDocuments] = useState<VerificationDocument[]>([]);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
@@ -107,10 +125,44 @@ export default function Settings() {
   const [activeItemsDetails, setActiveItemsDetails] = useState<any>(null);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
+  // Document viewer state
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [documentViewerUrl, setDocumentViewerUrl] = useState("");
+  const [documentViewerName, setDocumentViewerName] = useState("");
+  const [documentViewerType, setDocumentViewerType] = useState("");
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [isRequestingOtp, setIsRequestingOtp] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState("");
+
+  // Password change with OTP states
+  const [passwordChangeOtpSent, setPasswordChangeOtpSent] = useState(false);
+  const [passwordChangeOtpCode, setPasswordChangeOtpCode] = useState("");
+  const [passwordChangeMaskedEmail, setPasswordChangeMaskedEmail] = useState("");
+  const [isRequestingPasswordChangeOtp, setIsRequestingPasswordChangeOtp] = useState(false);
+  const [newPasswordWithOtp, setNewPasswordWithOtp] = useState("");
+  const [confirmPasswordWithOtp, setConfirmPasswordWithOtp] = useState("");
+  const [isChangingPasswordWithOtp, setIsChangingPasswordWithOtp] = useState(false);
+
   const { data: profile } = useQuery<any>({
     queryKey: ["/api/profile"],
     enabled: isAuthenticated,
   });
+
+  // Fetch verification documents for company users
+  const { data: fetchedVerificationDocs = [] } = useQuery<VerificationDocument[]>({
+    queryKey: ["/api/company/verification-documents"],
+    enabled: isAuthenticated && user?.role === 'company',
+  });
+
+  // Sync fetched documents with local state
+  useEffect(() => {
+    if (fetchedVerificationDocs.length > 0) {
+      setVerificationDocuments(fetchedVerificationDocs);
+    }
+  }, [fetchedVerificationDocs]);
 
   // Fetch niches from API
   const { data: niches = [], isLoading: nichesLoading } = useQuery<Array<{ id: string; name: string; description: string | null; isActive: boolean }>>({
@@ -447,6 +499,15 @@ export default function Settings() {
       return;
     }
 
+    // Check max documents limit
+    if (verificationDocuments.length >= 5) {
+      setErrorDialog({
+        title: "Maximum Documents Reached",
+        message: "You can upload a maximum of 5 verification documents",
+      });
+      return;
+    }
+
     setIsUploadingDocument(true);
 
     try {
@@ -463,7 +524,9 @@ export default function Settings() {
         },
         body: JSON.stringify({
           folder,
-          resourceType: file.type === 'application/pdf' ? 'raw' : 'image'
+          resourceType: file.type === 'application/pdf' ? 'raw' : 'image',
+          contentType: file.type, // Pass actual file content type
+          fileName: file.name // Pass original filename to preserve extension
         }),
       });
 
@@ -490,11 +553,47 @@ export default function Settings() {
 
       // Construct the public URL from the upload response
       const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
-      setVerificationDocumentUrl(uploadedUrl);
+
+      // Determine document type
+      const documentType = file.type === 'application/pdf' ? 'pdf' : 'image';
+
+      // Save document to API
+      const saveResponse = await fetch("/api/company/verification-documents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          documentUrl: uploadedUrl,
+          documentName: file.name,
+          documentType,
+          fileSize: file.size,
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        throw new Error("Failed to save document");
+      }
+
+      const saveData = await saveResponse.json();
+
+      // Add to local state
+      if (saveData.document) {
+        setVerificationDocuments(prev => [...prev, saveData.document]);
+      }
+
+      // Also update the legacy field for backward compatibility
+      if (verificationDocuments.length === 0) {
+        setVerificationDocumentUrl(uploadedUrl);
+      }
+
+      // Invalidate the query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["/api/company/verification-documents"] });
 
       toast({
         title: "Success!",
-        description: "Verification document uploaded successfully. Don't forget to save your changes.",
+        description: "Verification document uploaded successfully.",
       });
     } catch (error) {
       console.error("Document upload error:", error);
@@ -504,7 +603,122 @@ export default function Settings() {
       });
     } finally {
       setIsUploadingDocument(false);
+      // Reset the input so the same file can be uploaded again
+      event.target.value = '';
     }
+  };
+
+  const handleRemoveDocument = async (documentId: string) => {
+    try {
+      const response = await fetch(`/api/company/verification-documents/${documentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete document");
+      }
+
+      // Remove from local state
+      setVerificationDocuments(prev => prev.filter(doc => doc.id !== documentId));
+
+      // Update the legacy field
+      const remainingDocs = verificationDocuments.filter(doc => doc.id !== documentId);
+      setVerificationDocumentUrl(remainingDocs.length > 0 ? remainingDocs[0].documentUrl : "");
+
+      // Invalidate the query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["/api/company/verification-documents"] });
+
+      toast({
+        title: "Success",
+        description: "Document removed successfully.",
+      });
+    } catch (error) {
+      console.error("Error removing document:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove document. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleViewDocument = async (documentUrl: string, documentName: string, documentType: string) => {
+    try {
+      setIsLoadingDocument(true);
+      setDocumentViewerName(documentName);
+      setDocumentViewerType(documentType);
+      setShowDocumentViewer(true);
+
+      // Extract the file path from the GCS URL
+      const url = new URL(documentUrl);
+      const pathParts = url.pathname.split('/');
+      const filePath = pathParts.slice(2).join('/');
+
+      // Fetch signed URL from the API
+      const response = await fetch(`/api/get-signed-url/${filePath}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get document access');
+      }
+
+      const data = await response.json();
+      setDocumentViewerUrl(data.url);
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      setShowDocumentViewer(false);
+      toast({
+        title: "Error",
+        description: "Failed to view document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingDocument(false);
+    }
+  };
+
+  const handleDownloadDocument = async (documentUrl: string, documentName: string) => {
+    try {
+      // Extract the file path from the GCS URL
+      const url = new URL(documentUrl);
+      const pathParts = url.pathname.split('/');
+      const filePath = pathParts.slice(2).join('/');
+
+      // Fetch signed URL with download flag from the API
+      const response = await fetch(`/api/get-signed-url/${filePath}?download=true&name=${encodeURIComponent(documentName)}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get download URL');
+      }
+
+      const data = await response.json();
+
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = data.url;
+      link.download = documentName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to download document. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleLogout = async () => {
@@ -717,22 +931,51 @@ export default function Settings() {
     }
   };
 
+  const handleRequestDeleteOtp = async () => {
+    try {
+      setIsRequestingOtp(true);
+
+      const response = await fetch("/api/user/request-account-deletion", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to send verification code");
+      }
+
+      setOtpSent(true);
+      setMaskedEmail(result.email || user?.email || "");
+      toast({
+        title: "Verification Code Sent",
+        description: "A 6-digit code has been sent to your email address.",
+      });
+    } catch (error: any) {
+      console.error("Request OTP error:", error);
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to send verification code. Please try again.",
+      });
+    } finally {
+      setIsRequestingOtp(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     try {
       setIsDeletingAccount(true);
 
-      const payload: any = {};
-
-      // Only require password for non-OAuth users
-      if (!user?.googleId && user?.password) {
-        if (!deletePassword) {
-          setErrorDialog({
-            title: "Error",
-            message: "Password is required to delete your account.",
-          });
-          return;
-        }
-        payload.password = deletePassword;
+      if (!otpCode) {
+        setErrorDialog({
+          title: "Error",
+          message: "Please enter the verification code sent to your email.",
+        });
+        return;
       }
 
       const response = await fetch("/api/user/delete-account", {
@@ -741,7 +984,7 @@ export default function Settings() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ otp: otpCode }),
       });
 
       const result = await response.json();
@@ -753,6 +996,9 @@ export default function Settings() {
           setShowActiveItemsDialog(true);
           setShowDeleteDialog(false);
           setDeletePassword("");
+          setOtpCode("");
+          setOtpSent(false);
+          setMaskedEmail("");
           return;
         }
         throw new Error(result.error || result.details || "Failed to delete account");
@@ -778,6 +1024,9 @@ export default function Settings() {
       setIsDeletingAccount(false);
       setShowDeleteDialog(false);
       setDeletePassword("");
+      setOtpCode("");
+      setOtpSent(false);
+      setMaskedEmail("");
     }
   };
 
@@ -868,6 +1117,119 @@ export default function Settings() {
     },
   });
 
+  // Handle requesting password change OTP
+  const handleRequestPasswordChangeOtp = async () => {
+    try {
+      setIsRequestingPasswordChangeOtp(true);
+
+      const response = await fetch("/api/auth/request-password-change-otp", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to send verification code");
+      }
+
+      setPasswordChangeOtpSent(true);
+      setPasswordChangeMaskedEmail(result.email || user?.email || "");
+      toast({
+        title: "Verification Code Sent",
+        description: "A 6-digit code has been sent to your email address.",
+      });
+    } catch (error: any) {
+      console.error("Request password change OTP error:", error);
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to send verification code. Please try again.",
+      });
+    } finally {
+      setIsRequestingPasswordChangeOtp(false);
+    }
+  };
+
+  // Handle changing password with OTP
+  const handleChangePasswordWithOtp = async () => {
+    try {
+      setIsChangingPasswordWithOtp(true);
+
+      if (!passwordChangeOtpCode) {
+        setErrorDialog({
+          title: "Error",
+          message: "Please enter the verification code sent to your email.",
+        });
+        return;
+      }
+
+      if (!newPasswordWithOtp) {
+        setErrorDialog({
+          title: "Error",
+          message: "Please enter a new password.",
+        });
+        return;
+      }
+
+      if (newPasswordWithOtp.length < 8) {
+        setErrorDialog({
+          title: "Error",
+          message: "New password must be at least 8 characters.",
+        });
+        return;
+      }
+
+      if (newPasswordWithOtp !== confirmPasswordWithOtp) {
+        setErrorDialog({
+          title: "Error",
+          message: "Passwords do not match.",
+        });
+        return;
+      }
+
+      const response = await fetch("/api/auth/verify-password-change-otp", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          otp: passwordChangeOtpCode,
+          newPassword: newPasswordWithOtp
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to change password");
+      }
+
+      toast({
+        title: "Password Changed",
+        description: result.message || "Your password has been changed successfully.",
+      });
+
+      // Reset states
+      setPasswordChangeOtpSent(false);
+      setPasswordChangeOtpCode("");
+      setPasswordChangeMaskedEmail("");
+      setNewPasswordWithOtp("");
+      setConfirmPasswordWithOtp("");
+    } catch (error: any) {
+      console.error("Change password with OTP error:", error);
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to change password. Please try again.",
+      });
+    } finally {
+      setIsChangingPasswordWithOtp(false);
+    }
+  };
+
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
       let payload: any = {};
@@ -946,18 +1308,36 @@ export default function Settings() {
     updateProfileMutation.mutate();
   };
 
+  // Define navigation sections based on user role
+  const settingsSections: SettingsSection[] = useMemo(() => {
+    const sections: SettingsSection[] = [
+      { id: "profile-info", label: "Profile Information", icon: <User className="h-4 w-4" /> },
+      { id: "account-info", label: "Account Information", icon: <User className="h-4 w-4" /> },
+      { id: "change-email", label: "Change Email", icon: <Mail className="h-4 w-4" /> },
+      { id: "change-password-otp", label: "Password (Email Verify)", icon: <Key className="h-4 w-4" /> },
+      { id: "change-password-legacy", label: "Password (Legacy)", icon: <KeyRound className="h-4 w-4" /> },
+      { id: "two-factor-auth", label: "Two-Factor Auth", icon: <ShieldCheck className="h-4 w-4" /> },
+      { id: "privacy-data", label: "Privacy & Data", icon: <Shield className="h-4 w-4" /> },
+      { id: "logout-section", label: "Logout", icon: <LogOut className="h-4 w-4" /> },
+    ];
+    return sections;
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <TopNavBar />
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Settings</h1>
-            <p className="text-muted-foreground mt-1">Manage your account preferences</p>
-          </div>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:pl-2 lg:pr-8 py-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-muted-foreground mt-1">Manage your account preferences</p>
         </div>
 
-      <Card className="border-card-border">
+        <div className="flex gap-6">
+          <SettingsNavigation sections={settingsSections} />
+
+          <div className="flex-1 space-y-8 min-w-0 max-w-4xl">
+
+      <Card id="profile-info" className="border-card-border scroll-mt-24">
         <CardHeader>
           <CardTitle>Profile Information</CardTitle>
         </CardHeader>
@@ -1222,31 +1602,75 @@ export default function Settings() {
               <Separator />
 
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  <Label className="text-base font-semibold">Verification Document</Label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <Label className="text-base font-semibold">Verification Documents</Label>
+                  </div>
+                  <Badge variant="outline">
+                    {verificationDocuments.length}/5
+                  </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Upload business registration certificate, EIN/Tax ID, or incorporation certificate
+                  Upload business registration certificate, EIN/Tax ID, incorporation certificate, or other supporting documents (max 5 files)
                 </p>
 
-                {verificationDocumentUrl ? (
-                  <div className="flex items-center gap-3 p-4 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200">
-                    <FileText className="h-8 w-8 text-green-600" />
-                    <div className="flex-1">
-                      <p className="font-medium text-green-900 dark:text-green-100">Document Uploaded</p>
-                      <p className="text-sm text-green-700 dark:text-green-300">Verification document on file</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setVerificationDocumentUrl("")}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                {/* Uploaded Documents List */}
+                {verificationDocuments.length > 0 && (
+                  <div className="space-y-2">
+                    {verificationDocuments.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center gap-3 p-3 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200"
+                      >
+                        <FileText className="h-6 w-6 text-green-600 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-green-900 dark:text-green-100 truncate">
+                            {doc.documentName}
+                          </p>
+                          <p className="text-xs text-green-700 dark:text-green-300">
+                            {doc.documentType.toUpperCase()} • {formatFileSize(doc.fileSize)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleViewDocument(doc.documentUrl, doc.documentName, doc.documentType)}
+                            title="View document"
+                          >
+                            <Eye className="h-4 w-4 text-green-600" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleDownloadDocument(doc.documentUrl, doc.documentName)}
+                            title="Download document"
+                          >
+                            <Download className="h-4 w-4 text-blue-600" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleRemoveDocument(doc.id)}
+                            title="Delete document"
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : (
+                )}
+
+                {/* Upload Area */}
+                {verificationDocuments.length < 5 && (
                   <div className="relative">
                     <input
                       type="file"
@@ -1272,12 +1696,14 @@ export default function Settings() {
                           </>
                         ) : (
                           <>
-                            <FileText className="h-6 w-6 text-primary" />
+                            <Plus className="h-6 w-6 text-primary" />
                             <div className="text-sm font-medium">
-                              Click to upload verification document
+                              {verificationDocuments.length === 0
+                                ? "Click to upload verification document"
+                                : "Add another document"}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              PDF, JPG, PNG (max 10MB)
+                              PDF, JPG, PNG (max 10MB per file)
                             </div>
                           </>
                         )}
@@ -1634,7 +2060,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="border-card-border">
+      <Card id="account-info" className="border-card-border scroll-mt-24">
         <CardHeader>
           <CardTitle>Account Information</CardTitle>
         </CardHeader>
@@ -1691,7 +2117,7 @@ export default function Settings() {
       </Card>
 
       {/* Email Change Section */}
-      <Card className="border-card-border">
+      <Card id="change-email" className="border-card-border scroll-mt-24">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             Change Email Address
@@ -1830,60 +2256,194 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {!user?.googleId && (
-        <Card className="border-card-border">
-          <CardHeader>
-            <CardTitle>Change Password</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current Password *</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                placeholder="Enter current password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                data-testid="input-current-password"
-              />
-            </div>
+      <Card id="change-password-otp" className="border-card-border scroll-mt-24">
+        <CardHeader>
+          <CardTitle>Change Password with Email Verification</CardTitle>
+          <CardDescription>
+            Change your password securely with email verification code
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {user?.googleId ? (
+            <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+              <Shield className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-900 dark:text-blue-100">Google Account</AlertTitle>
+              <AlertDescription className="text-blue-800 dark:text-blue-200">
+                You signed in with Google. Your password is managed by Google, so you don't need to change it here.
+              </AlertDescription>
+            </Alert>
+          ) : !passwordChangeOtpSent ? (
+            <div className="space-y-4">
+              <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+                <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                  Secure Password Change
+                </p>
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  We'll send a verification code to your email to ensure it's really you making this change.
+                </p>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">New Password *</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                placeholder="Enter new password (min 8 characters)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                data-testid="input-new-password"
-              />
+              <Button
+                onClick={handleRequestPasswordChangeOtp}
+                disabled={isRequestingPasswordChangeOtp}
+                className="w-full"
+              >
+                {isRequestingPasswordChangeOtp ? "Sending Code..." : "Send Verification Code to Email"}
+              </Button>
             </div>
+          ) : (
+              <div className="space-y-4">
+                <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+                  <Shield className="h-4 w-4 text-blue-600" />
+                  <AlertTitle className="text-blue-900 dark:text-blue-100">Verification Code Sent</AlertTitle>
+                  <AlertDescription className="text-blue-800 dark:text-blue-200">
+                    We've sent a 6-digit code to {passwordChangeMaskedEmail}. Please check your email and enter the code below.
+                  </AlertDescription>
+                </Alert>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm New Password *</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                data-testid="input-confirm-password"
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password-change-otp">Verification Code *</Label>
+                  <Input
+                    id="password-change-otp"
+                    type="text"
+                    placeholder="000000"
+                    maxLength={6}
+                    value={passwordChangeOtpCode}
+                    onChange={(e) => setPasswordChangeOtpCode(e.target.value.replace(/\D/g, ''))}
+                    className="font-mono text-lg tracking-widest text-center"
+                  />
+                  <p className="text-xs text-muted-foreground">Code expires in 15 minutes</p>
+                </div>
 
-            <Button
-              onClick={() => changePasswordMutation.mutate()}
-              disabled={changePasswordMutation.isPending}
-              data-testid="button-change-password"
-            >
-              {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
-            </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="newPasswordWithOtp">New Password *</Label>
+                  <Input
+                    id="newPasswordWithOtp"
+                    type="password"
+                    placeholder="Enter new password (min 8 characters)"
+                    value={newPasswordWithOtp}
+                    onChange={(e) => setNewPasswordWithOtp(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPasswordWithOtp">Confirm New Password *</Label>
+                  <Input
+                    id="confirmPasswordWithOtp"
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmPasswordWithOtp}
+                    onChange={(e) => setConfirmPasswordWithOtp(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleChangePasswordWithOtp}
+                    disabled={isChangingPasswordWithOtp}
+                    className="flex-1"
+                  >
+                    {isChangingPasswordWithOtp ? "Changing Password..." : "Change Password"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPasswordChangeOtpSent(false);
+                      setPasswordChangeOtpCode("");
+                      setPasswordChangeMaskedEmail("");
+                      setNewPasswordWithOtp("");
+                      setConfirmPasswordWithOtp("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+
+                <Button
+                  variant="link"
+                  onClick={handleRequestPasswordChangeOtp}
+                  disabled={isRequestingPasswordChangeOtp}
+                  className="w-full text-sm"
+                >
+                  {isRequestingPasswordChangeOtp ? "Sending..." : "Didn't receive the code? Send again"}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
 
-      <Card className="border-card-border">
+      <Card id="change-password-legacy" className="border-card-border scroll-mt-24">
+        <CardHeader>
+          <CardTitle>Change Password (Legacy)</CardTitle>
+          <CardDescription>
+            Quick password change without email verification (less secure)
+          </CardDescription>
+        </CardHeader>
+          <CardContent className="space-y-4">
+            {user?.googleId ? (
+              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+                <Shield className="h-4 w-4 text-blue-600" />
+                <AlertTitle className="text-blue-900 dark:text-blue-100">Google Account</AlertTitle>
+                <AlertDescription className="text-blue-800 dark:text-blue-200">
+                  You signed in with Google. Your password is managed by Google.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="currentPassword">Current Password *</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    placeholder="Enter current password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    data-testid="input-current-password"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password *</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    placeholder="Enter new password (min 8 characters)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    data-testid="input-new-password"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm New Password *</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    data-testid="input-confirm-password"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => changePasswordMutation.mutate()}
+                  disabled={changePasswordMutation.isPending}
+                  data-testid="button-change-password"
+                >
+                  {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+      {/* Two-Factor Authentication Section */}
+      <div id="two-factor-auth" className="scroll-mt-24">
+        <TwoFactorSetup />
+      </div>
+
+      <Card id="privacy-data" className="border-card-border scroll-mt-24">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -1949,7 +2509,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      <Card className="border-card-border">
+      <Card id="logout-section" className="border-card-border scroll-mt-24">
         <CardHeader>
           <CardTitle>Account</CardTitle>
         </CardHeader>
@@ -2040,29 +2600,74 @@ export default function Settings() {
                     <li>Messages (content kept, sender anonymized)</li>
                   </ul>
                 </div>
-                {!user?.googleId && (
-                  <div className="space-y-2 pt-2">
-                    <Label htmlFor="delete-password">
-                      Enter your password to confirm deletion:
-                    </Label>
-                    <Input
-                      id="delete-password"
-                      type="password"
-                      placeholder="Enter your password"
-                      value={deletePassword}
-                      onChange={(e) => setDeletePassword(e.target.value)}
-                    />
-                  </div>
-                )}
+
+                {/* Two-step verification */}
+                <div className="space-y-3 pt-2">
+                  {!otpSent ? (
+                    <div className="bg-amber-50 dark:bg-amber-950 p-3 rounded-md border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-2">
+                        Security Verification Required
+                      </p>
+                      <p className="text-sm text-amber-800 dark:text-amber-200 mb-3">
+                        To proceed with account deletion, we'll send a verification code to your email address.
+                      </p>
+                      <Button
+                        onClick={handleRequestDeleteOtp}
+                        disabled={isRequestingOtp}
+                        variant="outline"
+                        className="w-full border-amber-300 dark:border-amber-700 bg-white dark:bg-amber-900"
+                      >
+                        {isRequestingOtp ? "Sending..." : "Send Verification Code to Email"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="bg-green-50 dark:bg-green-950 p-3 rounded-md border border-green-200 dark:border-green-800 mb-3">
+                        <p className="text-sm text-green-900 dark:text-green-100">
+                          ✓ Verification code sent to <strong>{maskedEmail}</strong>
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                          The code will expire in 15 minutes.
+                        </p>
+                      </div>
+                      <Label htmlFor="delete-otp">
+                        Enter the 6-digit verification code:
+                      </Label>
+                      <Input
+                        id="delete-otp"
+                        type="text"
+                        placeholder="000000"
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                        className="font-mono text-lg tracking-widest text-center"
+                      />
+                      <Button
+                        onClick={handleRequestDeleteOtp}
+                        disabled={isRequestingOtp}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs"
+                      >
+                        {isRequestingOtp ? "Resending..." : "Didn't receive? Resend code"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setDeletePassword("")}>
+              <AlertDialogCancel onClick={() => {
+                setDeletePassword("");
+                setOtpCode("");
+                setOtpSent(false);
+                setMaskedEmail("");
+              }}>
                 Cancel
               </AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDeleteAccount}
-                disabled={isDeletingAccount}
+                disabled={isDeletingAccount || !otpSent || otpCode.length !== 6}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
                 {isDeletingAccount ? "Deleting..." : "Yes, delete my account"}
@@ -2176,12 +2781,66 @@ export default function Settings() {
         </AlertDialog>
       )}
 
+      {/* Document Viewer Dialog */}
+      <Dialog open={showDocumentViewer} onOpenChange={(open) => {
+        if (!open) {
+          setShowDocumentViewer(false);
+          setDocumentViewerUrl("");
+          setDocumentViewerName("");
+          setDocumentViewerType("");
+        }
+      }}>
+        <DialogContent className="max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-4 pb-2 border-b">
+            <DialogTitle className="truncate pr-8">{documentViewerName}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 p-4">
+            {isLoadingDocument ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : documentViewerUrl ? (
+              documentViewerType === 'pdf' ? (
+                <iframe
+                  src={`${documentViewerUrl}#toolbar=1&view=FitH`}
+                  className="w-full h-full rounded border"
+                  title={documentViewerName}
+                  style={{ border: 'none' }}
+                />
+              ) : documentViewerType === 'image' ? (
+                <div className="flex items-center justify-center h-full">
+                  <img
+                    src={documentViewerUrl}
+                    alt={documentViewerName}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full gap-4">
+                  <p className="text-muted-foreground">Preview not available for this file type.</p>
+                  <a
+                    href={documentViewerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Click here to open in a new tab
+                  </a>
+                </div>
+              )
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <GenericErrorDialog
         open={!!errorDialog}
         onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
         description={errorDialog?.message || "An error occurred"}
       />
+          </div>
+        </div>
       </div>
     </div>
   );

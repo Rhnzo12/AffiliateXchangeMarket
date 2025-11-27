@@ -30,7 +30,7 @@ async function runMigration() {
     console.log('✅ Connected successfully\n');
 
     // Read the migration SQL file
-    const sqlPath = join(__dirname, '..', 'migrations', 'create_content_moderation_tables.sql');
+    const sqlPath = join(__dirname, '..', 'db', 'migrations', '018_create_content_moderation_tables.sql');
     const sql = readFileSync(sqlPath, 'utf-8');
 
     console.log('📝 Running Content Moderation migration...\n');

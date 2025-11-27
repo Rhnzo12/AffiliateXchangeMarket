@@ -8,7 +8,8 @@ import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { Building2, ExternalLink, Filter, X } from "lucide-react";
+import { Building2, ExternalLink, Filter, X, ShieldAlert, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { TopNavBar } from "../components/TopNavBar";
 import { useLocation } from "wouter";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
@@ -27,6 +28,15 @@ type Company = {
     email: string;
     username: string;
   };
+};
+
+type CompanyWithRisk = {
+  id: string;
+  legalName: string;
+  tradeName?: string;
+  riskScore: number;
+  riskLevel: 'high' | 'medium' | 'low';
+  riskIndicators: string[];
 };
 
 export default function AdminCompanies() {
@@ -85,6 +95,33 @@ export default function AdminCompanies() {
     enabled: isAuthenticated,
   });
 
+  // Fetch risk assessments for companies
+  const { data: riskData } = useQuery<{
+    companies: CompanyWithRisk[];
+    summary: {
+      total: number;
+      highRisk: number;
+      mediumRisk: number;
+      lowRisk: number;
+    };
+  }>({
+    queryKey: ["/api/admin/companies/risk-assessments"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/companies/risk-assessments", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch risk assessments");
+      return response.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  // Create a map of company ID to risk data for quick lookup
+  const riskMap = new Map<string, CompanyWithRisk>();
+  riskData?.companies?.forEach(company => {
+    riskMap.set(company.id, company);
+  });
+
   // Filter companies by search query (client-side)
   const filteredCompanies = companies.filter((company) => {
     if (!searchQuery) return true;
@@ -110,6 +147,82 @@ export default function AdminCompanies() {
       suspended: { variant: "outline", className: "border-orange-500 text-orange-700 dark:text-orange-400" },
     };
     return variants[status] || { variant: "secondary" };
+  };
+
+  // Risk indicator icon helper
+  const getRiskIndicator = (companyId: string) => {
+    const riskInfo = riskMap.get(companyId);
+    if (!riskInfo) return null;
+
+    const { riskLevel, riskScore, riskIndicators } = riskInfo;
+
+    if (riskLevel === 'high') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1">
+                <ShieldAlert className="h-4 w-4 text-red-500" />
+                <span className="text-xs font-medium text-red-600">{riskScore}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="space-y-1">
+                <p className="font-semibold text-red-600">High Risk ({riskScore}/100)</p>
+                {riskIndicators.length > 0 && (
+                  <ul className="text-xs text-muted-foreground list-disc pl-3">
+                    {riskIndicators.slice(0, 3).map((ind, i) => (
+                      <li key={i}>{ind}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } else if (riskLevel === 'medium') {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1">
+                <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                <span className="text-xs font-medium text-yellow-600">{riskScore}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="space-y-1">
+                <p className="font-semibold text-yellow-600">Medium Risk ({riskScore}/100)</p>
+                {riskIndicators.length > 0 && (
+                  <ul className="text-xs text-muted-foreground list-disc pl-3">
+                    {riskIndicators.slice(0, 3).map((ind, i) => (
+                      <li key={i}>{ind}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } else {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1">
+                <ShieldCheck className="h-4 w-4 text-green-500" />
+                <span className="text-xs font-medium text-green-600">{riskScore}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p className="font-semibold text-green-600">Low Risk ({riskScore}/100)</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
   };
 
   const clearFilters = () => {
@@ -243,6 +356,7 @@ export default function AdminCompanies() {
                   <TableHead>Industry</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Risk</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -297,6 +411,15 @@ export default function AdminCompanies() {
                       >
                         {company.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {company.status === 'approved' ? (
+                        getRiskIndicator(company.id) || (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">

@@ -12,6 +12,7 @@ import { offerVideos, applications, analytics, offers, companyProfiles, payments
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { checkClickFraud, logFraudDetection } from "./fraudDetection";
+import { calculateFees, formatFeePercentage, DEFAULT_PLATFORM_FEE_PERCENTAGE, STRIPE_PROCESSING_FEE_PERCENTAGE, getCompanyPlatformFeePercentage } from "./feeCalculator";
 import { NotificationService } from "./notifications/notificationService";
 import bcrypt from "bcrypt";
 import { PriorityListingScheduler } from "./priorityListingScheduler";
@@ -60,6 +61,21 @@ import {
   getPendingFlags,
   getFlagStatistics,
 } from "./moderation/moderationService";
+import {
+  getPlatformHealthReport,
+  getRecentApiMetrics,
+  getApiMetricsTimeSeries,
+  getStorageMetricsTimeSeries,
+  getVideoCostsTimeSeries,
+  getRecentErrorLogs,
+  getLatestHealthSnapshot,
+  calculateStorageUsage,
+  calculateVideoHostingCosts,
+  createHealthSnapshot,
+  recordDailyStorageMetrics,
+  recordDailyVideoCosts,
+  flushMetrics,
+} from "./platformHealthService";
 
 // Alias for convenience
 const requireAuth = isAuthenticated;
@@ -422,6 +438,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Get company profile error:", error);
       res.status(500).json({ error: error.message || "Failed to get company profile" });
+    }
+  });
+
+  // ===== Company Fee Info Route =====
+
+  // Get fee info for the logged-in company
+  app.get("/api/company/fee", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      const { percentage: platformFeePercentage, isCustom } = await getCompanyPlatformFeePercentage(companyProfile.id);
+      const totalFeePercentage = platformFeePercentage + STRIPE_PROCESSING_FEE_PERCENTAGE;
+      const creatorPayoutPercentage = 1 - totalFeePercentage;
+
+      return res.json({
+        platformFeePercentage,
+        platformFeeDisplay: formatFeePercentage(platformFeePercentage),
+        processingFeePercentage: STRIPE_PROCESSING_FEE_PERCENTAGE,
+        processingFeeDisplay: formatFeePercentage(STRIPE_PROCESSING_FEE_PERCENTAGE),
+        totalFeePercentage,
+        totalFeeDisplay: formatFeePercentage(totalFeePercentage),
+        creatorPayoutPercentage,
+        creatorPayoutDisplay: formatFeePercentage(creatorPayoutPercentage),
+        isCustomFee: isCustom,
+        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        defaultPlatformFeeDisplay: formatFeePercentage(DEFAULT_PLATFORM_FEE_PERCENTAGE),
+      });
+    } catch (error: any) {
+      console.error("Get company fee info error:", error);
+      res.status(500).json({ error: error.message || "Failed to get company fee info" });
+    }
+  });
+
+  // ===== Company Verification Documents Routes =====
+
+  // Get verification documents for the logged-in company user
+  app.get("/api/company/verification-documents", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const documents = await storage.getVerificationDocumentsByUserId(userId);
+      return res.json(documents);
+    } catch (error: any) {
+      console.error("Get verification documents error:", error);
+      res.status(500).json({ error: error.message || "Failed to get verification documents" });
+    }
+  });
+
+  // Add a new verification document
+  app.post("/api/company/verification-documents", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { documentUrl, documentName, documentType, fileSize } = req.body;
+
+      if (!documentUrl || !documentName || !documentType) {
+        return res.status(400).json({ error: "Missing required fields: documentUrl, documentName, documentType" });
+      }
+
+      // Get company profile for this user
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      const document = await storage.addVerificationDocument({
+        companyId: companyProfile.id,
+        documentUrl,
+        documentName,
+        documentType,
+        fileSize: fileSize || null,
+      });
+
+      return res.json({ success: true, document });
+    } catch (error: any) {
+      console.error("Add verification document error:", error);
+      res.status(500).json({ error: error.message || "Failed to add verification document" });
+    }
+  });
+
+  // Delete a verification document
+  app.delete("/api/company/verification-documents/:id", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const documentId = req.params.id;
+
+      // Get the document and verify ownership
+      const document = await storage.getVerificationDocumentById(documentId);
+      if (!document) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      // Get company profile and verify the document belongs to this company
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || document.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Not authorized to delete this document" });
+      }
+
+      // Delete from cloud storage first
+      if (document.documentUrl) {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          // Extract file path from GCS URL
+          // URL format: https://storage.googleapis.com/bucket-name/path/to/file
+          const url = new URL(document.documentUrl);
+          const pathParts = url.pathname.split('/');
+          // Remove empty string and bucket name, keep the rest as file path
+          const filePath = pathParts.slice(2).join('/');
+
+          if (filePath) {
+            await objectStorageService.deleteResource(filePath, 'raw');
+            console.log('[Verification Documents] Deleted file from GCS:', filePath);
+          }
+        } catch (storageError) {
+          console.error('[Verification Documents] Error deleting from cloud storage:', storageError);
+          // Continue with database deletion even if storage deletion fails
+        }
+      }
+
+      const deleted = await storage.deleteVerificationDocument(documentId);
+      if (deleted) {
+        return res.json({ success: true });
+      } else {
+        return res.status(500).json({ error: "Failed to delete document" });
+      }
+    } catch (error: any) {
+      console.error("Delete verification document error:", error);
+      res.status(500).json({ error: error.message || "Failed to delete verification document" });
+    }
+  });
+
+  // Admin: Get verification documents for a specific company
+  app.get("/api/admin/companies/:id/verification-documents", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const documents = await storage.getVerificationDocumentsByCompanyId(companyId);
+      return res.json(documents);
+    } catch (error: any) {
+      console.error("Admin get verification documents error:", error);
+      res.status(500).json({ error: error.message || "Failed to get verification documents" });
     }
   });
 
@@ -1519,10 +1678,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         grossAmount = parseFloat(offer.commissionAmount.toString());
       }
 
-      // Calculate fees (platform 4%, processing 3%)
-      const platformFeeAmount = grossAmount * 0.04;
-      const stripeFeeAmount = grossAmount * 0.03;
-      const netAmount = grossAmount - platformFeeAmount - stripeFeeAmount;
+      // Calculate fees with per-company override support (Section 4.3.H)
+      const fees = await calculateFees(grossAmount, companyProfile.id);
 
       // Create payment record
       const payment = await storage.createPayment({
@@ -1530,15 +1687,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         creatorId: application.creatorId,
         companyId: companyProfile.id,
         offerId: offer.id,
-        grossAmount: grossAmount.toFixed(2),
-        platformFeeAmount: platformFeeAmount.toFixed(2),
-        stripeFeeAmount: stripeFeeAmount.toFixed(2),
-        netAmount: netAmount.toFixed(2),
+        grossAmount: fees.grossAmount.toFixed(2),
+        platformFeeAmount: fees.platformFeeAmount.toFixed(2),
+        stripeFeeAmount: fees.stripeFeeAmount.toFixed(2),
+        netAmount: fees.netAmount.toFixed(2),
         status: 'pending',
         description: `Payment for ${offer.title}`,
       });
 
-      console.log(`[Payment] Created payment ${payment.id} for application ${application.id}`);
+      const feeLabel = fees.isCustomFee ? `Custom ${formatFeePercentage(fees.platformFeePercentage)}` : formatFeePercentage(DEFAULT_PLATFORM_FEE_PERCENTAGE);
+      console.log(`[Payment] Created payment ${payment.id} for application ${application.id} - Platform Fee: ${feeLabel}`);
 
       // Send notification to creator
       const creator = await storage.getUserById(application.creatorId);
@@ -1548,11 +1706,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           application.creatorId,
           'payment_pending',
           'Work Completed - Payment Pending 💰',
-          `Your work for "${offer.title}" has been marked as complete! Payment of $${netAmount.toFixed(2)} is pending company approval.`,
+          `Your work for "${offer.title}" has been marked as complete! Payment of $${fees.netAmount.toFixed(2)} is pending company approval.`,
           {
             userName: creator.firstName || creator.username,
             offerTitle: offer.title,
-            amount: `$${netAmount.toFixed(2)}`,
+            amount: `$${fees.netAmount.toFixed(2)}`,
             paymentId: payment.id, // ✅ ADDED
           }
         );
@@ -1565,11 +1723,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           admin.id,
           'payment_pending',
           'New Affiliate Payment Ready for Processing',
-          `A payment of $${netAmount.toFixed(2)} for creator ${creator?.username || 'Unknown'} on "${offer.title}" is ready for processing.`,
+          `A payment of $${fees.netAmount.toFixed(2)} for creator ${creator?.username || 'Unknown'} on "${offer.title}" is ready for processing.`,
           {
             userName: admin.firstName || admin.username,
             offerTitle: offer.title,
-            amount: `$${netAmount.toFixed(2)}`,
+            amount: `$${fees.netAmount.toFixed(2)}`,
             paymentId: payment.id,
             linkUrl: `/payments/${payment.id}`, // Link to specific payment detail page
           }
@@ -2117,8 +2275,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/messages/:conversationId", requireAuth, async (req, res) => {
     try {
-      const messages = await storage.getMessages(req.params.conversationId);
-      res.json(messages);
+      const userId = (req.user as any).id;
+      const allMessages = await storage.getMessages(req.params.conversationId);
+      // Filter out messages deleted for the current user
+      const filteredMessages = allMessages.filter(msg => {
+        const deletedFor = msg.deletedFor || [];
+        return !deletedFor.includes(userId);
+      });
+      res.json(filteredMessages);
     } catch (error: any) {
       console.error('[GET /api/messages/:conversationId] Error:', error);
       res.status(500).send(error.message);
@@ -2137,7 +2301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-moderate message for banned content
       try {
-        await moderateMessage(message.id);
+        await moderateMessage(message.id, storage);
       } catch (moderationError) {
         console.error('[Moderation] Error auto-moderating message:', moderationError);
         // Don't fail the message creation if moderation fails
@@ -2146,6 +2310,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(message);
     } catch (error: any) {
       console.error('[POST /api/messages] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Delete message for current user only ("delete for me")
+  app.delete("/api/messages/:messageId/for-me", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const messageId = req.params.messageId;
+
+      // Verify the message exists and user is part of the conversation
+      const message = await storage.getMessage(messageId);
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      // Get conversation to verify user is part of it
+      const conversation = await storage.getConversation(message.conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
+      // Check if user is part of the conversation
+      const isCreator = conversation.creatorId === userId;
+      const companyProfile = await storage.getCompanyProfile(userId);
+      const isCompany = companyProfile?.id === conversation.companyId;
+
+      if (!isCreator && !isCompany) {
+        return res.status(403).json({ error: "You don't have permission to delete this message" });
+      }
+
+      const success = await storage.deleteMessageForUser(messageId, userId);
+      if (success) {
+        res.json({ success: true, message: "Message deleted for you" });
+      } else {
+        res.status(500).json({ error: "Failed to delete message" });
+      }
+    } catch (error: any) {
+      console.error('[DELETE /api/messages/:messageId/for-me] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Delete message for both users ("delete for everyone")
+  app.delete("/api/messages/:messageId/for-both", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const messageId = req.params.messageId;
+
+      // Verify the message exists
+      const message = await storage.getMessage(messageId);
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      // Only the sender can delete for both
+      if (message.senderId !== userId) {
+        return res.status(403).json({ error: "Only the sender can delete a message for everyone" });
+      }
+
+      const success = await storage.deleteMessageForBoth(messageId, userId);
+      if (success) {
+        res.json({ success: true, message: "Message deleted for everyone" });
+      } else {
+        res.status(500).json({ error: "Failed to delete message" });
+      }
+    } catch (error: any) {
+      console.error('[DELETE /api/messages/:messageId/for-both] Error:', error);
       res.status(500).send(error.message);
     }
   });
@@ -2304,7 +2536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-moderate review for banned content and low ratings
       try {
-        await moderateReview(review.id);
+        await moderateReview(review.id, storage);
       } catch (moderationError) {
         console.error('[Moderation] Error auto-moderating review:', moderationError);
         // Don't fail the review creation if moderation fails
@@ -2877,6 +3109,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (creator) {
+          // Calculate fee percentages from payment data
+          const grossAmt = parseFloat(payment.grossAmount);
+          const platformFeeAmt = parseFloat(payment.platformFeeAmount);
+          const processingFeeAmt = parseFloat(payment.stripeFeeAmount);
+          const platformFeePercent = grossAmt > 0 ? formatFeePercentage(platformFeeAmt / grossAmt) : '4%';
+          const processingFeePercent = grossAmt > 0 ? formatFeePercentage(processingFeeAmt / grossAmt) : '3%';
+
           await notificationService.sendNotification(
             payment.creatorId,
             'payment_received',
@@ -2889,6 +3128,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               grossAmount: `$${payment.grossAmount}`,
               platformFee: `$${payment.platformFeeAmount}`,
               processingFee: `$${payment.stripeFeeAmount}`,
+              platformFeePercentage: platformFeePercent,
+              processingFeePercentage: processingFeePercent,
               transactionId: paymentResult.transactionId,
               paymentId: payment.id,
               linkUrl: `/payments/${payment.id}`,
@@ -2903,6 +3144,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (companyProfile) {
             const companyUser = await storage.getUserById(companyProfile.userId);
             if (companyUser) {
+              // Reuse calculated fee percentages from above
+              const grossAmtCompany = parseFloat(payment.grossAmount);
+              const platformFeeAmtCompany = parseFloat(payment.platformFeeAmount);
+              const processingFeeAmtCompany = parseFloat(payment.stripeFeeAmount);
+              const platformFeePercentCompany = grossAmtCompany > 0 ? formatFeePercentage(platformFeeAmtCompany / grossAmtCompany) : '4%';
+              const processingFeePercentCompany = grossAmtCompany > 0 ? formatFeePercentage(processingFeeAmtCompany / grossAmtCompany) : '3%';
+
               await notificationService.sendNotification(
                 companyUser.id,
                 'payment_approved',
@@ -2916,6 +3164,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   grossAmount: `$${payment.grossAmount}`,
                   platformFee: `$${payment.platformFeeAmount}`,
                   processingFee: `$${payment.stripeFeeAmount}`,
+                  platformFeePercentage: platformFeePercentCompany,
+                  processingFeePercentage: processingFeePercentCompany,
                   transactionId: paymentResult.transactionId,
                   paymentId: payment.id,
                   linkUrl: `/payments/${payment.id}`,
@@ -3052,6 +3302,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (creator) {
+        // Calculate fee percentages from payment data
+        const grossAmtApproved = parseFloat(payment.grossAmount);
+        const platformFeeAmtApproved = parseFloat(payment.platformFeeAmount);
+        const processingFeeAmtApproved = parseFloat(payment.stripeFeeAmount);
+        const platformFeePercentApproved = grossAmtApproved > 0 ? formatFeePercentage(platformFeeAmtApproved / grossAmtApproved) : '4%';
+        const processingFeePercentApproved = grossAmtApproved > 0 ? formatFeePercentage(processingFeeAmtApproved / grossAmtApproved) : '3%';
+
         await notificationService.sendNotification(
           payment.creatorId,
           'payment_approved',
@@ -3064,6 +3321,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             grossAmount: `$${payment.grossAmount}`,
             platformFee: `$${payment.platformFeeAmount}`,
             processingFee: `$${payment.stripeFeeAmount}`,
+            platformFeePercentage: platformFeePercentApproved,
+            processingFeePercentage: processingFeePercentApproved,
             paymentId: payment.id,
             linkUrl: `/payments/${payment.id}`,
           }
@@ -3549,6 +3808,322 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get comprehensive admin analytics (admin only)
+  app.get("/api/admin/analytics", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const range = (req.query.range as string) || '30d';
+
+      // Calculate date range
+      const now = new Date();
+      let startDate: Date;
+      switch (range) {
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '90d':
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case 'all':
+          startDate = new Date(0);
+          break;
+        default:
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      // Get all users
+      const allUsers = await storage.getAllUsers();
+      const creators = allUsers.filter(user => user.role === 'creator');
+      const companies = allUsers.filter(user => user.role === 'company');
+      const admins = allUsers.filter(user => user.role === 'admin');
+
+      // Calculate new users this week
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const newCreatorsThisWeek = creators.filter(user =>
+        user.createdAt && new Date(user.createdAt) >= oneWeekAgo
+      ).length;
+      const newCompaniesThisWeek = companies.filter(user =>
+        user.createdAt && new Date(user.createdAt) >= oneWeekAgo
+      ).length;
+
+      // Get all payments for financial data
+      const allPayments = await db
+        .select()
+        .from(payments);
+
+      const filteredPayments = allPayments.filter(p =>
+        !p.initiatedAt || new Date(p.initiatedAt) >= startDate
+      );
+
+      // Calculate financial metrics
+      let totalPayouts = 0;
+      let pendingPayouts = 0;
+      let completedPayouts = 0;
+      let disputedPaymentsAmt = 0;
+      let platformFees = 0;
+      let processingFees = 0;
+
+      for (const payment of filteredPayments) {
+        const platform = Number(payment.platformFeeAmount || 0);
+        const processing = Number(payment.stripeFeeAmount || 0);
+        const net = Number(payment.netAmount || 0);
+
+        totalPayouts += net;
+        platformFees += platform;
+        processingFees += processing;
+
+        if (payment.status === 'pending' || payment.status === 'processing') {
+          pendingPayouts += net;
+        } else if (payment.status === 'completed') {
+          completedPayouts += net;
+        } else if (payment.status === 'failed') {
+          disputedPaymentsAmt += net;
+        }
+      }
+
+      // Get offers for listing fees
+      const allOffers = await storage.getOffers({});
+      const filteredOffers = allOffers.filter((o: any) =>
+        !o.createdAt || new Date(o.createdAt) >= startDate
+      );
+      const listingFees = filteredOffers.reduce((sum: number, o: any) => sum + Number(o.listingFee || 0), 0);
+
+      const totalRevenue = listingFees + platformFees + processingFees;
+
+      // Calculate growth (compare to previous period)
+      const previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
+      const previousPayments = allPayments.filter(p =>
+        p.initiatedAt && new Date(p.initiatedAt) >= previousStartDate && new Date(p.initiatedAt) < startDate
+      );
+      const previousRevenue = previousPayments.reduce((sum, p) =>
+        sum + Number(p.platformFeeAmount || 0) + Number(p.stripeFeeAmount || 0), 0);
+      const revenueGrowth = previousRevenue > 0
+        ? ((totalRevenue - previousRevenue) / previousRevenue) * 100
+        : 0;
+
+      // Get applications data directly from db
+      const allApplications = await db.select().from(applications);
+      const filteredApplications = allApplications.filter(a =>
+        !a.createdAt || new Date(a.createdAt) >= startDate
+      );
+
+      // Get analytics data for clicks and conversions
+      const allAnalytics = await db.select().from(analytics);
+      const filteredAnalytics = allAnalytics.filter(a =>
+        !a.createdAt || new Date(a.createdAt) >= startDate
+      );
+      const totalClicks = filteredAnalytics.reduce((sum, a) => sum + (a.clicks || 0), 0);
+      const totalConversions = filteredAnalytics.reduce((sum, a) => sum + (a.conversions || 0), 0);
+      const averageConversionRate = totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
+
+      // Group applications by status
+      const applicationsByStatus = ['pending', 'approved', 'active', 'paused', 'completed', 'rejected'].map(status => ({
+        status: status.charAt(0).toUpperCase() + status.slice(1),
+        count: filteredApplications.filter(a => a.status === status).length,
+      })).filter(s => s.count > 0);
+
+      // Get niches data (use primaryNiche)
+      const nicheMap = new Map<string, number>();
+      for (const offer of filteredOffers) {
+        const primaryNiche = (offer as any).primaryNiche;
+        if (primaryNiche) {
+          nicheMap.set(primaryNiche, (nicheMap.get(primaryNiche) || 0) + 1);
+        }
+      }
+      const offersByNiche = Array.from(nicheMap.entries())
+        .map(([niche, count]) => ({ niche, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+
+      // Calculate revenue by period (group by week/day)
+      const revenueByPeriod: Array<{ period: string; listingFees: number; platformFees: number; processingFees: number; total: number }> = [];
+      const periodMap = new Map<string, { listingFees: number; platformFees: number; processingFees: number }>();
+
+      for (const payment of filteredPayments) {
+        const date = payment.initiatedAt ? new Date(payment.initiatedAt) : new Date();
+        const periodKey = date.toISOString().split('T')[0];
+        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0 };
+        existing.platformFees += Number(payment.platformFeeAmount || 0);
+        existing.processingFees += Number(payment.stripeFeeAmount || 0);
+        periodMap.set(periodKey, existing);
+      }
+
+      for (const offer of filteredOffers) {
+        const date = offer.createdAt ? new Date(offer.createdAt) : new Date();
+        const periodKey = date.toISOString().split('T')[0];
+        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0 };
+        existing.listingFees += Number(offer.listingFee || 0);
+        periodMap.set(periodKey, existing);
+      }
+
+      const sortedPeriods = Array.from(periodMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [period, data] of sortedPeriods.slice(-14)) {
+        revenueByPeriod.push({
+          period: new Date(period).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          listingFees: data.listingFees,
+          platformFees: data.platformFees,
+          processingFees: data.processingFees,
+          total: data.listingFees + data.platformFees + data.processingFees,
+        });
+      }
+
+      // User growth by period
+      const userGrowthMap = new Map<string, { creators: number; companies: number; total: number }>();
+      for (const user of allUsers) {
+        if (!user.createdAt || new Date(user.createdAt) < startDate) continue;
+        const date = new Date(user.createdAt);
+        const periodKey = date.toISOString().split('T')[0];
+        const existing = userGrowthMap.get(periodKey) || { creators: 0, companies: 0, total: 0 };
+        if (user.role === 'creator') existing.creators++;
+        else if (user.role === 'company') existing.companies++;
+        existing.total++;
+        userGrowthMap.set(periodKey, existing);
+      }
+
+      const userGrowth = Array.from(userGrowthMap.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-14)
+        .map(([period, data]) => ({
+          period: new Date(period).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          ...data,
+        }));
+
+      // Get top creators by earnings
+      const creatorEarnings = new Map<string, { earnings: number; clicks: number; conversions: number }>();
+      for (const analytic of filteredAnalytics) {
+        if (!analytic.creatorId) continue;
+        const existing = creatorEarnings.get(analytic.creatorId) || { earnings: 0, clicks: 0, conversions: 0 };
+        existing.earnings += Number(analytic.earnings || 0);
+        existing.clicks += analytic.clicks || 0;
+        existing.conversions += analytic.conversions || 0;
+        creatorEarnings.set(analytic.creatorId, existing);
+      }
+
+      const topCreators = await Promise.all(
+        Array.from(creatorEarnings.entries())
+          .sort((a, b) => b[1].earnings - a[1].earnings)
+          .slice(0, 10)
+          .map(async ([creatorId, data]) => {
+            const user = await storage.getUserById(creatorId);
+            return {
+              id: creatorId,
+              name: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+              email: user?.email || '',
+              earnings: data.earnings,
+              clicks: data.clicks,
+              conversions: data.conversions,
+            };
+          })
+      );
+
+      // Get top companies by spend
+      const companySpend = new Map<string, { spend: number; offers: number; creators: number }>();
+      for (const offer of filteredOffers) {
+        if (!offer.companyId) continue;
+        const existing = companySpend.get(offer.companyId) || { spend: 0, offers: 0, creators: 0 };
+        existing.offers++;
+        companySpend.set(offer.companyId, existing);
+      }
+
+      for (const payment of filteredPayments) {
+        if (!payment.companyId) continue;
+        const existing = companySpend.get(payment.companyId) || { spend: 0, offers: 0, creators: 0 };
+        existing.spend += Number(payment.grossAmount || 0);
+        companySpend.set(payment.companyId, existing);
+      }
+
+      // Count unique creators per company
+      for (const app of filteredApplications) {
+        const offer = allOffers.find(o => o.id === app.offerId);
+        if (!offer?.companyId) continue;
+        const existing = companySpend.get(offer.companyId) || { spend: 0, offers: 0, creators: 0 };
+        existing.creators++;
+        companySpend.set(offer.companyId, existing);
+      }
+
+      const topCompanies = await Promise.all(
+        Array.from(companySpend.entries())
+          .sort((a, b) => b[1].spend - a[1].spend)
+          .slice(0, 10)
+          .map(async ([companyId, data]) => {
+            const profile = await storage.getCompanyProfileById(companyId);
+            return {
+              id: companyId,
+              name: profile?.legalName || profile?.tradeName || 'Unknown',
+              offers: data.offers,
+              spend: data.spend,
+              creators: data.creators,
+            };
+          })
+      );
+
+      // Count active users
+      const activeApplications = allApplications.filter(a => a.status === 'active' || a.status === 'approved');
+      const activeCreatorIds = new Set(activeApplications.map(a => a.creatorId).filter(Boolean));
+      const activeCompanyIds = new Set(filteredOffers.filter((o: any) => o.status === 'approved').map((o: any) => o.companyId).filter(Boolean));
+
+      // Get pending companies count
+      const pendingCompanyProfiles = await db.select().from(companyProfiles);
+      const pendingCompaniesCount = pendingCompanyProfiles.filter((c: any) => c.verificationStatus === 'pending').length;
+
+      // Get suspended users (those without active status)
+      const suspendedUsersCount = allUsers.filter((u: any) => u.isSuspended).length;
+
+      const response = {
+        financial: {
+          totalRevenue,
+          listingFees,
+          platformFees,
+          processingFees,
+          totalPayouts,
+          pendingPayouts,
+          completedPayouts,
+          disputedPayments: disputedPaymentsAmt,
+          revenueGrowth,
+          payoutGrowth: 0,
+          revenueByPeriod,
+          payoutsByPeriod: [],
+          revenueBySource: [
+            { source: 'Listing Fees', amount: listingFees },
+            { source: 'Platform Fees (4%)', amount: platformFees },
+            { source: 'Processing Fees (3%)', amount: processingFees },
+          ].filter(s => s.amount > 0),
+        },
+        users: {
+          totalUsers: allUsers.length,
+          totalCreators: creators.length,
+          totalCompanies: companies.length,
+          totalAdmins: admins.length,
+          newUsersThisWeek: newCreatorsThisWeek + newCompaniesThisWeek,
+          newCreatorsThisWeek,
+          newCompaniesThisWeek,
+          activeCreators: activeCreatorIds.size,
+          activeCompanies: activeCompanyIds.size,
+          pendingCompanies: pendingCompaniesCount,
+          suspendedUsers: suspendedUsersCount,
+          userGrowth,
+          topCreators,
+          topCompanies,
+        },
+        platform: {
+          totalOffers: allOffers.length,
+          activeOffers: allOffers.filter((o: any) => o.status === 'approved').length,
+          pendingOffers: allOffers.filter((o: any) => o.status === 'pending_review').length,
+          totalApplications: filteredApplications.length,
+          totalConversions,
+          totalClicks,
+          averageConversionRate,
+          offersByNiche,
+          applicationsByStatus,
+        },
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      console.error('[Admin Analytics Error]:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Notify admins about existing pending offers and payments (admin only)
   app.post("/api/admin/notify-pending-items", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -3739,6 +4314,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all companies with their risk assessments (for dashboard and company management)
+  // NOTE: This route must be defined BEFORE /api/admin/companies/:id to avoid route conflict
+  app.get("/api/admin/companies/risk-assessments", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      // Get all approved companies
+      const approvedCompanies = await storage.getAllCompanies({ status: 'approved' });
+
+      // Calculate risk assessment for each company
+      const companiesWithRisk = await Promise.all(
+        approvedCompanies.map(async (company: any) => {
+          const companyPayments = await storage.getPaymentsByCompany(company.id);
+
+          // Calculate risk indicators (simplified version of the detailed endpoint)
+          const disputedPayments = companyPayments.filter(p =>
+            p.description?.toLowerCase().includes('disputed')
+          );
+          const disputeRate = companyPayments.length > 0
+            ? (disputedPayments.length / companyPayments.length) * 100
+            : 0;
+
+          const failedPayments = companyPayments.filter(p =>
+            p.status === 'failed' && !p.description?.toLowerCase().includes('disputed')
+          );
+          const failureRate = companyPayments.length > 0
+            ? (failedPayments.length / companyPayments.length) * 100
+            : 0;
+
+          const refundedPayments = companyPayments.filter(p => p.status === 'refunded');
+          const refundRate = companyPayments.length > 0
+            ? (refundedPayments.length / companyPayments.length) * 100
+            : 0;
+
+          const completedPayments = companyPayments.filter(p => p.status === 'completed');
+
+          // Calculate risk score
+          let riskScore = 50; // Start neutral
+          const riskIndicators: string[] = [];
+
+          // High dispute rate
+          if (disputeRate >= 10) {
+            riskScore += 15;
+            riskIndicators.push(`High dispute rate (${disputeRate.toFixed(1)}%)`);
+          }
+
+          // High failure rate
+          if (failedPayments.length >= 3 || failureRate >= 15) {
+            riskScore += 15;
+            riskIndicators.push(`High payment failure rate (${failedPayments.length} failed)`);
+          }
+
+          // High refund rate
+          if (refundRate >= 20) {
+            riskScore += 15;
+            riskIndicators.push(`High refund rate (${refundRate.toFixed(1)}%)`);
+          }
+
+          // Website not verified
+          if (!company.websiteVerified) {
+            riskScore += 15;
+            riskIndicators.push('Website not verified');
+          }
+
+          // Positive indicators
+          if (completedPayments.length >= 50 && disputeRate < 2 && failureRate < 5) {
+            riskScore -= 10;
+          }
+
+          riskScore = Math.max(0, Math.min(100, riskScore));
+
+          const riskLevel = riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low';
+
+          return {
+            id: company.id,
+            legalName: company.legalName,
+            tradeName: company.tradeName,
+            industry: company.industry,
+            websiteUrl: company.websiteUrl,
+            websiteVerified: company.websiteVerified,
+            customPlatformFeePercentage: company.customPlatformFeePercentage,
+            status: company.status,
+            createdAt: company.createdAt,
+            riskScore,
+            riskLevel,
+            riskIndicators,
+            stats: {
+              totalPayments: companyPayments.length,
+              completedPayments: completedPayments.length,
+              failedPayments: failedPayments.length,
+              disputedPayments: disputedPayments.length,
+              refundedPayments: refundedPayments.length,
+            },
+          };
+        })
+      );
+
+      // Sort by risk score (highest first)
+      companiesWithRisk.sort((a: any, b: any) => b.riskScore - a.riskScore);
+
+      res.json({
+        companies: companiesWithRisk,
+        summary: {
+          total: companiesWithRisk.length,
+          highRisk: companiesWithRisk.filter((c: any) => c.riskLevel === 'high').length,
+          mediumRisk: companiesWithRisk.filter((c: any) => c.riskLevel === 'medium').length,
+          lowRisk: companiesWithRisk.filter((c: any) => c.riskLevel === 'low').length,
+        },
+      });
+    } catch (error: any) {
+      console.error('[get-companies-risk-assessments] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get individual company details
   app.get("/api/admin/companies/:id", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -3825,6 +4513,677 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(company);
     } catch (error: any) {
       res.status(500).send(error.message);
+    }
+  });
+
+  // Website Verification - Generate verification token
+  app.post("/api/admin/companies/:id/generate-verification-token", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.generateWebsiteVerificationToken(companyId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      res.json({
+        success: true,
+        verificationToken: company.websiteVerificationToken,
+        instructions: {
+          meta_tag: `Add this meta tag to the <head> section of your website's homepage:\n<meta name="affiliatexchange-site-verification" content="${company.websiteVerificationToken}">`,
+          dns_txt: `Add this TXT record to your domain's DNS settings:\n${company.websiteVerificationToken}`,
+        },
+      });
+    } catch (error: any) {
+      console.error('[generate-verification-token] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Website Verification - Verify website ownership
+  app.post("/api/admin/companies/:id/verify-website", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const { method } = req.body;
+
+      if (!method || !['meta_tag', 'dns_txt'].includes(method)) {
+        return res.status(400).json({ error: "Invalid verification method. Use 'meta_tag' or 'dns_txt'." });
+      }
+
+      const result = await storage.verifyWebsiteOwnership(companyId, method);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: `Website verified successfully via ${method === 'meta_tag' ? 'Meta Tag' : 'DNS TXT Record'}`,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+    } catch (error: any) {
+      console.error('[verify-website] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Website Verification - Reset verification status (admin)
+  app.post("/api/admin/companies/:id/reset-website-verification", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.updateWebsiteVerificationStatus(companyId, false);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      res.json({
+        success: true,
+        message: "Website verification status has been reset",
+      });
+    } catch (error: any) {
+      console.error('[reset-website-verification] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================
+  // Per-Company Platform Fee Override Endpoints (Section 4.3.H)
+  // ============================================================
+
+  // Get company's custom platform fee percentage
+  app.get("/api/admin/companies/:id/fee", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.getCompanyById(companyId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      const customFee = company.customPlatformFeePercentage;
+      const hasCustomFee = customFee !== null && customFee !== undefined;
+
+      res.json({
+        companyId: company.id,
+        companyName: company.legalName,
+        customPlatformFeePercentage: hasCustomFee ? parseFloat(customFee.toString()) : null,
+        customPlatformFeeDisplay: hasCustomFee ? `${(parseFloat(customFee.toString()) * 100).toFixed(2)}%` : null,
+        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        processingFeePercentage: STRIPE_PROCESSING_FEE_PERCENTAGE,
+        processingFeeDisplay: `${(STRIPE_PROCESSING_FEE_PERCENTAGE * 100)}%`,
+        effectivePlatformFee: hasCustomFee ? parseFloat(customFee.toString()) : DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        effectiveTotalFee: (hasCustomFee ? parseFloat(customFee.toString()) : DEFAULT_PLATFORM_FEE_PERCENTAGE) + STRIPE_PROCESSING_FEE_PERCENTAGE,
+        isUsingCustomFee: hasCustomFee,
+      });
+    } catch (error: any) {
+      console.error('[get-company-fee] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update company's custom platform fee percentage
+  app.put("/api/admin/companies/:id/fee", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const { platformFeePercentage } = req.body;
+
+      // Validate input
+      if (platformFeePercentage === undefined || platformFeePercentage === null) {
+        return res.status(400).json({ error: "platformFeePercentage is required" });
+      }
+
+      const feeValue = parseFloat(platformFeePercentage);
+
+      // Validate fee percentage is between 0% and 50%
+      if (isNaN(feeValue) || feeValue < 0 || feeValue > 0.5) {
+        return res.status(400).json({
+          error: "Platform fee percentage must be between 0 and 0.5 (0% to 50%)",
+          received: platformFeePercentage,
+        });
+      }
+
+      const company = await storage.getCompanyById(companyId);
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      // Update company profile with custom fee
+      const updatedCompany = await storage.updateCompanyProfileById(companyId, {
+        customPlatformFeePercentage: feeValue.toFixed(4),
+      });
+
+      // Log audit event
+      const adminUser = req.user as any;
+      await storage.createAuditLog({
+        userId: adminUser.id,
+        action: 'update_company_fee',
+        entityType: 'company',
+        entityId: companyId,
+        reason: `Updated platform fee for ${company.legalName} to ${(feeValue * 100).toFixed(2)}%`,
+        changes: {
+          previousFee: company.customPlatformFeePercentage,
+          newFee: feeValue,
+          companyName: company.legalName,
+        },
+      });
+
+      console.log(`[Admin] Updated platform fee for company ${companyId} (${company.legalName}) to ${(feeValue * 100).toFixed(2)}%`);
+
+      res.json({
+        success: true,
+        message: `Platform fee updated to ${(feeValue * 100).toFixed(2)}% for ${company.legalName}`,
+        companyId: companyId,
+        customPlatformFeePercentage: feeValue,
+        customPlatformFeeDisplay: `${(feeValue * 100).toFixed(2)}%`,
+        effectiveTotalFee: feeValue + STRIPE_PROCESSING_FEE_PERCENTAGE,
+      });
+    } catch (error: any) {
+      console.error('[update-company-fee] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Remove company's custom platform fee (revert to default)
+  app.delete("/api/admin/companies/:id/fee", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+
+      const company = await storage.getCompanyById(companyId);
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      const previousFee = company.customPlatformFeePercentage;
+
+      // Update company profile to remove custom fee
+      await storage.updateCompanyProfileById(companyId, {
+        customPlatformFeePercentage: null,
+      });
+
+      // Log audit event
+      const adminUser = req.user as any;
+      await storage.createAuditLog({
+        userId: adminUser.id,
+        action: 'remove_company_fee',
+        entityType: 'company',
+        entityId: companyId,
+        reason: `Removed custom platform fee for ${company.legalName}, reverting to default ${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        changes: {
+          previousFee: previousFee,
+          companyName: company.legalName,
+        },
+      });
+
+      console.log(`[Admin] Removed custom platform fee for company ${companyId} (${company.legalName}), reverted to default`);
+
+      res.json({
+        success: true,
+        message: `Custom platform fee removed for ${company.legalName}. Now using default ${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        companyId: companyId,
+        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        effectiveTotalFee: DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE,
+      });
+    } catch (error: any) {
+      console.error('[remove-company-fee] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all companies with custom fees (for admin dashboard)
+  app.get("/api/admin/companies-with-custom-fees", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companies = await storage.getCompaniesWithCustomFees();
+
+      res.json({
+        count: companies.length,
+        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
+        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        companies: companies.map(company => ({
+          id: company.id,
+          legalName: company.legalName,
+          tradeName: company.tradeName,
+          customPlatformFeePercentage: company.customPlatformFeePercentage ? parseFloat(company.customPlatformFeePercentage.toString()) : null,
+          customPlatformFeeDisplay: company.customPlatformFeePercentage ? `${(parseFloat(company.customPlatformFeePercentage.toString()) * 100).toFixed(2)}%` : null,
+          effectiveTotalFee: company.customPlatformFeePercentage
+            ? parseFloat(company.customPlatformFeePercentage.toString()) + STRIPE_PROCESSING_FEE_PERCENTAGE
+            : DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE,
+        })),
+      });
+    } catch (error: any) {
+      console.error('[get-companies-with-custom-fees] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get company risk indicators for fee adjustment decisions
+  app.get("/api/admin/companies/:id/risk-indicators", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const company = await storage.getCompanyById(companyId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      // Get company payments to analyze
+      const companyPayments = await storage.getPaymentsByCompany(companyId);
+
+      // Calculate risk indicators
+      const indicators: Array<{
+        type: 'warning' | 'info' | 'success';
+        category: string;
+        title: string;
+        description: string;
+        recommendation: 'increase' | 'decrease' | 'neutral';
+      }> = [];
+
+      // 1. Check dispute rate
+      const disputedPayments = companyPayments.filter(p =>
+        p.description?.toLowerCase().includes('disputed')
+      );
+      const disputeRate = companyPayments.length > 0
+        ? (disputedPayments.length / companyPayments.length) * 100
+        : 0;
+
+      if (disputedPayments.length > 0) {
+        if (disputeRate >= 10) {
+          indicators.push({
+            type: 'warning',
+            category: 'Disputes',
+            title: 'High Dispute Rate',
+            description: `${disputedPayments.length} disputed payments (${disputeRate.toFixed(1)}% of total). High dispute rates increase platform risk.`,
+            recommendation: 'increase',
+          });
+        } else if (disputeRate >= 5) {
+          indicators.push({
+            type: 'info',
+            category: 'Disputes',
+            title: 'Moderate Dispute Rate',
+            description: `${disputedPayments.length} disputed payments (${disputeRate.toFixed(1)}% of total). Monitor for potential issues.`,
+            recommendation: 'neutral',
+          });
+        }
+      }
+
+      // 2. Check failed payments
+      const failedPayments = companyPayments.filter(p =>
+        p.status === 'failed' && !p.description?.toLowerCase().includes('disputed')
+      );
+      const failureRate = companyPayments.length > 0
+        ? (failedPayments.length / companyPayments.length) * 100
+        : 0;
+
+      if (failedPayments.length >= 3 || failureRate >= 15) {
+        indicators.push({
+          type: 'warning',
+          category: 'Payment Issues',
+          title: 'High Payment Failure Rate',
+          description: `${failedPayments.length} failed payments (${failureRate.toFixed(1)}% failure rate). May indicate payment reliability issues.`,
+          recommendation: 'increase',
+        });
+      }
+
+      // 3. Check refund rate
+      const refundedPayments = companyPayments.filter(p => p.status === 'refunded');
+      const refundRate = companyPayments.length > 0
+        ? (refundedPayments.length / companyPayments.length) * 100
+        : 0;
+
+      if (refundRate >= 20) {
+        indicators.push({
+          type: 'warning',
+          category: 'Refunds',
+          title: 'High Refund Rate',
+          description: `${refundedPayments.length} refunded payments (${refundRate.toFixed(1)}% of total). High refund rates may indicate issues.`,
+          recommendation: 'increase',
+        });
+      }
+
+      // 4. Check website verification status
+      if (!company.websiteVerified) {
+        indicators.push({
+          type: 'warning',
+          category: 'Verification',
+          title: 'Website Not Verified',
+          description: 'Company website has not been verified. Unverified companies pose higher risk.',
+          recommendation: 'increase',
+        });
+      } else {
+        indicators.push({
+          type: 'success',
+          category: 'Verification',
+          title: 'Website Verified',
+          description: `Website verified on ${company.websiteVerifiedAt ? new Date(company.websiteVerifiedAt).toLocaleDateString() : 'N/A'}`,
+          recommendation: 'neutral',
+        });
+      }
+
+      // 5. Check account age (new accounts are higher risk)
+      const accountAgeDays = Math.floor(
+        (Date.now() - new Date(company.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (accountAgeDays < 30) {
+        indicators.push({
+          type: 'info',
+          category: 'Account Age',
+          title: 'New Account',
+          description: `Account created ${accountAgeDays} days ago. New accounts may require closer monitoring.`,
+          recommendation: 'neutral',
+        });
+      } else if (accountAgeDays >= 180) {
+        indicators.push({
+          type: 'success',
+          category: 'Account Age',
+          title: 'Established Account',
+          description: `Account is ${Math.floor(accountAgeDays / 30)} months old with established history.`,
+          recommendation: 'neutral',
+        });
+      }
+
+      // 6. Check payment volume (high volume trusted partners may warrant lower fees)
+      const completedPayments = companyPayments.filter(p => p.status === 'completed');
+      const totalVolume = completedPayments.reduce((sum, p) => sum + parseFloat(p.grossAmount?.toString() || '0'), 0);
+
+      if (completedPayments.length >= 50 && disputeRate < 2 && failureRate < 5) {
+        indicators.push({
+          type: 'success',
+          category: 'Payment History',
+          title: 'High-Volume Trusted Partner',
+          description: `${completedPayments.length} successful payments totaling $${totalVolume.toFixed(2)} with low dispute/failure rates. Consider reduced fees.`,
+          recommendation: 'decrease',
+        });
+      } else if (completedPayments.length >= 20 && disputeRate < 5) {
+        indicators.push({
+          type: 'success',
+          category: 'Payment History',
+          title: 'Good Payment History',
+          description: `${completedPayments.length} successful payments with acceptable dispute rate.`,
+          recommendation: 'neutral',
+        });
+      } else if (companyPayments.length === 0) {
+        indicators.push({
+          type: 'info',
+          category: 'Payment History',
+          title: 'No Payment History',
+          description: 'Company has no payment history yet. Default fee recommended until track record is established.',
+          recommendation: 'neutral',
+        });
+      }
+
+      // Calculate overall risk score (0-100)
+      let riskScore = 50; // Start neutral
+      indicators.forEach(ind => {
+        if (ind.recommendation === 'increase') riskScore += 15;
+        if (ind.recommendation === 'decrease') riskScore -= 10;
+      });
+      riskScore = Math.max(0, Math.min(100, riskScore));
+
+      // Generate overall recommendation
+      const increaseIndicators = indicators.filter(i => i.recommendation === 'increase').length;
+      const decreaseIndicators = indicators.filter(i => i.recommendation === 'decrease').length;
+
+      let overallRecommendation: 'increase' | 'decrease' | 'maintain' = 'maintain';
+      let recommendationText = 'Current fee appears appropriate based on company profile.';
+
+      if (increaseIndicators >= 2) {
+        overallRecommendation = 'increase';
+        recommendationText = 'Multiple risk indicators suggest considering a fee increase.';
+      } else if (decreaseIndicators > 0 && increaseIndicators === 0) {
+        overallRecommendation = 'decrease';
+        recommendationText = 'Strong payment history suggests this company may qualify for reduced fees.';
+      }
+
+      res.json({
+        companyId: company.id,
+        companyName: company.legalName,
+        riskScore,
+        riskLevel: riskScore >= 70 ? 'high' : riskScore >= 40 ? 'medium' : 'low',
+        overallRecommendation,
+        recommendationText,
+        indicators,
+        stats: {
+          totalPayments: companyPayments.length,
+          completedPayments: completedPayments.length,
+          failedPayments: failedPayments.length,
+          refundedPayments: refundedPayments.length,
+          disputedPayments: disputedPayments.length,
+          totalVolume: totalVolume.toFixed(2),
+          accountAgeDays,
+        },
+      });
+    } catch (error: any) {
+      console.error('[get-company-risk-indicators] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check and notify admins about high-risk companies
+  app.post("/api/admin/check-high-risk-companies", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      // Get all approved companies
+      const approvedCompanies = await storage.getAllCompanies({ status: 'approved' });
+
+      // Get all admin users
+      const allUsers = await storage.getAllUsers();
+      const adminUsers = allUsers.filter(u => u.role === 'admin');
+
+      if (adminUsers.length === 0) {
+        return res.json({ message: 'No admin users found', notificationsSent: 0 });
+      }
+
+      let notificationsSent = 0;
+      const highRiskCompanies: Array<{ id: string; legalName: string; riskScore: number; riskIndicators: string[] }> = [];
+
+      // Calculate risk for each company
+      for (const company of approvedCompanies as any[]) {
+        const companyPayments = await storage.getPaymentsByCompany(company.id);
+
+        // Calculate risk indicators
+        const disputedPayments = companyPayments.filter(p =>
+          p.description?.toLowerCase().includes('disputed')
+        );
+        const disputeRate = companyPayments.length > 0
+          ? (disputedPayments.length / companyPayments.length) * 100
+          : 0;
+
+        const failedPayments = companyPayments.filter(p =>
+          p.status === 'failed' && !p.description?.toLowerCase().includes('disputed')
+        );
+        const failureRate = companyPayments.length > 0
+          ? (failedPayments.length / companyPayments.length) * 100
+          : 0;
+
+        const refundedPayments = companyPayments.filter(p => p.status === 'refunded');
+        const refundRate = companyPayments.length > 0
+          ? (refundedPayments.length / companyPayments.length) * 100
+          : 0;
+
+        const completedPayments = companyPayments.filter(p => p.status === 'completed');
+
+        // Calculate risk score
+        let riskScore = 50;
+        const riskIndicators: string[] = [];
+
+        if (disputeRate >= 10) {
+          riskScore += 15;
+          riskIndicators.push(`High dispute rate (${disputeRate.toFixed(1)}%)`);
+        }
+
+        if (failedPayments.length >= 3 || failureRate >= 15) {
+          riskScore += 15;
+          riskIndicators.push(`High payment failure rate (${failedPayments.length} failed)`);
+        }
+
+        if (refundRate >= 20) {
+          riskScore += 15;
+          riskIndicators.push(`High refund rate (${refundRate.toFixed(1)}%)`);
+        }
+
+        if (!company.websiteVerified) {
+          riskScore += 15;
+          riskIndicators.push('Website not verified');
+        }
+
+        if (completedPayments.length >= 50 && disputeRate < 2 && failureRate < 5) {
+          riskScore -= 10;
+        }
+
+        riskScore = Math.max(0, Math.min(100, riskScore));
+
+        // Check if company is high risk (score >= 70)
+        if (riskScore >= 70) {
+          highRiskCompanies.push({
+            id: company.id,
+            legalName: company.legalName,
+            riskScore,
+            riskIndicators,
+          });
+        }
+      }
+
+      // Send notifications to all admins for each high-risk company
+      for (const company of highRiskCompanies) {
+        for (const admin of adminUsers) {
+          // Check if a notification was already sent recently (within 24 hours)
+          const recentNotifications = await storage.getNotifications(admin.id, 100);
+          const alreadyNotified = recentNotifications.some((n: any) =>
+            n.type === 'high_risk_company' &&
+            (n.metadata as any)?.companyId === company.id &&
+            new Date(n.createdAt!).getTime() > Date.now() - 24 * 60 * 60 * 1000
+          );
+
+          if (!alreadyNotified) {
+            await notificationService.sendNotification(
+              admin.id,
+              'high_risk_company',
+              `High Risk Company: ${company.legalName}`,
+              `${company.legalName} has been flagged as high risk (score: ${company.riskScore}/100). Consider reviewing their platform fee.`,
+              {
+                companyId: company.id,
+                companyName: company.legalName,
+                riskScore: company.riskScore,
+                riskLevel: 'high',
+                riskIndicators: company.riskIndicators,
+                linkUrl: `/admin/companies/${company.id}`,
+              }
+            );
+            notificationsSent++;
+          }
+        }
+      }
+
+      res.json({
+        message: `Found ${highRiskCompanies.length} high-risk companies`,
+        highRiskCount: highRiskCompanies.length,
+        notificationsSent,
+        companies: highRiskCompanies.map(c => ({
+          id: c.id,
+          name: c.legalName,
+          riskScore: c.riskScore,
+          indicators: c.riskIndicators,
+        })),
+      });
+    } catch (error: any) {
+      console.error('[check-high-risk-companies] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Company self-service - Get verification token (for company users)
+  app.get("/api/company/website-verification", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const company = await storage.getCompanyProfile(userId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      res.json({
+        websiteUrl: company.websiteUrl,
+        websiteVerified: company.websiteVerified,
+        websiteVerificationToken: company.websiteVerificationToken,
+        websiteVerificationMethod: company.websiteVerificationMethod,
+        websiteVerifiedAt: company.websiteVerifiedAt,
+        instructions: company.websiteVerificationToken ? {
+          meta_tag: `Add this meta tag to the <head> section of your website's homepage:\n<meta name="affiliatexchange-site-verification" content="${company.websiteVerificationToken}">`,
+          dns_txt: `Add this TXT record to your domain's DNS settings:\n${company.websiteVerificationToken}`,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error('[get-website-verification] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Company self-service - Generate verification token
+  app.post("/api/company/generate-verification-token", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      let company = await storage.getCompanyProfile(userId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      if (!company.websiteUrl) {
+        return res.status(400).json({ error: "Please add a website URL to your company profile first" });
+      }
+
+      company = await storage.generateWebsiteVerificationToken(company.id);
+
+      res.json({
+        success: true,
+        verificationToken: company?.websiteVerificationToken,
+        instructions: {
+          meta_tag: `Add this meta tag to the <head> section of your website's homepage:\n<meta name="affiliatexchange-site-verification" content="${company?.websiteVerificationToken}">`,
+          dns_txt: `Add this TXT record to your domain's DNS settings:\n${company?.websiteVerificationToken}`,
+        },
+      });
+    } catch (error: any) {
+      console.error('[company-generate-verification-token] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Company self-service - Request verification check
+  app.post("/api/company/verify-website", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { method } = req.body;
+
+      if (!method || !['meta_tag', 'dns_txt'].includes(method)) {
+        return res.status(400).json({ error: "Invalid verification method. Use 'meta_tag' or 'dns_txt'." });
+      }
+
+      const company = await storage.getCompanyProfile(userId);
+
+      if (!company) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      const result = await storage.verifyWebsiteOwnership(company.id, method);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          message: `Website verified successfully via ${method === 'meta_tag' ? 'Meta Tag' : 'DNS TXT Record'}`,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+    } catch (error: any) {
+      console.error('[company-verify-website] Error:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -4087,6 +5446,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/reviews/:id/unhide", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const review = await storage.unhideReview(req.params.id);
+      res.json(review);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
   app.delete("/api/admin/reviews/:id", requireAuth, requireRole('admin'), async (req, res) => {
     try {
       await storage.deleteReview(req.params.id);
@@ -4325,7 +5693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).send("Invalid status. Must be: reviewed, dismissed, or action_taken");
       }
 
-      await reviewFlaggedContent(req.params.id, userId, status, adminNotes, actionTaken);
+      await reviewFlaggedContent(req.params.id, userId, status, adminNotes, actionTaken, storage);
 
       const flag = await db.query.contentFlags.findFirst({
         where: eq(contentFlags.id, req.params.id),
@@ -4725,6 +6093,692 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(niches);
     } catch (error: any) {
       console.error('[Niches] Error fetching niches:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // =====================================================
+  // Email Templates Management Routes
+  // =====================================================
+
+  // Get all email templates (admin only)
+  app.get("/api/admin/email-templates", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const templates = await storage.getEmailTemplates();
+      res.json(templates);
+    } catch (error: any) {
+      console.error('[Email Templates] Error fetching templates:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // IMPORTANT: Specific path routes MUST come before the generic :id route
+  // Otherwise Express will match "available-types", "slug", "category", etc. as :id values
+
+  // Get email template by slug (for internal use)
+  app.get("/api/admin/email-templates/slug/:slug", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const template = await storage.getEmailTemplateBySlug(req.params.slug);
+      if (!template) {
+        return res.status(404).send("Email template not found");
+      }
+      res.json(template);
+    } catch (error: any) {
+      console.error('[Email Templates] Error fetching template by slug:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get templates by category
+  app.get("/api/admin/email-templates/category/:category", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const templates = await storage.getEmailTemplatesByCategory(req.params.category);
+      res.json(templates);
+    } catch (error: any) {
+      console.error('[Email Templates] Error fetching templates by category:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get available variables for a specific template slug
+  app.get("/api/admin/email-templates/variables/:slug", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { getAvailableVariablesForTemplate } = await import('./notifications/templateEngine');
+      const variables = getAvailableVariablesForTemplate(req.params.slug);
+      res.json(variables);
+    } catch (error: any) {
+      console.error('[Email Templates] Error getting template variables:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get all available template types/slugs with their variables
+  app.get("/api/admin/email-templates/available-types", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { getAvailableVariablesForTemplate, getTemplateSlugForNotificationType } = await import('./notifications/templateEngine');
+
+      // All notification types and their slugs
+      const templateTypes = [
+        { type: 'application_status_change', category: 'application', name: 'Application Status Change', description: 'Sent when application status changes (approved/rejected/pending)' },
+        { type: 'new_application', category: 'application', name: 'New Application', description: 'Sent when a new application or offer is submitted for review' },
+        { type: 'payment_received', category: 'payment', name: 'Payment Received', description: 'Sent to creator when payment is successfully received' },
+        { type: 'payment_pending', category: 'payment', name: 'Payment Pending', description: 'Sent when payment is pending approval or processing' },
+        { type: 'payment_approved', category: 'payment', name: 'Payment Approved', description: 'Sent when payment has been approved and is being processed' },
+        { type: 'payment_failed_insufficient_funds', category: 'payment', name: 'Payment Failed (Insufficient Funds)', description: 'Sent when payment fails due to insufficient funds' },
+        { type: 'payment_disputed', category: 'payment', name: 'Payment Disputed', description: 'Sent when a payment is disputed' },
+        { type: 'payment_dispute_resolved', category: 'payment', name: 'Payment Dispute Resolved', description: 'Sent when a payment dispute is resolved' },
+        { type: 'payment_refunded', category: 'payment', name: 'Payment Refunded', description: 'Sent when a payment is refunded' },
+        { type: 'offer_approved', category: 'offer', name: 'Offer Approved', description: 'Sent when company offer is approved by admin' },
+        { type: 'offer_rejected', category: 'offer', name: 'Offer Rejected', description: 'Sent when company offer is rejected by admin' },
+        { type: 'registration_approved', category: 'company', name: 'Registration Approved', description: 'Sent when company registration is approved' },
+        { type: 'registration_rejected', category: 'company', name: 'Registration Rejected', description: 'Sent when company registration is rejected' },
+        { type: 'system_announcement', category: 'system', name: 'System Announcement', description: 'General system announcements and updates' },
+        { type: 'new_message', category: 'system', name: 'New Message', description: 'Sent when user receives a new message' },
+        { type: 'review_received', category: 'system', name: 'Review Received', description: 'Sent when company receives a new review' },
+        { type: 'work_completion_approval', category: 'system', name: 'Work Completion Approval', description: 'Sent when work is approved' },
+        { type: 'priority_listing_expiring', category: 'system', name: 'Priority Listing Expiring', description: 'Sent when priority listing is about to expire' },
+        { type: 'deliverable_rejected', category: 'system', name: 'Deliverable Rejected', description: 'Sent when retainer deliverable is rejected' },
+        { type: 'revision_requested', category: 'system', name: 'Revision Requested', description: 'Sent when revision is requested for deliverable' },
+        { type: 'content_flagged', category: 'moderation', name: 'Content Flagged', description: 'Sent when content is flagged for moderation' },
+        { type: 'email_verification', category: 'authentication', name: 'Email Verification', description: 'Sent for email address verification' },
+        { type: 'password_reset', category: 'authentication', name: 'Password Reset', description: 'Sent for password reset requests' },
+        { type: 'account_deletion_otp', category: 'authentication', name: 'Account Deletion OTP', description: 'Sent for account deletion verification' },
+        { type: 'password_change_otp', category: 'authentication', name: 'Password Change OTP', description: 'Sent for password change verification' },
+      ];
+
+      // Add slug and variables to each type
+      const result = templateTypes.map(t => {
+        const slug = getTemplateSlugForNotificationType(t.type);
+        return {
+          ...t,
+          slug,
+          variables: slug ? getAvailableVariablesForTemplate(slug) : [],
+        };
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[Email Templates] Error getting available template types:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get email template by ID (must come after specific path routes)
+  app.get("/api/admin/email-templates/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const template = await storage.getEmailTemplateById(req.params.id);
+      if (!template) {
+        return res.status(404).send("Email template not found");
+      }
+      res.json(template);
+    } catch (error: any) {
+      console.error('[Email Templates] Error fetching template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Create new email template
+  app.post("/api/admin/email-templates", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { name, slug, category, subject, htmlContent, visualData, description, availableVariables, isActive, isSystem } = req.body;
+
+      // Validate required fields
+      if (!name || !slug || !category || !subject || !htmlContent) {
+        return res.status(400).send("Missing required fields: name, slug, category, subject, htmlContent");
+      }
+
+      // Check if slug already exists
+      const existingTemplate = await storage.getEmailTemplateBySlug(slug);
+      if (existingTemplate) {
+        return res.status(400).send("A template with this slug already exists");
+      }
+
+      const template = await storage.createEmailTemplate({
+        name,
+        slug,
+        category,
+        subject,
+        htmlContent,
+        visualData: visualData || null,
+        description: description || null,
+        availableVariables: availableVariables || [],
+        isActive: isActive !== false,
+        isSystem: isSystem || false,
+        createdBy: userId,
+        updatedBy: userId,
+      });
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.CREATE_EMAIL_TEMPLATE || 'create_email_template',
+        entityType: EntityTypes.EMAIL_TEMPLATE || 'email_template',
+        entityId: template.id,
+        changes: { name, slug, category },
+        reason: 'Created new email template',
+      }, req);
+
+      res.json(template);
+    } catch (error: any) {
+      console.error('[Email Templates] Error creating template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Update email template
+  app.put("/api/admin/email-templates/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const templateId = req.params.id;
+      const { name, slug, category, subject, htmlContent, visualData, description, availableVariables, isActive } = req.body;
+
+      // Check if template exists
+      const existingTemplate = await storage.getEmailTemplateById(templateId);
+      if (!existingTemplate) {
+        return res.status(404).send("Email template not found");
+      }
+
+      // If slug is being changed, check for uniqueness
+      if (slug && slug !== existingTemplate.slug) {
+        const slugExists = await storage.getEmailTemplateBySlug(slug);
+        if (slugExists) {
+          return res.status(400).send("A template with this slug already exists");
+        }
+      }
+
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (slug !== undefined) updates.slug = slug;
+      if (category !== undefined) updates.category = category;
+      if (subject !== undefined) updates.subject = subject;
+      if (htmlContent !== undefined) updates.htmlContent = htmlContent;
+      if (visualData !== undefined) updates.visualData = visualData;
+      if (description !== undefined) updates.description = description;
+      if (availableVariables !== undefined) updates.availableVariables = availableVariables;
+      if (isActive !== undefined) updates.isActive = isActive;
+
+      const template = await storage.updateEmailTemplate(templateId, updates, userId);
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.UPDATE_EMAIL_TEMPLATE || 'update_email_template',
+        entityType: EntityTypes.EMAIL_TEMPLATE || 'email_template',
+        entityId: templateId,
+        changes: updates,
+        reason: 'Updated email template',
+      }, req);
+
+      res.json(template);
+    } catch (error: any) {
+      console.error('[Email Templates] Error updating template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Delete email template
+  app.delete("/api/admin/email-templates/:id", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const templateId = req.params.id;
+
+      // Check if template exists
+      const existingTemplate = await storage.getEmailTemplateById(templateId);
+      if (!existingTemplate) {
+        return res.status(404).send("Email template not found");
+      }
+
+      if (existingTemplate.isSystem) {
+        return res.status(403).send("Cannot delete system templates");
+      }
+
+      await storage.deleteEmailTemplate(templateId);
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.DELETE_EMAIL_TEMPLATE || 'delete_email_template',
+        entityType: EntityTypes.EMAIL_TEMPLATE || 'email_template',
+        entityId: templateId,
+        reason: 'Deleted email template',
+      }, req);
+
+      res.json({ success: true, message: 'Email template deleted successfully' });
+    } catch (error: any) {
+      console.error('[Email Templates] Error deleting template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Preview email template with sample data
+  app.post("/api/admin/email-templates/:id/preview", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const template = await storage.getEmailTemplateById(req.params.id);
+      if (!template) {
+        return res.status(404).send("Email template not found");
+      }
+
+      const sampleData = req.body.sampleData || {};
+
+      // Process template variables
+      let processedSubject = template.subject;
+      let processedHtml = template.htmlContent;
+
+      // Replace all {{variable}} patterns with sample data or placeholder
+      const variableRegex = /\{\{(\w+)\}\}/g;
+
+      processedSubject = processedSubject.replace(variableRegex, (match, variable) => {
+        return sampleData[variable] || `[${variable}]`;
+      });
+
+      processedHtml = processedHtml.replace(variableRegex, (match, variable) => {
+        return sampleData[variable] || `<span style="background-color: #FEF3C7; padding: 2px 4px; border-radius: 2px;">[${variable}]</span>`;
+      });
+
+      res.json({
+        subject: processedSubject,
+        html: processedHtml,
+        originalTemplate: template,
+      });
+    } catch (error: any) {
+      console.error('[Email Templates] Error previewing template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Duplicate an email template
+  app.post("/api/admin/email-templates/:id/duplicate", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const sourceTemplate = await storage.getEmailTemplateById(req.params.id);
+
+      if (!sourceTemplate) {
+        return res.status(404).send("Email template not found");
+      }
+
+      // Generate a unique slug
+      let newSlug = `${sourceTemplate.slug}-copy`;
+      let counter = 1;
+      while (await storage.getEmailTemplateBySlug(newSlug)) {
+        newSlug = `${sourceTemplate.slug}-copy-${counter}`;
+        counter++;
+      }
+
+      const newTemplate = await storage.createEmailTemplate({
+        name: `${sourceTemplate.name} (Copy)`,
+        slug: newSlug,
+        category: sourceTemplate.category,
+        subject: sourceTemplate.subject,
+        htmlContent: sourceTemplate.htmlContent,
+        visualData: sourceTemplate.visualData as Record<string, unknown> | undefined,
+        description: sourceTemplate.description,
+        availableVariables: sourceTemplate.availableVariables || [],
+        isActive: false, // Start as inactive
+        isSystem: false, // Copies are never system templates
+        createdBy: userId,
+        updatedBy: userId,
+      });
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.DUPLICATE_EMAIL_TEMPLATE || 'duplicate_email_template',
+        entityType: EntityTypes.EMAIL_TEMPLATE || 'email_template',
+        entityId: newTemplate.id,
+        changes: { sourceTemplateId: sourceTemplate.id },
+        reason: 'Duplicated email template',
+      }, req);
+
+      res.json(newTemplate);
+    } catch (error: any) {
+      console.error('[Email Templates] Error duplicating template:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Initialize default email templates for all notification types
+  app.post("/api/admin/email-templates/initialize-defaults", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { getTemplateSlugForNotificationType, getAvailableVariablesForTemplate } = await import('./notifications/templateEngine');
+
+      // Default visual template data for each notification type
+      const defaultTemplates: Record<string, {
+        name: string;
+        category: string;
+        subject: string;
+        headerTitle: string;
+        headerColor: string;
+        blocks: Array<{ id: string; type: string; content: string; properties: Record<string, string> }>;
+      }> = {
+        'application_status_change': {
+          name: 'Application Status Change',
+          category: 'application',
+          subject: 'Your application status has been updated',
+          headerTitle: 'Application Update',
+          headerColor: '#10B981',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'success-box', content: 'Your application for {{offerTitle}} has been updated!', properties: {} },
+            { id: '3', type: 'text', content: 'Please log in to view the details and next steps.', properties: {} },
+            { id: '4', type: 'button', content: 'View Application', properties: { url: '{{linkUrl}}', color: 'success' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'new_application': {
+          name: 'New Application',
+          category: 'application',
+          subject: 'New application for {{offerTitle}}',
+          headerTitle: 'New Application Received',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'info-box', content: 'You have received a new application for your offer: {{offerTitle}}', properties: {} },
+            { id: '3', type: 'text', content: 'Please review the application and respond to the creator.', properties: {} },
+            { id: '4', type: 'button', content: 'Review Application', properties: { url: '{{linkUrl}}', color: 'primary' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'payment_received': {
+          name: 'Payment Received',
+          category: 'payment',
+          subject: 'Payment received: {{amount}}',
+          headerTitle: 'Payment Received!',
+          headerColor: '#10B981',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'success-box', content: 'Great news! You have received a payment.', properties: {} },
+            { id: '3', type: 'amount-display', content: '{{amount}}', properties: { label: 'Amount Received', style: 'success' } },
+            { id: '4', type: 'details-table', content: 'Gross Amount:{{grossAmount}}\nPlatform Fee:{{platformFee}}\nProcessing Fee:{{processingFee}}\nTransaction ID:{{transactionId}}', properties: {} },
+            { id: '5', type: 'button', content: 'View Payment Details', properties: { url: '{{linkUrl}}', color: 'success' } },
+            { id: '6', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'payment_pending': {
+          name: 'Payment Pending',
+          category: 'payment',
+          subject: 'New payment ready for processing',
+          headerTitle: 'Payment Pending Review',
+          headerColor: '#F59E0B',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'warning-box', content: 'A new affiliate payment is ready for processing and requires your review.', properties: {} },
+            { id: '3', type: 'amount-display', content: '{{amount}}', properties: { label: 'Payment Amount', style: 'warning' } },
+            { id: '4', type: 'text', content: 'Please review and process this payment at your earliest convenience.', properties: {} },
+            { id: '5', type: 'button', content: 'Review Payment', properties: { url: '{{linkUrl}}', color: 'warning' } },
+            { id: '6', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'payment_approved': {
+          name: 'Payment Approved',
+          category: 'payment',
+          subject: 'Payment sent: {{amount}}',
+          headerTitle: 'Payment Sent Successfully',
+          headerColor: '#10B981',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'success-box', content: 'Your payment has been successfully sent!', properties: {} },
+            { id: '3', type: 'amount-display', content: '{{amount}}', properties: { label: 'Amount Sent', style: 'success' } },
+            { id: '4', type: 'button', content: 'View Details', properties: { url: '{{linkUrl}}', color: 'success' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'offer_approved': {
+          name: 'Offer Approved',
+          category: 'offer',
+          subject: 'Your offer "{{offerTitle}}" has been approved!',
+          headerTitle: 'Offer Approved!',
+          headerColor: '#10B981',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'success-box', content: 'Congratulations! Your offer "{{offerTitle}}" has been approved and is now live.', properties: {} },
+            { id: '3', type: 'text', content: 'Creators can now discover and apply to your offer.', properties: {} },
+            { id: '4', type: 'button', content: 'View Your Offer', properties: { url: '{{linkUrl}}', color: 'success' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'offer_rejected': {
+          name: 'Offer Rejected',
+          category: 'offer',
+          subject: 'Update on your offer submission',
+          headerTitle: 'Offer Review Update',
+          headerColor: '#6B7280',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'info-box', content: 'Your offer "{{offerTitle}}" requires adjustments before it can be published.', properties: {} },
+            { id: '3', type: 'text', content: 'Please review the feedback and make the necessary changes.', properties: {} },
+            { id: '4', type: 'button', content: 'View Offer', properties: { url: '{{linkUrl}}', color: 'gray' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'registration_approved': {
+          name: 'Registration Approved',
+          category: 'company',
+          subject: 'Your account has been approved!',
+          headerTitle: 'Welcome to AffiliateXchange!',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'success-box', content: 'Great news! Your company account has been approved.', properties: {} },
+            { id: '3', type: 'text', content: 'You can now start creating offers and connecting with creators.', properties: {} },
+            { id: '4', type: 'button', content: 'Get Started', properties: { url: '{{linkUrl}}', color: 'primary' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'registration_rejected': {
+          name: 'Registration Rejected',
+          category: 'company',
+          subject: 'Update on your registration',
+          headerTitle: 'Account Registration Update',
+          headerColor: '#6B7280',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'text', content: 'Unfortunately, we are unable to approve your company account at this time.', properties: {} },
+            { id: '3', type: 'info-box', content: 'If you believe this is an error, please contact our support team.', properties: {} },
+            { id: '4', type: 'button', content: 'Contact Support', properties: { url: '{{linkUrl}}', color: 'gray' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.', properties: {} },
+          ],
+        },
+        'new_message': {
+          name: 'New Message',
+          category: 'system',
+          subject: 'New message from {{companyName}}',
+          headerTitle: 'New Message',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'text', content: 'You have a new message from {{companyName}} regarding {{offerTitle}}.', properties: {} },
+            { id: '3', type: 'info-box', content: '"{{messagePreview}}"', properties: {} },
+            { id: '4', type: 'button', content: 'View Message', properties: { url: '{{linkUrl}}', color: 'primary' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'review_received': {
+          name: 'Review Received',
+          category: 'system',
+          subject: 'New review received ({{reviewRating}} stars)',
+          headerTitle: 'New Review Received',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'text', content: 'You have received a new review for your company!', properties: {} },
+            { id: '3', type: 'info-box', content: '{{reviewRating}} out of 5 stars\n\n"{{reviewText}}"', properties: {} },
+            { id: '4', type: 'button', content: 'View Review', properties: { url: '{{linkUrl}}', color: 'primary' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'email_verification': {
+          name: 'Email Verification',
+          category: 'authentication',
+          subject: 'Verify your email address',
+          headerTitle: 'Verify Your Email',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'text', content: 'Please verify your email address to complete your registration.', properties: {} },
+            { id: '3', type: 'button', content: 'Verify Email Address', properties: { url: '{{verificationUrl}}', color: 'primary' } },
+            { id: '4', type: 'warning-box', content: 'This verification link will expire in 24 hours.', properties: {} },
+            { id: '5', type: 'footer', content: 'This is an automated email from AffiliateXchange.', properties: {} },
+          ],
+        },
+        'password_reset': {
+          name: 'Password Reset',
+          category: 'authentication',
+          subject: 'Reset your password',
+          headerTitle: 'Password Reset Request',
+          headerColor: '#F59E0B',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'text', content: 'Click the button below to reset your password.', properties: {} },
+            { id: '3', type: 'button', content: 'Reset Password', properties: { url: '{{resetUrl}}', color: 'warning' } },
+            { id: '4', type: 'warning-box', content: 'This link will expire in 1 hour.', properties: {} },
+            { id: '5', type: 'footer', content: 'This is an automated email from AffiliateXchange.', properties: {} },
+          ],
+        },
+        'system_announcement': {
+          name: 'System Announcement',
+          category: 'system',
+          subject: '{{announcementTitle}}',
+          headerTitle: 'System Announcement',
+          headerColor: '#4F46E5',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'heading', content: '{{announcementTitle}}', properties: { size: 'medium' } },
+            { id: '3', type: 'text', content: '{{announcementMessage}}', properties: {} },
+            { id: '4', type: 'button', content: 'Learn More', properties: { url: '{{linkUrl}}', color: 'primary' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+        'content_flagged': {
+          name: 'Content Flagged',
+          category: 'moderation',
+          subject: 'Your content is under review',
+          headerTitle: 'Content Under Review',
+          headerColor: '#F59E0B',
+          blocks: [
+            { id: '1', type: 'greeting', content: 'Hi {{userName}},', properties: {} },
+            { id: '2', type: 'warning-box', content: 'Your content has been flagged for review by our moderation system.', properties: {} },
+            { id: '3', type: 'text', content: 'Our team will review and you will be notified of the outcome.', properties: {} },
+            { id: '4', type: 'button', content: 'View Details', properties: { url: '{{linkUrl}}', color: 'warning' } },
+            { id: '5', type: 'footer', content: 'This is an automated notification from AffiliateXchange.\nUpdate your notification preferences anytime.', properties: {} },
+          ],
+        },
+      };
+
+      // Helper function to generate HTML from visual blocks
+      const generateHtmlFromBlocks = (data: { headerTitle: string; headerColor: string; blocks: any[] }): string => {
+        const baseStyles = `
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+          .header { background-color: ${data.headerColor}; color: #ffffff; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { padding: 30px 20px; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 14px; border-top: 1px solid #E5E7EB; }
+        `;
+
+        const renderBlock = (block: any): string => {
+          switch (block.type) {
+            case 'greeting':
+              return `<p>${block.content}</p>`;
+            case 'text':
+              return `<p>${block.content.replace(/\n/g, '<br>')}</p>`;
+            case 'heading':
+              return `<h3 style="font-size: 20px; font-weight: 600; color: #111827;">${block.content}</h3>`;
+            case 'success-box':
+              return `<div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;"><p style="margin: 0; color: #065F46;">${block.content}</p></div>`;
+            case 'warning-box':
+              return `<div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;"><p style="margin: 0; color: #92400E;">${block.content}</p></div>`;
+            case 'error-box':
+              return `<div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px;"><p style="margin: 0; color: #991B1B;">${block.content}</p></div>`;
+            case 'info-box':
+              return `<div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;"><p style="margin: 0; color: #1E40AF;">${block.content.replace(/\n/g, '<br>')}</p></div>`;
+            case 'button':
+              const colors: Record<string, string> = { primary: '#4F46E5', success: '#10B981', warning: '#F59E0B', danger: '#EF4444', gray: '#6B7280' };
+              const btnColor = colors[block.properties?.color || 'primary'];
+              return `<div style="text-align: center; margin: 30px 0;"><a href="${block.properties?.url || '{{linkUrl}}'}" style="display: inline-block; padding: 12px 30px; background-color: ${btnColor}; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">${block.content}</a></div>`;
+            case 'amount-display':
+              const styles: Record<string, { bg: string; label: string; amount: string }> = {
+                default: { bg: '#F3F4F6', label: '#6B7280', amount: '#111827' },
+                success: { bg: '#ECFDF5', label: '#065F46', amount: '#047857' },
+                warning: { bg: '#FEF3C7', label: '#92400E', amount: '#D97706' },
+              };
+              const style = styles[block.properties?.style || 'default'];
+              return `<div style="background-color: ${style.bg}; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;"><p style="margin: 0 0 5px 0; font-size: 14px; color: ${style.label};">${block.properties?.label || 'Amount'}</p><p style="margin: 0; font-size: 32px; font-weight: bold; color: ${style.amount};">${block.content}</p></div>`;
+            case 'details-table':
+              const rows = block.content.split('\n').filter((line: string) => line.includes(':'));
+              const tableRows = rows.map((row: string) => {
+                const [label, ...valueParts] = row.split(':');
+                const value = valueParts.join(':').trim();
+                return `<tr style="border-bottom: 1px solid #D1D5DB;"><td style="padding: 12px 0; color: #6B7280;">${label.trim()}</td><td style="padding: 12px 0; font-weight: 600; color: #111827; text-align: right;">${value}</td></tr>`;
+              }).join('');
+              return `<div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;"><table style="width: 100%; border-collapse: collapse;">${tableRows}</table></div>`;
+            case 'footer':
+              return `<div class="footer">${block.content.split('\n').map((l: string) => `<p>${l}</p>`).join('')}</div>`;
+            case 'numbered-list':
+              const items = block.content.split('\n').filter(Boolean).map((item: string) => `<li style="margin-bottom: 8px;">${item}</li>`).join('');
+              return `<ol style="margin: 15px 0; padding-left: 20px; color: #374151;">${items}</ol>`;
+            default:
+              return '';
+          }
+        };
+
+        const contentBlocks = data.blocks.filter(b => b.type !== 'footer');
+        const footerBlocks = data.blocks.filter(b => b.type === 'footer');
+
+        const bodyContent = contentBlocks.map(renderBlock).join('\n');
+        const footerContent = footerBlocks.length > 0
+          ? footerBlocks.map(renderBlock).join('\n')
+          : `<div class="footer"><p>This is an automated notification from AffiliateXchange.</p></div>`;
+
+        return `<!DOCTYPE html><html><head><style>${baseStyles}</style></head><body><div class="container"><div class="header"><h1 style="margin: 0;">${data.headerTitle}</h1></div><div class="content">${bodyContent}</div>${footerContent}</div></body></html>`;
+      };
+
+      let created = 0;
+
+      for (const [notificationType, templateData] of Object.entries(defaultTemplates)) {
+        const slug = getTemplateSlugForNotificationType(notificationType);
+        if (!slug) continue;
+
+        // Check if template already exists
+        const existing = await storage.getEmailTemplateBySlug(slug);
+        if (existing) continue;
+
+        // Get variables for this template
+        const variables = getAvailableVariablesForTemplate(slug);
+        const variableNames = variables.map(v => v.name);
+
+        // Create visual data structure
+        const visualData = {
+          blocks: templateData.blocks,
+          headerTitle: templateData.headerTitle,
+          headerColor: templateData.headerColor,
+        };
+
+        // Generate HTML
+        const htmlContent = generateHtmlFromBlocks(visualData);
+
+        // Create the template
+        await storage.createEmailTemplate({
+          name: templateData.name,
+          slug,
+          category: templateData.category as any,
+          subject: templateData.subject,
+          htmlContent,
+          visualData,
+          description: `Default template for ${templateData.name} notifications`,
+          availableVariables: variableNames,
+          isActive: true,
+          isSystem: true,
+          createdBy: userId,
+          updatedBy: userId,
+        });
+
+        created++;
+      }
+
+      res.json({ success: true, created, message: `Created ${created} default email templates` });
+    } catch (error: any) {
+      console.error('[Email Templates] Error initializing default templates:', error);
       res.status(500).send(error.message);
     }
   });
@@ -5321,10 +7375,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const objectStorageService = new ObjectStorageService();
     const folder = req.body.folder || undefined; // Optional folder parameter
     const resourceType = req.body.resourceType || 'auto'; // Optional resource type (image, video, auto)
+    const contentType = req.body.contentType || undefined; // Optional content type from client
+    const fileName = req.body.fileName || undefined; // Optional original filename
     console.log('[Upload API] Requested folder:', req.body.folder);
     console.log('[Upload API] Requested resourceType:', req.body.resourceType);
+    console.log('[Upload API] Requested contentType:', contentType);
+    console.log('[Upload API] Requested fileName:', fileName);
     console.log('[Upload API] Folder parameter passed to service:', folder);
-    const uploadParams = await objectStorageService.getObjectEntityUploadURL(folder, resourceType);
+    const uploadParams = await objectStorageService.getObjectEntityUploadURL(folder, resourceType, contentType, fileName);
     console.log('[Upload API] Upload params returned:', uploadParams);
     res.json(uploadParams);
   });
@@ -5338,9 +7396,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Endpoint to generate signed URL for reading an existing file
+  // Query params: download=true (forces download with Content-Disposition), name=filename (custom download name)
   app.get("/api/get-signed-url/:filename(*)", requireAuth, async (req, res) => {
     try {
       const filename = req.params.filename;
+      const isDownload = req.query.download === 'true';
+      const customName = req.query.name as string | undefined;
       const objectStorageService = new ObjectStorageService();
 
       // Import Storage from @google-cloud/storage
@@ -5372,18 +7433,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         gcsStorage = new Storage({ projectId });
       }
 
-      const options = {
+      // Determine content type based on file extension
+      const ext = filename.split('.').pop()?.toLowerCase();
+      const contentTypeMap: { [key: string]: string } = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mov': 'video/quicktime',
+      };
+      const contentType = contentTypeMap[ext || ''] || 'application/octet-stream';
+
+      // Build options with Content-Type and optional Content-Disposition
+      const options: any = {
         version: 'v4' as const,
         action: 'read' as const,
         expires: Date.now() + 60 * 60 * 1000, // 1 hour from now
+        responseContentType: contentType,
       };
+
+      // Set Content-Disposition based on mode
+      if (isDownload) {
+        const downloadName = customName || filename.split('/').pop() || 'download';
+        options.responseContentDisposition = `attachment; filename="${downloadName}"`;
+      } else {
+        // For viewing, set inline to display in browser
+        options.responseContentDisposition = 'inline';
+      }
 
       const [url] = await gcsStorage
         .bucket(bucketName)
         .file(filename)
         .getSignedUrl(options);
 
-      console.log('[Signed URL API] Generated signed URL for:', filename);
+      console.log('[Signed URL API] Generated signed URL for:', filename, isDownload ? '(download)' : '(view)', 'contentType:', contentType);
       res.json({ url });
     } catch (error: any) {
       console.error('Error generating signed URL:', error);
@@ -5918,11 +8005,8 @@ const monthlyAmount = parseFloat(contract.monthlyAmount);
 const videosPerMonth = contract.videosPerMonth || 1;
 const paymentPerVideo = monthlyAmount / videosPerMonth;
 
-// Calculate fees (platform 4%, processing 3%)
-const grossAmount = paymentPerVideo;
-const platformFeeAmount = grossAmount * 0.04;
-const processingFeeAmount = grossAmount * 0.03;
-const netAmount = grossAmount - platformFeeAmount - processingFeeAmount;
+// Calculate fees with per-company override support (Section 4.3.H)
+const retainerFees = await calculateFees(paymentPerVideo, contract.companyId);
 
 // Create payment for the approved deliverable with 'pending' status
 // This puts it in the admin queue for processing
@@ -5932,16 +8016,17 @@ const payment = await storage.createRetainerPayment({
   creatorId: deliverable.creatorId,
   companyId: contract.companyId,
   amount: paymentPerVideo.toFixed(2),
-  grossAmount: grossAmount.toFixed(2),
-  platformFeeAmount: platformFeeAmount.toFixed(2),
-  processingFeeAmount: processingFeeAmount.toFixed(2),
-  netAmount: netAmount.toFixed(2),
+  grossAmount: retainerFees.grossAmount.toFixed(2),
+  platformFeeAmount: retainerFees.platformFeeAmount.toFixed(2),
+  processingFeeAmount: retainerFees.stripeFeeAmount.toFixed(2),
+  netAmount: retainerFees.netAmount.toFixed(2),
   status: 'pending', // ✅ FIXED: Changed from 'completed' to 'pending' for admin review
   description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
   initiatedAt: new Date(),
 });
 
-console.log(`[Retainer Payment] Created pending payment of $${netAmount.toFixed(2)} (net) for creator ${deliverable.creatorId}`);
+const retainerFeeLabel = retainerFees.isCustomFee ? `Custom ${formatFeePercentage(retainerFees.platformFeePercentage)}` : formatFeePercentage(DEFAULT_PLATFORM_FEE_PERCENTAGE);
+console.log(`[Retainer Payment] Created pending payment of $${retainerFees.netAmount.toFixed(2)} (net) for creator ${deliverable.creatorId} - Platform Fee: ${retainerFeeLabel}`);
 
 // 🆕 SEND NOTIFICATION TO CREATOR ABOUT PENDING PAYMENT
 const creatorUser = await storage.getUserById(deliverable.creatorId);
@@ -5950,11 +8035,11 @@ if (creatorUser) {
     deliverable.creatorId,
     'payment_pending',
     'Deliverable Approved - Payment Pending 💰',
-    `Your deliverable for "${contract.title}" has been approved! Payment of $${netAmount.toFixed(2)} is pending admin processing.`,
+    `Your deliverable for "${contract.title}" has been approved! Payment of $${retainerFees.netAmount.toFixed(2)} is pending admin processing.`,
     {
       userName: creatorUser.firstName || creatorUser.username,
       offerTitle: contract.title,
-      amount: `$${netAmount.toFixed(2)}`,
+      amount: `$${retainerFees.netAmount.toFixed(2)}`,
       paymentId: payment.id,
     }
   );
@@ -5969,10 +8054,10 @@ for (const admin of adminUsers) {
     admin.id,
     'payment_pending',
     'New Retainer Payment Ready for Processing',
-    `A retainer payment of $${netAmount.toFixed(2)} for creator ${creatorUser?.username || 'Unknown'} on "${contract.title}" is ready for processing.`,
+    `A retainer payment of $${retainerFees.netAmount.toFixed(2)} for creator ${creatorUser?.username || 'Unknown'} on "${contract.title}" is ready for processing.`,
     {
       offerTitle: contract.title,
-      amount: `$${netAmount.toFixed(2)}`,
+      amount: `$${retainerFees.netAmount.toFixed(2)}`,
       paymentId: payment.id,
     }
   );
@@ -6164,6 +8249,14 @@ res.json(approved);
             attachments: message.attachments || [],
           });
 
+          // Auto-moderate message for banned content
+          try {
+            await moderateMessage(savedMessage.id, storage);
+          } catch (moderationError) {
+            console.error('[WebSocket] Error auto-moderating message:', moderationError);
+            // Don't fail the message if moderation fails
+          }
+
           // Find all participants in the conversation
           const conversation = await storage.getConversation(message.conversationId);
           const companyProfile = conversation?.companyId
@@ -6323,6 +8416,151 @@ res.json(approved);
 
   // Run once immediately on startup
   runAutoApprovalScheduler();
+
+  // ============ Platform Health Monitoring Endpoints (Section 4.3.G) ============
+
+  // Get comprehensive platform health report
+  app.get("/api/admin/platform-health", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const report = await getPlatformHealthReport();
+      res.json(report);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting health report:', error);
+      res.status(500).json({ error: "Failed to get platform health report", details: error.message });
+    }
+  });
+
+  // Get latest health snapshot
+  app.get("/api/admin/platform-health/snapshot", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const snapshot = await getLatestHealthSnapshot();
+      res.json(snapshot || { message: "No health snapshots available" });
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting snapshot:', error);
+      res.status(500).json({ error: "Failed to get health snapshot", details: error.message });
+    }
+  });
+
+  // Get API metrics summary
+  app.get("/api/admin/platform-health/api-metrics", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const hours = parseInt(req.query.hours as string) || 24;
+      const metrics = await getRecentApiMetrics(hours);
+      res.json(metrics);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting API metrics:', error);
+      res.status(500).json({ error: "Failed to get API metrics", details: error.message });
+    }
+  });
+
+  // Get API metrics time series for charts
+  app.get("/api/admin/platform-health/api-metrics/timeseries", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 7;
+      const timeSeries = await getApiMetricsTimeSeries(days);
+      res.json(timeSeries);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting API metrics time series:', error);
+      res.status(500).json({ error: "Failed to get API metrics time series", details: error.message });
+    }
+  });
+
+  // Get storage metrics
+  app.get("/api/admin/platform-health/storage", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const storage = await calculateStorageUsage();
+      res.json(storage);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting storage metrics:', error);
+      res.status(500).json({ error: "Failed to get storage metrics", details: error.message });
+    }
+  });
+
+  // Get storage metrics time series
+  app.get("/api/admin/platform-health/storage/timeseries", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const timeSeries = await getStorageMetricsTimeSeries(days);
+      res.json(timeSeries);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting storage time series:', error);
+      res.status(500).json({ error: "Failed to get storage time series", details: error.message });
+    }
+  });
+
+  // Get video hosting costs
+  app.get("/api/admin/platform-health/video-costs", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const costs = await calculateVideoHostingCosts();
+      res.json(costs);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting video costs:', error);
+      res.status(500).json({ error: "Failed to get video costs", details: error.message });
+    }
+  });
+
+  // Get video costs time series
+  app.get("/api/admin/platform-health/video-costs/timeseries", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const timeSeries = await getVideoCostsTimeSeries(days);
+      res.json(timeSeries);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting video costs time series:', error);
+      res.status(500).json({ error: "Failed to get video costs time series", details: error.message });
+    }
+  });
+
+  // Get recent error logs
+  app.get("/api/admin/platform-health/errors", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const errors = await getRecentErrorLogs(limit);
+      res.json(errors);
+    } catch (error: any) {
+      console.error('[Platform Health] Error getting error logs:', error);
+      res.status(500).json({ error: "Failed to get error logs", details: error.message });
+    }
+  });
+
+  // Manually trigger health snapshot (for testing/admin)
+  app.post("/api/admin/platform-health/snapshot", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      await createHealthSnapshot();
+      const snapshot = await getLatestHealthSnapshot();
+      res.json({ message: "Health snapshot created", snapshot });
+    } catch (error: any) {
+      console.error('[Platform Health] Error creating snapshot:', error);
+      res.status(500).json({ error: "Failed to create health snapshot", details: error.message });
+    }
+  });
+
+  // Manually trigger metrics flush (for testing/admin)
+  app.post("/api/admin/platform-health/flush-metrics", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      await flushMetrics();
+      res.json({ message: "Metrics flushed successfully" });
+    } catch (error: any) {
+      console.error('[Platform Health] Error flushing metrics:', error);
+      res.status(500).json({ error: "Failed to flush metrics", details: error.message });
+    }
+  });
+
+  // Manually record daily metrics (for testing/admin)
+  app.post("/api/admin/platform-health/record-daily", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      await Promise.all([
+        recordDailyStorageMetrics(),
+        recordDailyVideoCosts(),
+      ]);
+      res.json({ message: "Daily metrics recorded successfully" });
+    } catch (error: any) {
+      console.error('[Platform Health] Error recording daily metrics:', error);
+      res.status(500).json({ error: "Failed to record daily metrics", details: error.message });
+    }
+  });
+
+  // ============ End Platform Health Monitoring Endpoints ============
 
   // Debug endpoint to check database URLs
   app.get("/api/admin/debug-urls", requireAuth, async (req, res) => {

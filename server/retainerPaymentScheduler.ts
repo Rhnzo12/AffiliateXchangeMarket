@@ -3,6 +3,7 @@
 
 import { storage } from "./storage";
 import { paymentProcessor } from "./paymentProcessor";
+import { calculateFees, formatFeePercentage, DEFAULT_PLATFORM_FEE_PERCENTAGE } from "./feeCalculator";
 import type { NotificationService } from "./notifications/notificationService";
 
 export class RetainerPaymentScheduler {
@@ -130,11 +131,8 @@ export class RetainerPaymentScheduler {
 
     const monthlyAmount = parseFloat(contract.monthlyAmount);
 
-    // Calculate fees (4% platform fee, 3% processing fee)
-    const grossAmount = monthlyAmount;
-    const platformFeeAmount = grossAmount * 0.04;
-    const processingFeeAmount = grossAmount * 0.03;
-    const netAmount = grossAmount - platformFeeAmount - processingFeeAmount;
+    // Calculate fees with per-company override support (Section 4.3.H)
+    const fees = await calculateFees(monthlyAmount, contract.companyId);
 
     // Create the payment record
     const payment = await storage.createRetainerPayment({
@@ -144,17 +142,18 @@ export class RetainerPaymentScheduler {
       companyId: contract.companyId,
       monthNumber: monthNumber,
       paymentType: 'monthly',
-      grossAmount: grossAmount.toFixed(2),
-      platformFeeAmount: platformFeeAmount.toFixed(2),
-      processingFeeAmount: processingFeeAmount.toFixed(2),
-      netAmount: netAmount.toFixed(2),
-      amount: grossAmount.toFixed(2), // For backwards compatibility
+      grossAmount: fees.grossAmount.toFixed(2),
+      platformFeeAmount: fees.platformFeeAmount.toFixed(2),
+      processingFeeAmount: fees.stripeFeeAmount.toFixed(2),
+      netAmount: fees.netAmount.toFixed(2),
+      amount: fees.grossAmount.toFixed(2), // For backwards compatibility
       status: 'pending',
       description: `Monthly retainer payment for ${contract.title} - Month ${monthNumber}`,
       initiatedAt: new Date(),
     });
 
-    console.log(`[Retainer Scheduler] Created payment ${payment.id} of $${netAmount.toFixed(2)} (net)`);
+    const feeLabel = fees.isCustomFee ? `Custom ${formatFeePercentage(fees.platformFeePercentage)}` : formatFeePercentage(DEFAULT_PLATFORM_FEE_PERCENTAGE);
+    console.log(`[Retainer Scheduler] Created payment ${payment.id} of $${fees.netAmount.toFixed(2)} (net) - Platform Fee: ${feeLabel}`);
 
     // Validate creator has payment settings
     const validation = await paymentProcessor.validateCreatorPaymentSettings(contract.assignedCreatorId);
@@ -171,7 +170,7 @@ export class RetainerPaymentScheduler {
         contract.assignedCreatorId,
         'payment_pending',
         'Payment Method Required',
-        `Your monthly retainer payment of $${netAmount.toFixed(2)} for "${contract.title}" is pending. Please configure your payment method to receive funds.`,
+        `Your monthly retainer payment of $${fees.netAmount.toFixed(2)} for "${contract.title}" is pending. Please configure your payment method to receive funds.`,
         {
           linkUrl: '/settings/payment',
         }
@@ -200,14 +199,14 @@ export class RetainerPaymentScheduler {
           contract.assignedCreatorId,
           'payment_received',
           'Monthly Retainer Payment Received! 💰',
-          `$${netAmount.toFixed(2)} has been sent to your payment method for month ${monthNumber} of "${contract.title}". Transaction ID: ${paymentResult.transactionId}`,
+          `$${fees.netAmount.toFixed(2)} has been sent to your payment method for month ${monthNumber} of "${contract.title}". Transaction ID: ${paymentResult.transactionId}`,
           {
             userName: creator.firstName || creator.username,
             offerTitle: contract.title,
-            amount: `$${netAmount.toFixed(2)}`,
-            grossAmount: `$${grossAmount.toFixed(2)}`,
-            platformFee: `$${platformFeeAmount.toFixed(2)}`,
-            processingFee: `$${processingFeeAmount.toFixed(2)}`,
+            amount: `$${fees.netAmount.toFixed(2)}`,
+            grossAmount: `$${fees.grossAmount.toFixed(2)}`,
+            platformFee: `$${fees.platformFeeAmount.toFixed(2)}`,
+            processingFee: `$${fees.stripeFeeAmount.toFixed(2)}`,
             transactionId: paymentResult.transactionId,
             paymentId: payment.id,
             linkUrl: `/payments/${payment.id}`,

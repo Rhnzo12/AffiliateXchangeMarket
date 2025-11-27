@@ -25,7 +25,11 @@ import {
   FileText,
   Globe,
   Shield,
-  CreditCard
+  CreditCard,
+  Plus,
+  Trash2,
+  Eye,
+  Download
 } from "lucide-react";
 
 const STEPS = [
@@ -62,6 +66,14 @@ const INDUSTRIES = [
   { value: "other", label: "Other" },
 ];
 
+type VerificationDocument = {
+  id: string;
+  documentUrl: string;
+  documentName: string;
+  documentType: string;
+  fileSize: number | null;
+};
+
 export default function CompanyOnboarding() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -90,7 +102,7 @@ export default function CompanyOnboarding() {
   const [businessAddress, setBusinessAddress] = useState("");
 
   // Step 3: Verification
-  const [verificationDocumentUrl, setVerificationDocumentUrl] = useState("");
+  const [verificationDocuments, setVerificationDocuments] = useState<VerificationDocument[]>([]);
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [twitterUrl, setTwitterUrl] = useState("");
   const [facebookUrl, setFacebookUrl] = useState("");
@@ -226,6 +238,15 @@ export default function CompanyOnboarding() {
       return;
     }
 
+    // Check max documents limit
+    if (verificationDocuments.length >= 5) {
+      setErrorDialog({
+        title: "Maximum Documents Reached",
+        message: "You can upload a maximum of 5 verification documents",
+      });
+      return;
+    }
+
     setIsUploadingDocument(true);
 
     try {
@@ -237,7 +258,9 @@ export default function CompanyOnboarding() {
         },
         body: JSON.stringify({
           folder: user?.id ? `verification-documents/${user.id}` : "verification-documents",
-          resourceType: file.type === 'application/pdf' ? 'raw' : 'image'
+          resourceType: file.type === 'application/pdf' ? 'raw' : 'image',
+          contentType: file.type, // Pass actual file content type
+          fileName: file.name // Pass original filename to preserve extension
         }),
       });
 
@@ -264,7 +287,20 @@ export default function CompanyOnboarding() {
 
       // Construct the public URL from the upload response
       const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
-      setVerificationDocumentUrl(uploadedUrl);
+
+      // Determine document type
+      const documentType = file.type === 'application/pdf' ? 'pdf' : 'image';
+
+      // Add to documents array with a temporary ID
+      const newDocument: VerificationDocument = {
+        id: `temp-${Date.now()}`,
+        documentUrl: uploadedUrl,
+        documentName: file.name,
+        documentType,
+        fileSize: file.size,
+      };
+
+      setVerificationDocuments(prev => [...prev, newDocument]);
 
       toast({
         title: "Success!",
@@ -278,7 +314,83 @@ export default function CompanyOnboarding() {
       });
     } finally {
       setIsUploadingDocument(false);
+      // Reset the input so the same file can be uploaded again if needed
+      event.target.value = '';
     }
+  };
+
+  const handleRemoveDocument = (documentId: string) => {
+    setVerificationDocuments(prev => prev.filter(doc => doc.id !== documentId));
+  };
+
+  const handleViewDocument = async (documentUrl: string) => {
+    try {
+      // Extract the file path from the GCS URL
+      const url = new URL(documentUrl);
+      const pathParts = url.pathname.split('/');
+      const filePath = pathParts.slice(2).join('/');
+
+      // Fetch signed URL from the API
+      const response = await fetch(`/api/get-signed-url/${filePath}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get document access');
+      }
+
+      const data = await response.json();
+      window.open(data.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      console.error('Error viewing document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to view document. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownloadDocument = async (documentUrl: string, documentName: string) => {
+    try {
+      // Extract the file path from the GCS URL
+      const url = new URL(documentUrl);
+      const pathParts = url.pathname.split('/');
+      const filePath = pathParts.slice(2).join('/');
+
+      // Fetch signed URL with download flag from the API
+      const response = await fetch(`/api/get-signed-url/${filePath}?download=true&name=${encodeURIComponent(documentName)}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get download URL');
+      }
+
+      const data = await response.json();
+
+      // Create a temporary link and trigger download
+      const link = document.createElement('a');
+      link.href = data.url;
+      link.download = documentName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      toast({
+        title: "Error",
+        description: "Failed to download document. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatFileSize = (bytes: number | null): string => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const validateStep = (step: number): boolean => {
@@ -346,10 +458,10 @@ export default function CompanyOnboarding() {
         return true;
 
       case 3:
-        if (!verificationDocumentUrl) {
+        if (verificationDocuments.length === 0) {
           setErrorDialog({
             title: "Verification Required",
-            message: "Please upload a business registration certificate or Tax ID document",
+            message: "Please upload at least one verification document (business registration certificate or Tax ID document)",
           });
           return false;
         }
@@ -428,6 +540,9 @@ export default function CompanyOnboarding() {
     setIsSubmitting(true);
 
     try {
+      // Use the first document URL for backward compatibility with existing schema
+      const firstDocumentUrl = verificationDocuments.length > 0 ? verificationDocuments[0].documentUrl : null;
+
       const payload = {
         legalName: legalName.trim(),
         tradeName: tradeName.trim() || null,
@@ -441,7 +556,7 @@ export default function CompanyOnboarding() {
         contactJobTitle: contactJobTitle.trim() || null,
         phoneNumber: phoneNumber.trim(),
         businessAddress: businessAddress.trim(),
-        verificationDocumentUrl,
+        verificationDocumentUrl: firstDocumentUrl,
         linkedinUrl: linkedinUrl.trim() || null,
         twitterUrl: twitterUrl.trim() || null,
         facebookUrl: facebookUrl.trim() || null,
@@ -460,6 +575,28 @@ export default function CompanyOnboarding() {
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to submit onboarding");
+      }
+
+      // Save all verification documents to the new table
+      for (const doc of verificationDocuments) {
+        try {
+          await fetch("/api/company/verification-documents", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              documentUrl: doc.documentUrl,
+              documentName: doc.documentName,
+              documentType: doc.documentType,
+              fileSize: doc.fileSize,
+            }),
+          });
+        } catch (docError) {
+          console.error("Error saving verification document:", docError);
+          // Continue with other documents even if one fails
+        }
       }
 
       toast({
@@ -759,38 +896,85 @@ export default function CompanyOnboarding() {
               </AlertDescription>
             </Alert>
 
-            <div className="space-y-2">
-              <Label>
-                Verification Document <span className="text-red-500">*</span>
-              </Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Upload one of the following:
-              </p>
-              <ul className="text-xs text-muted-foreground list-disc list-inside mb-3 space-y-1">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>
+                    Verification Documents <span className="text-red-500">*</span>
+                  </Label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Upload one or more of the following (max 5 documents):
+                  </p>
+                </div>
+                <Badge variant="outline">
+                  {verificationDocuments.length}/5
+                </Badge>
+              </div>
+
+              <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
                 <li>Business registration certificate</li>
                 <li>EIN/Tax ID document</li>
                 <li>Certificate of incorporation</li>
+                <li>Business license</li>
+                <li>Other supporting documents</li>
               </ul>
 
-              {verificationDocumentUrl ? (
-                <div className="relative">
-                  <div className="flex items-center gap-3 p-4 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200">
-                    <FileText className="h-8 w-8 text-green-600" />
-                    <div className="flex-1">
-                      <p className="font-medium text-green-900 dark:text-green-100">Document Uploaded</p>
-                      <p className="text-sm text-green-700 dark:text-green-300">Verification document ready for review</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setVerificationDocumentUrl("")}
+              {/* Uploaded Documents List */}
+              {verificationDocuments.length > 0 && (
+                <div className="space-y-2">
+                  {verificationDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center gap-3 p-3 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200"
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
+                      <FileText className="h-6 w-6 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-green-900 dark:text-green-100 truncate">
+                          {doc.documentName}
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300">
+                          {doc.documentType.toUpperCase()} • {formatFileSize(doc.fileSize)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleViewDocument(doc.documentUrl)}
+                          title="View document"
+                        >
+                          <Eye className="h-4 w-4 text-green-600" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleDownloadDocument(doc.documentUrl, doc.documentName)}
+                          title="Download document"
+                        >
+                          <Download className="h-4 w-4 text-blue-600" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleRemoveDocument(doc.id)}
+                          title="Delete document"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ) : (
+              )}
+
+              {/* Upload Area */}
+              {verificationDocuments.length < 5 && (
                 <div className="relative">
                   <input
                     type="file"
@@ -802,26 +986,28 @@ export default function CompanyOnboarding() {
                   />
                   <label
                     htmlFor="document-upload"
-                    className={`border-2 border-dashed rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer block ${
+                    className={`border-2 border-dashed rounded-lg p-6 text-center hover:border-primary transition-colors cursor-pointer block ${
                       isUploadingDocument ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
                     <div className="flex flex-col items-center gap-2">
                       {isUploadingDocument ? (
                         <>
-                          <Upload className="h-8 w-8 text-blue-600 animate-pulse" />
+                          <Upload className="h-6 w-6 text-blue-600 animate-pulse" />
                           <div className="text-sm font-medium text-blue-600">
                             Uploading Document...
                           </div>
                         </>
                       ) : (
                         <>
-                          <FileText className="h-8 w-8 text-primary" />
+                          <Plus className="h-6 w-6 text-primary" />
                           <div className="text-sm font-medium">
-                            Click to upload verification document
+                            {verificationDocuments.length === 0
+                              ? "Click to upload verification document"
+                              : "Add another document"}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            PDF, JPG, PNG (max 10MB)
+                            PDF, JPG, PNG (max 10MB per file)
                           </div>
                         </>
                       )}
@@ -1113,10 +1299,20 @@ export default function CompanyOnboarding() {
                   <Shield className="h-4 w-4" />
                   Verification
                 </h3>
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2 text-sm mb-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
-                  <span>Verification document uploaded</span>
+                  <span>{verificationDocuments.length} verification document{verificationDocuments.length !== 1 ? 's' : ''} uploaded</span>
                 </div>
+                {verificationDocuments.length > 0 && (
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {verificationDocuments.map((doc) => (
+                      <div key={doc.id} className="flex items-center gap-2">
+                        <FileText className="h-3 w-3" />
+                        <span className="truncate">{doc.documentName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {(linkedinUrl || twitterUrl || facebookUrl || instagramUrl) && (
                   <div className="mt-3 pt-3 border-t">
                     <p className="text-sm font-medium mb-2">Social Media:</p>

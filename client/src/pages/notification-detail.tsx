@@ -107,6 +107,8 @@ export default function NotificationDetail() {
         const grossAmount = meta.grossAmount;
         const platformFee = meta.platformFee;
         const processingFee = meta.processingFee;
+        const platformFeePercentage = meta.platformFeePercentage || '4%';
+        const processingFeePercentage = meta.processingFeePercentage || '3%';
         const transactionId = meta.transactionId;
         const isApproved = n.type === 'payment_approved';
         const hasBreakdown = grossAmount && platformFee && processingFee;
@@ -145,11 +147,11 @@ export default function NotificationDetail() {
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{grossAmount}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-red-600 dark:text-red-400">Platform Fee (4%)</span>
+                    <span className="text-red-600 dark:text-red-400">Platform Fee ({platformFeePercentage})</span>
                     <span className="font-semibold text-red-600 dark:text-red-400">-{platformFee}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-red-600 dark:text-red-400">Processing Fee (3%)</span>
+                    <span className="text-red-600 dark:text-red-400">Processing Fee ({processingFeePercentage})</span>
                     <span className="font-semibold text-red-600 dark:text-red-400">-{processingFee}</span>
                   </div>
                   <div className="pt-2 border-t border-gray-300 dark:border-gray-700 flex justify-between">
@@ -164,7 +166,7 @@ export default function NotificationDetail() {
             {hasBreakdown && (
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>💡 How fees work:</strong> Platform fee (4%) and processing fee (3%) are automatically deducted from your gross earnings. The net amount is what you receive in your payment method.
+                  <strong>💡 How fees work:</strong> Platform fee ({platformFeePercentage}) and processing fee ({processingFeePercentage}) are automatically deducted from your gross earnings. The net amount is what you receive in your payment method.
                 </p>
               </div>
             )}
@@ -538,6 +540,190 @@ export default function NotificationDetail() {
               )}
             </div>
           );
+        }
+      }
+
+      case "content_flagged": {
+        const contentType = meta.contentType || 'content';
+        const contentId = meta.contentId;
+        const flagId = meta.flagId;
+        const flaggedUserId = meta.flaggedUserId;
+        const matchedKeywords = meta.matchedKeywords || [];
+        const moderationUrl = meta.moderationUrl;
+        const reviewStatus = meta.reviewStatus;
+        const actionTaken = meta.actionTaken;
+        const reason = meta.reason;
+
+        // Check if this is for admin (has flaggedUserId) or for user
+        const isAdminNotification = !!flaggedUserId;
+
+        // Determine notification status based on metadata
+        const isReviewComplete = reviewStatus && reviewStatus !== 'pending';
+
+        if (isAdminNotification) {
+          // Admin notification - content was flagged for review
+          return (
+            <div className="space-y-4">
+              <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+                <h3 className="font-semibold text-orange-900 dark:text-orange-100 mb-2">
+                  ⚠️ Content Flagged for Review
+                </h3>
+                <p className="text-orange-800 dark:text-orange-200">{n.message}</p>
+              </div>
+
+              {/* Content Details */}
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-3">
+                <h4 className="font-semibold text-gray-900 dark:text-gray-100">Flag Details</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 dark:text-gray-400">Content Type</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{contentType}</span>
+                  </div>
+                  {contentId && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Content ID</span>
+                      <span className="font-mono text-xs text-gray-900 dark:text-gray-100">{contentId}</span>
+                    </div>
+                  )}
+                  {flagId && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">Flag ID</span>
+                      <span className="font-mono text-xs text-gray-900 dark:text-gray-100">{flagId}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Matched Keywords */}
+              {matchedKeywords.length > 0 && (
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2">
+                    Matched Keywords
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {matchedKeywords.map((keyword: string, idx: number) => (
+                      <span
+                        key={idx}
+                        className="px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 rounded text-sm"
+                      >
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Required */}
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <h4 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
+                  Action Required
+                </h4>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Please review this flagged content and take appropriate action. You can view all flagged content
+                  in the Content Moderation dashboard.
+                </p>
+              </div>
+
+              {/* Go to Moderation Dashboard */}
+              {moderationUrl && (
+                <Link href={moderationUrl}>
+                  <Button className="w-full bg-orange-600 hover:bg-orange-700">
+                    Go to Content Moderation
+                  </Button>
+                </Link>
+              )}
+            </div>
+          );
+        } else {
+          // User notification - their content was flagged or review is complete
+          if (isReviewComplete) {
+            // Review completed
+            const statusColor = reviewStatus === 'dismissed'
+              ? 'green'
+              : reviewStatus === 'action_taken'
+              ? 'red'
+              : 'blue';
+
+            return (
+              <div className="space-y-4">
+                <div className={`bg-${statusColor}-50 dark:bg-${statusColor}-950/20 border border-${statusColor}-200 dark:border-${statusColor}-800 rounded-lg p-4`}
+                  style={{
+                    backgroundColor: statusColor === 'green' ? 'rgb(240 253 244)' : statusColor === 'red' ? 'rgb(254 242 242)' : 'rgb(239 246 255)',
+                    borderColor: statusColor === 'green' ? 'rgb(187 247 208)' : statusColor === 'red' ? 'rgb(254 202 202)' : 'rgb(191 219 254)',
+                  }}
+                >
+                  <h3 className="font-semibold mb-2"
+                    style={{
+                      color: statusColor === 'green' ? 'rgb(20 83 45)' : statusColor === 'red' ? 'rgb(127 29 29)' : 'rgb(30 58 138)',
+                    }}
+                  >
+                    {reviewStatus === 'dismissed' ? '✓ No Issues Found' : reviewStatus === 'action_taken' ? '⚠️ Action Taken' : '📋 Review Complete'}
+                  </h3>
+                  <p style={{
+                    color: statusColor === 'green' ? 'rgb(22 101 52)' : statusColor === 'red' ? 'rgb(153 27 27)' : 'rgb(30 64 175)',
+                  }}>
+                    {n.message}
+                  </p>
+                </div>
+
+                {/* Action Taken Details */}
+                {actionTaken && reviewStatus === 'action_taken' && (
+                  <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <h4 className="font-semibold text-red-900 dark:text-red-100 mb-2">
+                      Action Taken
+                    </h4>
+                    <p className="text-red-800 dark:text-red-200">{actionTaken}</p>
+                  </div>
+                )}
+
+                {/* Content Type */}
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <strong>Content Type:</strong> <span className="capitalize">{contentType}</span>
+                </div>
+              </div>
+            );
+          } else {
+            // Content flagged - pending review
+            return (
+              <div className="space-y-4">
+                <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                  <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
+                    ⏳ Content Under Review
+                  </h3>
+                  <p className="text-yellow-800 dark:text-yellow-200">{n.message}</p>
+                </div>
+
+                {/* Reason */}
+                {(reason || matchedKeywords.length > 0) && (
+                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                      Reason for Review
+                    </h4>
+                    <p className="text-gray-700 dark:text-gray-300">
+                      {matchedKeywords.length > 0 ? matchedKeywords.join(', ') : reason || 'Potential policy violation'}
+                    </p>
+                  </div>
+                )}
+
+                {/* What happens next */}
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                    What happens next?
+                  </h4>
+                  <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-200 text-sm">
+                    <li>Our moderation team will review your content</li>
+                    <li>You will be notified once the review is complete</li>
+                    <li>If any action is required, we will provide detailed information</li>
+                  </ul>
+                </div>
+
+                {/* Content Type */}
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <strong>Content Type:</strong> <span className="capitalize">{contentType}</span>
+                </div>
+              </div>
+            );
+          }
         }
       }
 

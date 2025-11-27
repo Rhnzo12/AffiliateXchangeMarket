@@ -1,9 +1,52 @@
 import { Filter } from 'bad-words';
 import { db } from '../db';
-import { bannedKeywords, contentFlags, reviews, messages, notifications } from '../../shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { bannedKeywords, contentFlags, reviews, messages, notifications, users } from '../../shared/schema';
+import { eq, and, count } from 'drizzle-orm';
+import { NotificationService } from '../notifications/notificationService';
+import type { DatabaseStorage } from '../storage';
 
 const profanityFilter = new Filter();
+
+// Default keywords to seed if table is empty
+const defaultKeywords = [
+  { keyword: 'scam', category: 'spam' as const, severity: 4, description: 'Potential scam-related content' },
+  { keyword: 'fraud', category: 'legal' as const, severity: 5, description: 'Fraud-related term' },
+  { keyword: 'guaranteed money', category: 'spam' as const, severity: 3, description: 'Misleading financial claims' },
+  { keyword: 'get rich quick', category: 'spam' as const, severity: 3, description: 'Misleading financial claims' },
+  { keyword: 'free money', category: 'spam' as const, severity: 3, description: 'Spam-like promotional content' },
+  { keyword: 'testbadword', category: 'custom' as const, severity: 2, description: 'Test keyword for moderation testing' },
+];
+
+/**
+ * Initialize moderation system with default keywords if none exist
+ */
+export async function initializeModerationKeywords(): Promise<void> {
+  try {
+    const result = await db.select({ count: count() }).from(bannedKeywords);
+    const keywordCount = result[0]?.count || 0;
+
+    if (keywordCount === 0) {
+      console.log('[Moderation] No banned keywords found, seeding defaults...');
+
+      for (const kw of defaultKeywords) {
+        await db.insert(bannedKeywords).values({
+          keyword: kw.keyword,
+          category: kw.category,
+          severity: kw.severity,
+          description: kw.description,
+          isActive: true,
+        });
+      }
+
+      console.log(`[Moderation] Seeded ${defaultKeywords.length} default banned keywords`);
+    } else {
+      console.log(`[Moderation] Found ${keywordCount} existing banned keywords`);
+    }
+  } catch (error) {
+    console.error('[Moderation] Error initializing keywords:', error);
+    // Don't throw - let the app continue even if seeding fails
+  }
+}
 
 interface CheckContentResult {
   isFlagged: boolean;
@@ -63,53 +106,77 @@ export async function checkContent(
 }
 
 /**
- * Flag content and create notification for admins
+ * Flag content and create notification for admins and notify the user
  */
 export async function flagContent(
   contentType: 'message' | 'review',
   contentId: string,
   userId: string,
   reason: string,
-  matchedKeywords: string[] = []
+  matchedKeywords: string[] = [],
+  storage?: DatabaseStorage
 ): Promise<void> {
   // Create content flag
-  await db.insert(contentFlags).values({
+  const [flag] = await db.insert(contentFlags).values({
     contentType,
     contentId,
     userId,
     flagReason: reason,
     matchedKeywords,
     status: 'pending',
-  });
+  }).returning();
 
   // Get all admin users to notify
   const admins = await db.query.users.findMany({
     where: (users, { eq }) => eq(users.role, 'admin'),
   });
 
-  // Create notifications for all admins
+  // Create notifications for all admins - link to notification detail page
   for (const admin of admins) {
     await db.insert(notifications).values({
       userId: admin.id,
       type: 'content_flagged',
       title: 'Content Flagged for Review',
       message: `A ${contentType} has been flagged for moderation: ${reason}`,
-      linkUrl: `/admin/moderation/${contentType}/${contentId}`,
+      linkUrl: `/notifications`,
       metadata: {
         contentType,
         contentId,
+        flagId: flag.id,
         flaggedUserId: userId,
         matchedKeywords,
+        moderationUrl: `/admin/moderation`,
       },
       isRead: false,
     });
+  }
+
+  // Notify the user whose content was flagged
+  if (storage) {
+    const notificationService = new NotificationService(storage);
+    const keywordsList = matchedKeywords.length > 0
+      ? matchedKeywords.join(', ')
+      : 'inappropriate content';
+
+    await notificationService.sendNotification(
+      userId,
+      'content_flagged',
+      'Content Under Review',
+      `Your ${contentType} has been flagged for review due to: ${keywordsList}. Our moderation team will review it shortly.`,
+      {
+        contentType,
+        contentId,
+        matchedKeywords,
+        reason,
+      }
+    );
   }
 }
 
 /**
  * Check and flag a review if it meets flagging criteria
  */
-export async function moderateReview(reviewId: string): Promise<void> {
+export async function moderateReview(reviewId: string, storage?: DatabaseStorage): Promise<void> {
   const review = await db.query.reviews.findFirst({
     where: eq(reviews.id, reviewId),
   });
@@ -119,11 +186,10 @@ export async function moderateReview(reviewId: string): Promise<void> {
   }
 
   const reasons: string[] = [];
-  let shouldFlag = false;
+  let matchedKeywords: string[] = [];
 
   // Check for low rating (1-2 stars)
   if (review.overallRating <= 2) {
-    shouldFlag = true;
     reasons.push('Low rating (1-2 stars)');
   }
 
@@ -131,28 +197,20 @@ export async function moderateReview(reviewId: string): Promise<void> {
   if (review.reviewText) {
     const contentCheck = await checkContent(review.reviewText, 'review');
     if (contentCheck.isFlagged) {
-      shouldFlag = true;
       reasons.push(...contentCheck.reasons);
-
-      if (contentCheck.matchedKeywords.length > 0) {
-        await flagContent(
-          'review',
-          reviewId,
-          review.creatorId,
-          reasons.join(', '),
-          contentCheck.matchedKeywords
-        );
-      }
+      matchedKeywords = contentCheck.matchedKeywords;
     }
   }
 
-  // If flagged but no keywords, still create flag
-  if (shouldFlag && reasons.length > 0 && !review.reviewText) {
+  // Flag if any reasons found
+  if (reasons.length > 0) {
     await flagContent(
       'review',
       reviewId,
       review.creatorId,
-      reasons.join(', ')
+      reasons.join(', '),
+      matchedKeywords,
+      storage
     );
   }
 }
@@ -160,38 +218,64 @@ export async function moderateReview(reviewId: string): Promise<void> {
 /**
  * Check and flag a message if it contains banned content
  */
-export async function moderateMessage(messageId: string): Promise<void> {
+export async function moderateMessage(messageId: string, storage?: DatabaseStorage): Promise<void> {
+  console.log(`[Moderation] Checking message: ${messageId}`);
+
   const message = await db.query.messages.findFirst({
     where: eq(messages.id, messageId),
   });
 
-  if (!message || !message.content) {
+  if (!message) {
+    console.log(`[Moderation] Message not found: ${messageId}`);
     return;
   }
 
+  if (!message.content) {
+    console.log(`[Moderation] Message has no content: ${messageId}`);
+    return;
+  }
+
+  console.log(`[Moderation] Checking content: "${message.content.substring(0, 50)}..."`);
   const contentCheck = await checkContent(message.content, 'message');
+  console.log(`[Moderation] Content check result:`, JSON.stringify(contentCheck));
 
   if (contentCheck.isFlagged) {
-    await flagContent(
-      'message',
-      messageId,
-      message.senderId,
-      contentCheck.reasons.join(', '),
-      contentCheck.matchedKeywords
-    );
+    console.log(`[Moderation] Flagging message ${messageId} - Reasons: ${contentCheck.reasons.join(', ')}`);
+    try {
+      await flagContent(
+        'message',
+        messageId,
+        message.senderId,
+        contentCheck.reasons.join(', '),
+        contentCheck.matchedKeywords,
+        storage
+      );
+      console.log(`[Moderation] Successfully flagged message ${messageId}`);
+    } catch (flagError) {
+      console.error(`[Moderation] Failed to flag message ${messageId}:`, flagError);
+      throw flagError;
+    }
+  } else {
+    console.log(`[Moderation] Message ${messageId} passed moderation check`);
   }
 }
 
 /**
- * Review a flagged content item
+ * Review a flagged content item and notify the user
  */
 export async function reviewFlaggedContent(
   flagId: string,
   adminId: string,
   status: 'reviewed' | 'dismissed' | 'action_taken',
   adminNotes?: string,
-  actionTaken?: string
+  actionTaken?: string,
+  storage?: DatabaseStorage
 ): Promise<void> {
+  // First get the flag to know which user to notify
+  const flag = await db.query.contentFlags.findFirst({
+    where: eq(contentFlags.id, flagId),
+  });
+
   await db
     .update(contentFlags)
     .set({
@@ -202,6 +286,45 @@ export async function reviewFlaggedContent(
       actionTaken,
     })
     .where(eq(contentFlags.id, flagId));
+
+  // Notify the user about the review outcome
+  if (flag && storage) {
+    const notificationService = new NotificationService(storage);
+
+    let title: string;
+    let message: string;
+
+    switch (status) {
+      case 'reviewed':
+        title = 'Content Review Complete';
+        message = `Your ${flag.contentType} has been reviewed by our moderation team. No action was taken.`;
+        break;
+      case 'dismissed':
+        title = 'Content Review Complete';
+        message = `Your ${flag.contentType} has been reviewed and the flag has been dismissed. No issues were found.`;
+        break;
+      case 'action_taken':
+        title = 'Content Moderation Notice';
+        message = `Your ${flag.contentType} has been reviewed and action has been taken${actionTaken ? `: ${actionTaken}` : '.'}`;
+        break;
+      default:
+        title = 'Content Review Update';
+        message = `Your ${flag.contentType} review status has been updated.`;
+    }
+
+    await notificationService.sendNotification(
+      flag.userId,
+      'content_flagged',
+      title,
+      message,
+      {
+        contentType: flag.contentType,
+        contentId: flag.contentId,
+        reviewStatus: status,
+        actionTaken,
+      }
+    );
+  }
 }
 
 /**

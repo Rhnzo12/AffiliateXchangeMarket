@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge";
 import { format } from "date-fns";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle,
   Clock,
@@ -56,37 +57,49 @@ async function fetchPaymentById(id?: string): Promise<Payment | null> {
 }
 
 const statusConfig = {
-  pending: { 
-    bg: "bg-yellow-100", 
-    text: "text-yellow-800", 
-    icon: Clock, 
-    label: "Pending Approval" 
+  pending: {
+    bg: "bg-yellow-100",
+    text: "text-yellow-800",
+    icon: Clock,
+    label: "Pending Approval"
   },
-  processing: { 
-    bg: "bg-blue-100", 
-    text: "text-blue-800", 
-    icon: Clock, 
-    label: "Processing" 
+  processing: {
+    bg: "bg-blue-100",
+    text: "text-blue-800",
+    icon: Clock,
+    label: "Processing"
   },
-  completed: { 
-    bg: "bg-green-100", 
-    text: "text-green-800", 
-    icon: CheckCircle, 
-    label: "Completed" 
+  completed: {
+    bg: "bg-green-100",
+    text: "text-green-800",
+    icon: CheckCircle,
+    label: "Completed"
   },
-  failed: { 
-    bg: "bg-red-100", 
-    text: "text-red-800", 
-    icon: XCircle, 
-    label: "Failed" 
+  failed: {
+    bg: "bg-red-100",
+    text: "text-red-800",
+    icon: XCircle,
+    label: "Failed"
   },
-  refunded: { 
-    bg: "bg-gray-100", 
-    text: "text-gray-800", 
-    icon: XCircle, 
-    label: "Refunded" 
+  refunded: {
+    bg: "bg-gray-100",
+    text: "text-gray-800",
+    icon: XCircle,
+    label: "Refunded"
+  },
+  disputed: {
+    bg: "bg-orange-100",
+    text: "text-orange-800",
+    icon: AlertTriangle,
+    label: "Disputed"
   },
 };
+
+// Helper to check if a payment is disputed
+function isDisputedPayment(payment: Payment): boolean {
+  return payment.status === "failed" &&
+    (payment.description?.toLowerCase().includes("disputed:") ?? false);
+}
 
 export default function PaymentDetail() {
   const [, params] = useRoute("/payments/:id");
@@ -127,13 +140,19 @@ export default function PaymentDetail() {
     );
   }
 
-  const statusInfo = statusConfig[payment.status];
+  // Use disputed status config if payment is disputed, otherwise use normal status
+  const statusKey = isDisputedPayment(payment) ? "disputed" : payment.status;
+  const statusInfo = statusConfig[statusKey];
   const StatusIcon = statusInfo.icon;
 
   const grossAmount = parseFloat(payment.grossAmount);
   const platformFee = parseFloat(payment.platformFeeAmount);
   const processingFee = parseFloat(payment.stripeFeeAmount);
   const netAmount = parseFloat(payment.netAmount);
+
+  // Calculate actual platform fee percentage from payment data
+  const platformFeePercentage = grossAmount > 0 ? ((platformFee / grossAmount) * 100).toFixed(platformFee / grossAmount % 0.01 === 0 ? 0 : 1) : '4';
+  const processingFeePercentage = grossAmount > 0 ? ((processingFee / grossAmount) * 100).toFixed(processingFee / grossAmount % 0.01 === 0 ? 0 : 1) : '3';
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -159,6 +178,27 @@ export default function PaymentDetail() {
           </span>
         </div>
       </div>
+
+      {/* Disputed Payment Alert */}
+      {isDisputedPayment(payment) && (
+        <div className="rounded-lg border-2 border-orange-300 bg-orange-50 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-orange-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-orange-900">Payment Disputed</h3>
+              <p className="text-sm text-orange-800 mt-1">
+                This payment has been disputed by the company and is currently under review by admin.
+                The disputed amount is not included in your total earnings until resolved.
+              </p>
+              {payment.description && (
+                <p className="text-sm text-orange-700 mt-2">
+                  <span className="font-medium">Reason:</span> {payment.description.replace(/^Disputed:\s*/i, '')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Amount Card */}
       <Card className="border-2">
@@ -194,13 +234,13 @@ export default function PaymentDetail() {
                 </p>
               </div>
               <div className="bg-red-50 rounded-lg p-4">
-                <p className="text-sm text-red-600 mb-1">Platform Fee (4%)</p>
+                <p className="text-sm text-red-600 mb-1">Platform Fee ({platformFeePercentage}%)</p>
                 <p className="text-2xl font-bold text-red-700">
                   -${platformFee.toFixed(2)}
                 </p>
               </div>
               <div className="bg-red-50 rounded-lg p-4">
-                <p className="text-sm text-red-600 mb-1">Processing (3%)</p>
+                <p className="text-sm text-red-600 mb-1">Processing ({processingFeePercentage}%)</p>
                 <p className="text-2xl font-bold text-red-700">
                   -${processingFee.toFixed(2)}
                 </p>
@@ -218,11 +258,11 @@ export default function PaymentDetail() {
                   <span className="font-medium">${grossAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Platform fee (4%):</span>
+                  <span>Platform fee ({platformFeePercentage}%):</span>
                   <span className="font-medium">-${platformFee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Processing fee (3%):</span>
+                  <span>Processing fee ({processingFeePercentage}%):</span>
                   <span className="font-medium">-${processingFee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-blue-300">

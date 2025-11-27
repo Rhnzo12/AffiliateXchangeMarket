@@ -150,6 +150,27 @@ export default function AdminReviews() {
     },
   });
 
+  const unhideReviewMutation = useMutation({
+    mutationFn: async (reviewId: string) => {
+      const response = await apiRequest("POST", `/api/admin/reviews/${reviewId}/unhide`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reviews"] });
+      toast({
+        title: "Success",
+        description: "Review is now visible",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to unhide review",
+      });
+    },
+  });
+
   const deleteReviewMutation = useMutation({
     mutationFn: async (reviewId: string) => {
       const response = await apiRequest("DELETE", `/api/admin/reviews/${reviewId}`);
@@ -529,16 +550,29 @@ export default function AdminReviews() {
                       <MessageSquare className="h-4 w-4 mr-1" />
                       Respond
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => hideReviewMutation.mutate(review.id)}
-                      disabled={hideReviewMutation.isPending}
-                      data-testid={`button-hide-${review.id}`}
-                    >
-                      <EyeOff className="h-4 w-4 mr-1" />
-                      {review.isHidden ? 'Hidden' : 'Hide'}
-                    </Button>
+                    {review.isHidden ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => unhideReviewMutation.mutate(review.id)}
+                        disabled={unhideReviewMutation.isPending}
+                        data-testid={`button-unhide-${review.id}`}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        Show
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => hideReviewMutation.mutate(review.id)}
+                        disabled={hideReviewMutation.isPending}
+                        data-testid={`button-hide-${review.id}`}
+                      >
+                        <EyeOff className="h-4 w-4 mr-1" />
+                        Hide
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="destructive"

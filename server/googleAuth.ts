@@ -147,7 +147,22 @@ export async function setupGoogleAuth(app: Express) {
         return res.redirect("/select-role");
       }
 
-      // Existing user - redirect based on role
+      // Check if 2FA is enabled for this user
+      if (user.twoFactorEnabled) {
+        // Store user ID in session for 2FA verification
+        (req.session as any).pending2FAUserId = user.id;
+        // Logout the user (they were auto-logged in by passport)
+        req.logout((err) => {
+          if (err) {
+            console.error("[Google Auth] Error logging out for 2FA:", err);
+          }
+          // Redirect to 2FA verification page
+          return res.redirect(`/login?require2fa=true&userId=${user.id}`);
+        });
+        return;
+      }
+
+      // Existing user without 2FA - redirect based on role
       if (user.role === "creator") {
         res.redirect("/browse");
       } else if (user.role === "company") {

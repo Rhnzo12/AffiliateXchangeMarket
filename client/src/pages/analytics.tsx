@@ -24,6 +24,7 @@ import {
   Globe2,
   Users,
 } from "lucide-react";
+import { exportAnalyticsPDF, downloadCSV, type AnalyticsData } from "../lib/export-utils";
 import {
   LineChart,
   Line,
@@ -194,25 +195,15 @@ export default function Analytics() {
       return;
     }
 
-    const csvContent = [
-      ['Date', 'Clicks', 'Conversions', 'Earnings'],
-      ...chartData.map((item: any) => [
-        item.date,
-        item.clicks || 0,
-        item.conversions || 0,
-        item.earnings || 0
-      ])
-    ].map(row => row.join(',')).join('\n');
+    const headers = ['Date', 'Clicks', 'Conversions', 'Earnings'];
+    const data = chartData.map((item: TimelinePoint) => [
+      item.date,
+      item.clicks.toString(),
+      item.conversions.toString(),
+      `$${item.earnings.toFixed(2)}`,
+    ]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `analytics-${dateRange}-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    downloadCSV(data, `analytics-${dateRange}`, headers);
 
     toast({
       title: "Data exported",
@@ -229,104 +220,45 @@ export default function Analytics() {
       return;
     }
 
-    const printWindow = window.open("", "_blank", "width=900,height=700");
-    if (!printWindow) {
-      setErrorDialog({
-        title: "Popup blocked",
-        message: "Allow popups to generate the PDF report.",
+    try {
+      const analyticsExport: AnalyticsData = {
+        totalEarnings: Number(analytics.totalEarnings || 0),
+        totalSpent: Number(analytics.totalSpent || 0),
+        affiliateEarnings: Number(analytics.affiliateEarnings || 0),
+        affiliateSpent: Number(analytics.affiliateSpent || 0),
+        retainerEarnings: Number(analytics.retainerEarnings || 0),
+        retainerSpent: Number(analytics.retainerSpent || 0),
+        totalClicks,
+        uniqueClicks,
+        conversions,
+        conversionRate,
+        activeOffers,
+        activeCreators,
+        chartData,
+        offerBreakdown: analytics.offerBreakdown,
+        conversionFunnel,
+        acquisitionSources,
+        geography,
+        applicationsTimeline,
+      };
+
+      exportAnalyticsPDF(analyticsExport, {
+        isCompany,
+        dateRange,
+        applicationId,
+        offerTitle: analytics?.offerTitle,
       });
-      return;
+
+      toast({
+        title: "PDF exported",
+        description: "Your analytics report has been downloaded.",
+      });
+    } catch (error) {
+      setErrorDialog({
+        title: "Export failed",
+        message: "Unable to generate PDF report. Please try again.",
+      });
     }
-
-    const now = new Date().toLocaleString();
-
-    const summaryRows: Array<[string, string]> = isCompany
-      ? [
-          ["Total Spend", `$${Number(analytics.totalSpent || analytics.totalEarnings || 0).toFixed(2)}`],
-          ["Affiliate Spend", `$${Number(analytics.affiliateSpent || 0).toFixed(2)}`],
-          ["Retainer Spend", `$${Number(analytics.retainerSpent || 0).toFixed(2)}`],
-          ["Total Clicks", `${Number(analytics.totalClicks || 0).toLocaleString()}`],
-          ["Conversions", `${Number(analytics.conversions || 0).toLocaleString()}`],
-          ["Conversion Rate", `${conversionRate.toFixed(1)}%`],
-          ["Active Offers", `${Number(analytics.activeOffers || 0)}`],
-          ["Active Creators", `${Number(analytics.activeCreators || 0)}`],
-        ]
-      : [
-          ["Total Earnings", `$${Number(analytics.totalEarnings || 0).toFixed(2)}`],
-          ["Affiliate Earnings", `$${Number(analytics.affiliateEarnings || 0).toFixed(2)}`],
-          ["Retainer Earnings", `$${Number(analytics.retainerEarnings || 0).toFixed(2)}`],
-          ["Total Clicks", `${Number(analytics.totalClicks || 0).toLocaleString()}`],
-          ["Conversions", `${Number(analytics.conversions || 0).toLocaleString()}`],
-          ["Conversion Rate", `${conversionRate.toFixed(1)}%`],
-          ["Active Offers", `${Number(analytics.activeOffers || 0)}`],
-        ];
-
-    const timelineSummary = chartData
-      .map(
-        (item: TimelinePoint) =>
-          `${item.date}: ${item.clicks.toLocaleString()} clicks, ${item.conversions.toLocaleString()} conversions, $${item.earnings.toFixed(2)} earnings`,
-      )
-      .join("<br/>");
-
-    const acquisitionSummary = acquisitionSources.length
-      ? acquisitionSources.map((item: { source: string; creators: number }) => `${item.source}: ${item.creators} creators`).join("<br/>")
-      : "No acquisition data available.";
-
-    const geographySummary = geography.length
-      ? geography.map((item: { country: string; count: number }) => `${item.country}: ${item.count}`).join("<br/>")
-      : "No geographic data available.";
-
-    printWindow.document.write(`<!DOCTYPE html>
-      <html>
-        <head>
-          <title>Analytics Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
-            h1 { font-size: 24px; margin-bottom: 4px; }
-            h2 { font-size: 18px; margin-top: 24px; margin-bottom: 8px; }
-            table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-            td { border: 1px solid #e5e7eb; padding: 8px; font-size: 14px; }
-            .muted { color: #6b7280; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <h1>${applicationId
-            ? isCompany
-              ? "Application Analytics Report"
-              : "Application Performance Report"
-            : isCompany
-              ? "Company Analytics Report"
-              : "Creator Analytics Report"}</h1>
-          <div class="muted">Generated ${now}</div>
-          <h2>Summary</h2>
-          <table>
-            ${summaryRows.map(([label, value]) => `<tr><td><strong>${label}</strong></td><td>${value}</td></tr>`).join("")}
-          </table>
-          <h2>Performance Timeline</h2>
-          <div>${timelineSummary || "No timeline data available."}</div>
-          <h2>Conversion Funnel</h2>
-          <div>${
-            conversionFunnel
-              ? `Applied: ${conversionFunnel.applied}<br/>Approved: ${conversionFunnel.approved}<br/>Active: ${conversionFunnel.active}<br/>Paused: ${conversionFunnel.paused}<br/>Completed: ${conversionFunnel.completed}<br/>Converted: ${conversionFunnel.conversions}`
-              : "No funnel data available."
-          }</div>
-          <h2>Top Acquisition Sources</h2>
-          <div>${acquisitionSummary}</div>
-          <h2>Geographic Heatmap</h2>
-          <div>${geographySummary}</div>
-        </body>
-      </html>`);
-
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 300);
-
-    toast({
-      title: "PDF ready",
-      description: "Use the browser dialog to save the report as PDF.",
-    });
   };
 
   const sendToZapier = async () => {
@@ -455,6 +387,15 @@ export default function Analytics() {
           >
             <Download className="h-4 w-4" />
             Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={exportPdf}
+            disabled={!analytics}
+          >
+            <FileText className="h-4 w-4" />
+            PDF Report
           </Button>
         </div>
       </div>

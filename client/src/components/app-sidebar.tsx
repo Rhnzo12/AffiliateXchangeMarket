@@ -32,6 +32,10 @@ import {
   AlertCircle,
   Tags,
   ShieldAlert,
+  ShieldCheck,
+  Ban,
+  Mail,
+  BarChart3,
 } from "lucide-react";
 
 export function AppSidebar() {
@@ -127,6 +131,11 @@ export function AppSidebar() {
       icon: Star,
     },
     {
+      title: "Website Verification",
+      url: "/company/website-verification",
+      icon: ShieldCheck,
+    },
+    {
       title: "Payment Management",
       url: "/company/payment-settings",
       icon: DollarSign,
@@ -138,6 +147,11 @@ export function AppSidebar() {
       title: "Dashboard",
       url: "/admin",
       icon: Home,
+    },
+    {
+      title: "Analytics & Reports",
+      url: "/admin/analytics",
+      icon: BarChart3,
     },
     {
       title: "Company Management",
@@ -165,6 +179,11 @@ export function AppSidebar() {
       icon: ShieldAlert,
     },
     {
+      title: "Keyword Management",
+      url: "/admin/keyword-management",
+      icon: Ban,
+    },
+    {
       title: "Message Monitoring",
       url: "/admin/messages",
       icon: MessageSquare,
@@ -183,6 +202,11 @@ export function AppSidebar() {
       title: "Niche Categories",
       url: "/admin/niches",
       icon: Tags,
+    },
+    {
+      title: "Email Templates",
+      url: "/admin/email-templates",
+      icon: Mail,
     },
     {
       title: "Audit Trail",

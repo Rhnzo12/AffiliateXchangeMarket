@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,8 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { useToast } from "../hooks/use-toast";
-import { Zap, Mail, Eye, EyeOff } from "lucide-react";
-import { Link } from "wouter";
+import { Mail, Eye, EyeOff, Shield, ArrowLeft, Key } from "lucide-react";
+import { Link, useSearch } from "wouter";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 
 const loginSchema = z.object({
@@ -28,6 +28,27 @@ export default function Login() {
     description: "An error occurred",
     errorDetails: "",
   });
+
+  // 2FA state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [pending2FAUserId, setPending2FAUserId] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+  const [useBackupCode, setUseBackupCode] = useState(false);
+
+  // Check for 2FA redirect from Google OAuth
+  const searchString = useSearch();
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const require2fa = params.get("require2fa");
+    const userId = params.get("userId");
+
+    if (require2fa === "true" && userId) {
+      setRequires2FA(true);
+      setPending2FAUserId(userId);
+    }
+  }, [searchString]);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -53,6 +74,17 @@ export default function Login() {
       }
 
       const result = await response.json();
+
+      // Check if 2FA is required
+      if (result.requiresTwoFactor) {
+        setRequires2FA(true);
+        setPending2FAUserId(result.userId);
+        toast({
+          title: "Two-Factor Authentication Required",
+          description: "Please enter your authentication code to continue.",
+        });
+        return;
+      }
 
       toast({
         title: "Welcome back!",
@@ -83,11 +115,187 @@ export default function Login() {
     }
   };
 
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!pending2FAUserId || !twoFactorCode) return;
+
+    setIsVerifying2FA(true);
+    try {
+      const response = await fetch("/api/auth/2fa/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: pending2FAUserId,
+          code: twoFactorCode,
+          isBackupCode: useBackupCode,
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Verification failed");
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: "Welcome back!",
+        description: "Login successful. Redirecting...",
+      });
+
+      // Redirect based on role
+      setTimeout(() => {
+        if (result.role === "creator") {
+          window.location.href = "/browse";
+        } else if (result.role === "company") {
+          window.location.href = "/company/dashboard";
+        } else if (result.role === "admin") {
+          window.location.href = "/admin";
+        } else {
+          window.location.href = "/";
+        }
+      }, 1000);
+    } catch (error: any) {
+      setErrorDialog({
+        open: true,
+        title: "Verification Failed",
+        description: "The code you entered is invalid. Please try again.",
+        errorDetails: error.message,
+      });
+    } finally {
+      setIsVerifying2FA(false);
+    }
+  };
+
+  const handleBack = () => {
+    setRequires2FA(false);
+    setPending2FAUserId(null);
+    setTwoFactorCode("");
+    setUseBackupCode(false);
+    // Clear URL params
+    window.history.replaceState({}, "", "/login");
+  };
+
   const handleGoogleLogin = () => {
     // Redirect to Google OAuth endpoint
     window.location.href = "/api/auth/google";
   };
 
+  // Render 2FA verification form
+  if (requires2FA) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6">
+          <div className="flex items-center justify-center gap-2">
+            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-10 w-10 rounded-md object-cover" />
+            <span className="text-2xl font-bold">AffiliateXchange</span>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBack}
+                  className="h-8 w-8"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Two-Factor Authentication
+                  </CardTitle>
+                  <CardDescription>
+                    {useBackupCode
+                      ? "Enter one of your backup codes"
+                      : "Enter the 6-digit code from your authenticator app"}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleVerify2FA} className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    value={twoFactorCode}
+                    onChange={(e) => {
+                      if (useBackupCode) {
+                        // Allow alphanumeric and dashes for backup codes
+                        setTwoFactorCode(e.target.value.toUpperCase().slice(0, 9));
+                      } else {
+                        // Only digits for TOTP
+                        setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                      }
+                    }}
+                    placeholder={useBackupCode ? "XXXX-XXXX" : "000000"}
+                    className={`text-center text-2xl tracking-widest font-mono ${
+                      useBackupCode ? "" : ""
+                    }`}
+                    maxLength={useBackupCode ? 9 : 6}
+                    autoComplete="one-time-code"
+                    autoFocus
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={
+                    isVerifying2FA ||
+                    (useBackupCode
+                      ? twoFactorCode.replace(/-/g, "").length !== 8
+                      : twoFactorCode.length !== 6)
+                  }
+                >
+                  {isVerifying2FA ? "Verifying..." : "Verify"}
+                </Button>
+
+                <div className="text-center">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setUseBackupCode(!useBackupCode);
+                      setTwoFactorCode("");
+                    }}
+                    className="text-sm"
+                  >
+                    {useBackupCode ? (
+                      <>
+                        <Shield className="h-4 w-4 mr-1" />
+                        Use authenticator app instead
+                      </>
+                    ) : (
+                      <>
+                        <Key className="h-4 w-4 mr-1" />
+                        Use a backup code instead
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Generic Error Dialog */}
+          <GenericErrorDialog
+            open={errorDialog.open}
+            onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}
+            title={errorDialog.title}
+            description={errorDialog.description}
+            errorDetails={errorDialog.errorDetails}
+            variant="error"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Regular login form
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
@@ -188,6 +396,12 @@ export default function Login() {
               Don't have an account?{" "}
               <Link href="/register" className="text-primary hover:underline" data-testid="link-register">
                 Create account
+              </Link>
+            </div>
+
+            <div className="mt-2 text-center text-sm">
+              <Link href="/forgot-password" className="text-muted-foreground hover:text-primary hover:underline">
+                Forgot your password?
               </Link>
             </div>
 

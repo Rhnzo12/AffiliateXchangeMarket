@@ -4,9 +4,16 @@ import { eq, and, or, desc, asc, sql, count, inArray, gte, lte } from "drizzle-o
 import { db, pool } from "./db";
 import geoip from "geoip-lite";
 import {
+  calculateFees,
+  DEFAULT_PLATFORM_FEE_PERCENTAGE,
+  STRIPE_PROCESSING_FEE_PERCENTAGE,
+  formatFeePercentage,
+} from "./feeCalculator";
+import {
   users,
   creatorProfiles,
   companyProfiles,
+  companyVerificationDocuments,
   offers,
   offerVideos,
   applications,
@@ -28,6 +35,7 @@ import {
   platformSettings,
   niches,
   platformFundingAccounts,
+  emailTemplates,
   type User,
   type UpsertUser,
   type InsertUser,
@@ -72,6 +80,10 @@ import {
   type InsertNiche,
   type PlatformFundingAccount,
   type InsertPlatformFundingAccount,
+  type CompanyVerificationDocument,
+  type InsertCompanyVerificationDocument,
+  type EmailTemplate,
+  type InsertEmailTemplate,
 } from "../shared/schema";
 
 /**
@@ -621,6 +633,11 @@ export interface IStorage {
     endDate?: Date;
   }): Promise<any[]>;
 
+  // Website Verification
+  generateWebsiteVerificationToken(companyId: string): Promise<CompanyProfile | undefined>;
+  verifyWebsiteOwnership(companyId: string, method: 'meta_tag' | 'dns_txt'): Promise<{ success: boolean; error?: string }>;
+  updateWebsiteVerificationStatus(companyId: string, verified: boolean, method?: 'meta_tag' | 'dns_txt'): Promise<CompanyProfile | undefined>;
+
   // Offers
   getOffer(id: string): Promise<Offer | undefined>;
   getOffers(filters?: any): Promise<Offer[]>;
@@ -1097,6 +1114,26 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async updateCompanyProfileById(
+    companyId: string,
+    updates: Partial<InsertCompanyProfile>,
+  ): Promise<CompanyProfile | undefined> {
+    const result = await db
+      .update(companyProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(companyProfiles.id, companyId))
+      .returning();
+    return result[0];
+  }
+
+  async getCompaniesWithCustomFees(): Promise<CompanyProfile[]> {
+    return await db
+      .select()
+      .from(companyProfiles)
+      .where(sql`${companyProfiles.customPlatformFeePercentage} IS NOT NULL`)
+      .orderBy(desc(companyProfiles.updatedAt));
+  }
+
   async getPendingCompanies(): Promise<CompanyProfile[]> {
     return await db
       .select()
@@ -1188,6 +1225,130 @@ export class DatabaseStorage implements IStorage {
         !!row.user?.email &&
         (row.user.email.startsWith("deleted-") || row.user.email.includes("@deleted.user")),
     }));
+  }
+
+  // Website Verification Methods
+  async generateWebsiteVerificationToken(companyId: string): Promise<CompanyProfile | undefined> {
+    // Generate a unique verification token
+    const token = `affiliatexchange-site-verification=${randomUUID().replace(/-/g, '')}`;
+
+    const result = await db
+      .update(companyProfiles)
+      .set({
+        websiteVerificationToken: token,
+        updatedAt: new Date()
+      })
+      .where(eq(companyProfiles.id, companyId))
+      .returning();
+
+    return result[0];
+  }
+
+  async verifyWebsiteOwnership(companyId: string, method: 'meta_tag' | 'dns_txt'): Promise<{ success: boolean; error?: string }> {
+    const company = await this.getCompanyProfileById(companyId);
+
+    if (!company) {
+      return { success: false, error: 'Company not found' };
+    }
+
+    if (!company.websiteUrl) {
+      return { success: false, error: 'Company has no website URL configured' };
+    }
+
+    if (!company.websiteVerificationToken) {
+      return { success: false, error: 'No verification token generated. Please generate a token first.' };
+    }
+
+    try {
+      const url = new URL(company.websiteUrl);
+      const domain = url.hostname;
+
+      if (method === 'meta_tag') {
+        // Verify via meta tag
+        const response = await fetch(company.websiteUrl, {
+          headers: {
+            'User-Agent': 'AffiliateXchange-Verification-Bot/1.0',
+          },
+          signal: AbortSignal.timeout(10000), // 10 second timeout
+        });
+
+        if (!response.ok) {
+          return { success: false, error: `Failed to fetch website: HTTP ${response.status}` };
+        }
+
+        const html = await response.text();
+
+        // Look for meta tag: <meta name="affiliatexchange-site-verification" content="TOKEN">
+        const metaTagPattern = /<meta\s+name=["']affiliatexchange-site-verification["']\s+content=["']([^"']+)["']/i;
+        const metaTagPatternAlt = /<meta\s+content=["']([^"']+)["']\s+name=["']affiliatexchange-site-verification["']/i;
+
+        const match = html.match(metaTagPattern) || html.match(metaTagPatternAlt);
+
+        if (match && match[1] === company.websiteVerificationToken) {
+          // Verification successful
+          await this.updateWebsiteVerificationStatus(companyId, true, 'meta_tag');
+          return { success: true };
+        } else if (match) {
+          return { success: false, error: 'Meta tag found but token does not match' };
+        } else {
+          return { success: false, error: 'Meta tag not found on the website homepage' };
+        }
+
+      } else if (method === 'dns_txt') {
+        // Verify via DNS TXT record
+        const dns = await import('dns').then(m => m.promises);
+
+        try {
+          const records = await dns.resolveTxt(domain);
+          const flatRecords = records.flat();
+
+          if (flatRecords.includes(company.websiteVerificationToken)) {
+            // Verification successful
+            await this.updateWebsiteVerificationStatus(companyId, true, 'dns_txt');
+            return { success: true };
+          } else {
+            return { success: false, error: 'DNS TXT record not found or does not match the verification token' };
+          }
+        } catch (dnsError: any) {
+          if (dnsError.code === 'ENODATA' || dnsError.code === 'ENOTFOUND') {
+            return { success: false, error: 'No DNS TXT records found for this domain' };
+          }
+          return { success: false, error: `DNS lookup failed: ${dnsError.message}` };
+        }
+      }
+
+      return { success: false, error: 'Invalid verification method' };
+    } catch (error: any) {
+      console.error('[verifyWebsiteOwnership] Error:', error);
+      return { success: false, error: `Verification failed: ${error.message}` };
+    }
+  }
+
+  async updateWebsiteVerificationStatus(
+    companyId: string,
+    verified: boolean,
+    method?: 'meta_tag' | 'dns_txt'
+  ): Promise<CompanyProfile | undefined> {
+    const updateData: any = {
+      websiteVerified: verified,
+      updatedAt: new Date(),
+    };
+
+    if (verified && method) {
+      updateData.websiteVerificationMethod = method;
+      updateData.websiteVerifiedAt = new Date();
+    } else if (!verified) {
+      updateData.websiteVerificationMethod = null;
+      updateData.websiteVerifiedAt = null;
+    }
+
+    const result = await db
+      .update(companyProfiles)
+      .set(updateData)
+      .where(eq(companyProfiles.id, companyId))
+      .returning();
+
+    return result[0];
   }
 
   async getCompanyById(companyId: string): Promise<any | undefined> {
@@ -2429,6 +2590,83 @@ export class DatabaseStorage implements IStorage {
       .where(eq(conversations.id, conversationId));
   }
 
+  // Delete message for current user only ("delete for me")
+  async deleteMessageForUser(messageId: string, userId: string): Promise<boolean> {
+    try {
+      const message = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+
+      if (!message || message.length === 0) {
+        return false;
+      }
+
+      // Add userId to the deletedFor array
+      const currentDeletedFor = message[0].deletedFor || [];
+      if (!currentDeletedFor.includes(userId)) {
+        await db
+          .update(messages)
+          .set({
+            deletedFor: [...currentDeletedFor, userId]
+          })
+          .where(eq(messages.id, messageId));
+      }
+
+      return true;
+    } catch (error) {
+      console.error("[deleteMessageForUser] Error:", error);
+      return false;
+    }
+  }
+
+  // Delete message for both users (physical delete from DB)
+  async deleteMessageForBoth(messageId: string, userId: string): Promise<boolean> {
+    try {
+      // Verify the message exists and the user is the sender
+      const message = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+
+      if (!message || message.length === 0) {
+        return false;
+      }
+
+      // Only the sender can delete for both
+      if (message[0].senderId !== userId) {
+        return false;
+      }
+
+      // Physically delete the message from the database
+      await db
+        .delete(messages)
+        .where(eq(messages.id, messageId));
+
+      return true;
+    } catch (error) {
+      console.error("[deleteMessageForBoth] Error:", error);
+      return false;
+    }
+  }
+
+  // Get a single message by ID
+  async getMessage(messageId: string): Promise<Message | null> {
+    try {
+      const result = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, messageId))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      console.error("[getMessage] Error:", error);
+      return null;
+    }
+  }
+
   // Reviews
   async getReviewsByCompany(companyId: string): Promise<Review[]> {
     try {
@@ -2618,6 +2856,27 @@ export class DatabaseStorage implements IStorage {
       }
       if (isMissingRelationError(error, "reviews")) {
         console.warn("[Storage] reviews relation missing while hiding review - treating as no-op.");
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async unhideReview(id: string): Promise<Review | undefined> {
+    try {
+      const result = await db
+        .update(reviews)
+        .set({ isHidden: false, updatedAt: new Date() })
+        .where(eq(reviews.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      if (isLegacyReviewColumnError(error)) {
+        console.warn("[Storage] reviews column mismatch while unhiding review - treating as no-op.");
+        return undefined;
+      }
+      if (isMissingRelationError(error, "reviews")) {
+        console.warn("[Storage] reviews relation missing while unhiding review - treating as no-op.");
         return undefined;
       }
       throw error;
@@ -3154,26 +3413,25 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    // Calculate fees according to spec: 7% total (4% platform + 3% Stripe)
-    const platformFee = earnings * 0.04; // 4% platform fee
-    const stripeFee = earnings * 0.03;   // 3% Stripe processing fee
-    const netAmount = earnings - platformFee - stripeFee;
+    // Calculate fees with per-company override support (Section 4.3.H)
+    const fees = await calculateFees(earnings, offer.companyId);
 
     await this.createPayment({
       applicationId: applicationId,
       creatorId: application.creatorId,
       companyId: offer.companyId,
       offerId: application.offerId,
-      grossAmount: earnings.toFixed(2),
-      platformFeeAmount: platformFee.toFixed(2),
-      stripeFeeAmount: stripeFee.toFixed(2),
-      netAmount: netAmount.toFixed(2),
+      grossAmount: fees.grossAmount.toFixed(2),
+      platformFeeAmount: fees.platformFeeAmount.toFixed(2),
+      stripeFeeAmount: fees.stripeFeeAmount.toFixed(2),
+      netAmount: fees.netAmount.toFixed(2),
       status: "pending",
       description: `Commission for ${offer.commissionType} conversion`,
     });
 
+    const feeLabel = fees.isCustomFee ? `Custom ${formatFeePercentage(fees.platformFeePercentage)}` : `${formatFeePercentage(DEFAULT_PLATFORM_FEE_PERCENTAGE)}`;
     console.log(
-      `[Conversion] Recorded conversion for application ${applicationId} - Gross: $${earnings.toFixed(2)}, Platform Fee (4%): $${platformFee.toFixed(2)}, Stripe Fee (3%): $${stripeFee.toFixed(2)}, Net: $${netAmount.toFixed(2)}`,
+      `[Conversion] Recorded conversion for application ${applicationId} - Gross: $${fees.grossAmount.toFixed(2)}, Platform Fee (${feeLabel}): $${fees.platformFeeAmount.toFixed(2)}, Stripe Fee (${formatFeePercentage(STRIPE_PROCESSING_FEE_PERCENTAGE)}): $${fees.stripeFeeAmount.toFixed(2)}, Net: $${fees.netAmount.toFixed(2)}`,
     );
   }
 
@@ -3258,11 +3516,12 @@ export class DatabaseStorage implements IStorage {
     const retainerPayment = await db.select().from(retainerPayments).where(eq(retainerPayments.id, id)).limit(1);
     if (retainerPayment[0]) {
       const p = retainerPayment[0];
-      // Format retainer payment to match payment structure
+      // Format retainer payment to match payment structure (use defaults for legacy records)
       const netAmount = p.netAmount || p.amount || '0';
-      const grossAmount = p.grossAmount || (parseFloat(netAmount.toString()) / 0.93).toFixed(2);
-      const platformFeeAmount = p.platformFeeAmount || (parseFloat(grossAmount) * 0.04).toFixed(2);
-      const stripeFeeAmount = p.processingFeeAmount || (parseFloat(grossAmount) * 0.03).toFixed(2);
+      const defaultTotalFee = DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE;
+      const grossAmount = p.grossAmount || (parseFloat(netAmount.toString()) / (1 - defaultTotalFee)).toFixed(2);
+      const platformFeeAmount = p.platformFeeAmount || (parseFloat(grossAmount) * DEFAULT_PLATFORM_FEE_PERCENTAGE).toFixed(2);
+      const stripeFeeAmount = p.processingFeeAmount || (parseFloat(grossAmount) * STRIPE_PROCESSING_FEE_PERCENTAGE).toFixed(2);
 
       return {
         ...p,
@@ -3325,11 +3584,12 @@ export class DatabaseStorage implements IStorage {
       })),
       ...retainerPaymentsList.map(p => {
         // Retainer amount is the net amount (what creator receives)
-        // Calculate fee breakdown (platform 4% + processing 3% = 7% total)
+        // Calculate fee breakdown using default rates for legacy records
+        const defaultTotalFee = DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE;
         const netAmount = p.amount ? parseFloat(p.amount.toString()) : 0;
-        const grossAmount = netAmount > 0 ? netAmount / 0.93 : 0; // Reverse calculate: net = gross * 0.93
-        const platformFeeAmount = grossAmount * 0.04;
-        const stripeFeeAmount = grossAmount * 0.03;
+        const grossAmount = netAmount > 0 ? netAmount / (1 - defaultTotalFee) : 0;
+        const platformFeeAmount = grossAmount * DEFAULT_PLATFORM_FEE_PERCENTAGE;
+        const stripeFeeAmount = grossAmount * STRIPE_PROCESSING_FEE_PERCENTAGE;
 
         return {
           ...p,
@@ -3378,11 +3638,12 @@ export class DatabaseStorage implements IStorage {
       })),
       ...retainerPaymentsList.map(p => {
         // Retainer amount is the net amount (what creator receives)
-        // Calculate fee breakdown (platform 4% + processing 3% = 7% total)
+        // Calculate fee breakdown using default rates for legacy records
+        const defaultTotalFee = DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE;
         const netAmount = p.amount ? parseFloat(p.amount.toString()) : 0;
-        const grossAmount = netAmount > 0 ? netAmount / 0.93 : 0; // Reverse calculate: net = gross * 0.93
-        const platformFeeAmount = grossAmount * 0.04;
-        const stripeFeeAmount = grossAmount * 0.03;
+        const grossAmount = netAmount > 0 ? netAmount / (1 - defaultTotalFee) : 0;
+        const platformFeeAmount = grossAmount * DEFAULT_PLATFORM_FEE_PERCENTAGE;
+        const stripeFeeAmount = grossAmount * STRIPE_PROCESSING_FEE_PERCENTAGE;
 
         return {
           ...p,
@@ -3429,11 +3690,12 @@ export class DatabaseStorage implements IStorage {
       })),
       ...retainerPaymentsList.map(p => {
         // Retainer amount is the net amount (what creator receives)
-        // Calculate fee breakdown (platform 4% + processing 3% = 7% total)
+        // Calculate fee breakdown using default rates for legacy records
+        const defaultTotalFee = DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE;
         const netAmount = p.amount ? parseFloat(p.amount.toString()) : 0;
-        const grossAmount = netAmount > 0 ? netAmount / 0.93 : 0; // Reverse calculate: net = gross * 0.93
-        const platformFeeAmount = grossAmount * 0.04;
-        const stripeFeeAmount = grossAmount * 0.03;
+        const grossAmount = netAmount > 0 ? netAmount / (1 - defaultTotalFee) : 0;
+        const platformFeeAmount = grossAmount * DEFAULT_PLATFORM_FEE_PERCENTAGE;
+        const stripeFeeAmount = grossAmount * STRIPE_PROCESSING_FEE_PERCENTAGE;
 
         return {
           ...p,
@@ -5066,6 +5328,225 @@ async getCreatorGeographyByCompany(userId: string): Promise<any[]> {
     return [];
   }
 }
+
+// Company Verification Documents CRUD operations
+async addVerificationDocument(document: InsertCompanyVerificationDocument): Promise<CompanyVerificationDocument | null> {
+  try {
+    const [newDocument] = await db
+      .insert(companyVerificationDocuments)
+      .values(document)
+      .returning();
+    return newDocument || null;
+  } catch (error) {
+    if (isMissingRelationError(error, "company_verification_documents")) {
+      console.warn("[addVerificationDocument] Table does not exist yet");
+      return null;
+    }
+    console.error("[addVerificationDocument] Error:", error);
+    throw error;
+  }
+}
+
+async getVerificationDocumentsByCompanyId(companyId: string): Promise<CompanyVerificationDocument[]> {
+  try {
+    const documents = await db
+      .select()
+      .from(companyVerificationDocuments)
+      .where(eq(companyVerificationDocuments.companyId, companyId))
+      .orderBy(desc(companyVerificationDocuments.createdAt));
+    return documents;
+  } catch (error) {
+    if (isMissingRelationError(error, "company_verification_documents")) {
+      console.warn("[getVerificationDocumentsByCompanyId] Table does not exist yet");
+      return [];
+    }
+    console.error("[getVerificationDocumentsByCompanyId] Error:", error);
+    return [];
+  }
+}
+
+async getVerificationDocumentsByUserId(userId: string): Promise<CompanyVerificationDocument[]> {
+  try {
+    // First get the company profile for this user
+    const companyProfile = await this.getCompanyProfile(userId);
+    if (!companyProfile) {
+      return [];
+    }
+    return this.getVerificationDocumentsByCompanyId(companyProfile.id);
+  } catch (error) {
+    console.error("[getVerificationDocumentsByUserId] Error:", error);
+    return [];
+  }
+}
+
+async getVerificationDocumentById(documentId: string): Promise<CompanyVerificationDocument | null> {
+  try {
+    const [document] = await db
+      .select()
+      .from(companyVerificationDocuments)
+      .where(eq(companyVerificationDocuments.id, documentId));
+    return document || null;
+  } catch (error) {
+    if (isMissingRelationError(error, "company_verification_documents")) {
+      console.warn("[getVerificationDocumentById] Table does not exist yet");
+      return null;
+    }
+    console.error("[getVerificationDocumentById] Error:", error);
+    return null;
+  }
+}
+
+async deleteVerificationDocument(documentId: string): Promise<boolean> {
+  try {
+    const result = await db
+      .delete(companyVerificationDocuments)
+      .where(eq(companyVerificationDocuments.id, documentId))
+      .returning();
+    return result.length > 0;
+  } catch (error) {
+    if (isMissingRelationError(error, "company_verification_documents")) {
+      console.warn("[deleteVerificationDocument] Table does not exist yet");
+      return false;
+    }
+    console.error("[deleteVerificationDocument] Error:", error);
+    return false;
+  }
+}
+
+async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boolean> {
+  try {
+    await db
+      .delete(companyVerificationDocuments)
+      .where(eq(companyVerificationDocuments.companyId, companyId));
+    return true;
+  } catch (error) {
+    if (isMissingRelationError(error, "company_verification_documents")) {
+      console.warn("[deleteAllVerificationDocumentsForCompany] Table does not exist yet");
+      return false;
+    }
+    console.error("[deleteAllVerificationDocumentsForCompany] Error:", error);
+    return false;
+  }
+}
+
+  // Email Templates Management
+  async getEmailTemplates(): Promise<EmailTemplate[]> {
+    try {
+      return await db
+        .select()
+        .from(emailTemplates)
+        .orderBy(emailTemplates.category, emailTemplates.name);
+    } catch (error) {
+      if (isMissingRelationError(error, "email_templates")) {
+        console.warn("[getEmailTemplates] Table does not exist yet");
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getActiveEmailTemplates(): Promise<EmailTemplate[]> {
+    try {
+      return await db
+        .select()
+        .from(emailTemplates)
+        .where(eq(emailTemplates.isActive, true))
+        .orderBy(emailTemplates.category, emailTemplates.name);
+    } catch (error) {
+      if (isMissingRelationError(error, "email_templates")) {
+        console.warn("[getActiveEmailTemplates] Table does not exist yet");
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getEmailTemplateById(id: string): Promise<EmailTemplate | null> {
+    try {
+      const result = await db
+        .select()
+        .from(emailTemplates)
+        .where(eq(emailTemplates.id, id))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      if (isMissingRelationError(error, "email_templates")) {
+        console.warn("[getEmailTemplateById] Table does not exist yet");
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async getEmailTemplateBySlug(slug: string): Promise<EmailTemplate | null> {
+    try {
+      const result = await db
+        .select()
+        .from(emailTemplates)
+        .where(eq(emailTemplates.slug, slug))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      if (isMissingRelationError(error, "email_templates")) {
+        console.warn("[getEmailTemplateBySlug] Table does not exist yet");
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async createEmailTemplate(data: InsertEmailTemplate): Promise<EmailTemplate> {
+    const result = await db.insert(emailTemplates).values(data).returning();
+    return result[0];
+  }
+
+  async updateEmailTemplate(
+    id: string,
+    updates: Partial<InsertEmailTemplate>,
+    userId?: string
+  ): Promise<EmailTemplate | null> {
+    const result = await db
+      .update(emailTemplates)
+      .set({ ...updates, updatedBy: userId, updatedAt: new Date() })
+      .where(eq(emailTemplates.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async deleteEmailTemplate(id: string): Promise<boolean> {
+    // Check if it's a system template first
+    const template = await this.getEmailTemplateById(id);
+    if (template?.isSystem) {
+      throw new Error('Cannot delete system templates');
+    }
+
+    const result = await db
+      .delete(emailTemplates)
+      .where(eq(emailTemplates.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async getEmailTemplatesByCategory(category: string): Promise<EmailTemplate[]> {
+    try {
+      return await db
+        .select()
+        .from(emailTemplates)
+        .where(
+          and(
+            eq(emailTemplates.category, category as any),
+            eq(emailTemplates.isActive, true)
+          )
+        )
+        .orderBy(emailTemplates.name);
+    } catch (error) {
+      if (isMissingRelationError(error, "email_templates")) {
+        console.warn("[getEmailTemplatesByCategory] Table does not exist yet");
+        return [];
+      }
+      throw error;
+    }
+  }
 }
 
 export const storage = new DatabaseStorage();
