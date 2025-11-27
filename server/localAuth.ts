@@ -28,7 +28,7 @@ export function isAuthenticated(req: Request, res: any, next: any) {
 
   }
 
-  res.status(401).send("Unauthorized");
+  res.status(401).json({ message: "Session expired or not authenticated" });
 
 }
 
@@ -99,6 +99,8 @@ function getSession() {
       secure: process.env.NODE_ENV === 'production',
 
       maxAge: sessionTtl,
+
+      sameSite: 'lax', // Required for modern browsers to send cookies properly
 
     },
 
@@ -202,6 +204,8 @@ export async function setupAuth(app: Express) {
 
         // User not found - clear the session
 
+        console.warn(`[Auth] Session deserialization failed: User ${data.id} not found in database`);
+
         return done(null, false);
 
       }
@@ -210,7 +214,7 @@ export async function setupAuth(app: Express) {
 
     } catch (error) {
 
-      console.error("Error deserializing user:", error);
+      console.error("[Auth] Session deserialization error:", error);
 
       // Return false instead of error to clear invalid sessions
 
