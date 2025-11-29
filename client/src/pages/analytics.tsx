@@ -21,7 +21,6 @@ import {
   ArrowLeft,
   FileText,
   Share2,
-  Globe2,
   Users,
 } from "lucide-react";
 import { exportAnalyticsPDF, downloadCSV, type AnalyticsData } from "../lib/export-utils";
@@ -46,6 +45,7 @@ import {
 import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton, ChartSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { GeographicHeatmap } from "../components/GeographicHeatmap";
 
 const DATE_RANGES = [
   { value: "7d", label: "Last 7 Days" },
@@ -167,7 +167,6 @@ export default function Analytics() {
     : [];
 
   const conversionRate = Number(analytics?.conversionRate ?? 0);
-  const maxGeoCount = geography.reduce((max: number, item) => Math.max(max, item.count), 0);
 
   const totalSpend = Number(analytics?.totalSpent ?? 0);
   const totalEarnings = Number(analytics?.totalEarnings ?? 0);
@@ -1010,33 +1009,10 @@ export default function Analytics() {
       <div className={`grid gap-6 ${!applicationId ? "lg:grid-cols-2" : ""}`}>
         <Card className="border-card-border">
           <CardHeader>
-            <CardTitle>Geographic Heatmap</CardTitle>
+            <CardTitle>Creator Geographic Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            {geography.length > 0 ? (
-              <div className="space-y-3">
-                {geography.map((entry: { country: string; count: number }) => (
-                  <div key={entry.country} className="flex items-center gap-3">
-                    <div className="w-32 text-sm font-medium truncate" title={entry.country}>
-                      {entry.country}
-                    </div>
-                    <div className="flex-1 h-3 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-primary/30 to-primary"
-                        style={{ width: maxGeoCount ? `${(entry.count / maxGeoCount) * 100}%` : '4px' }}
-                      />
-                    </div>
-                    <div className="w-10 text-xs text-muted-foreground text-right">{entry.count}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <Globe2 className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                <p className="text-muted-foreground">No geographic data yet</p>
-                <p className="text-sm text-muted-foreground mt-1">Clicks with location data will appear here.</p>
-              </div>
-            )}
+            <GeographicHeatmap data={geography} />
           </CardContent>
         </Card>
 

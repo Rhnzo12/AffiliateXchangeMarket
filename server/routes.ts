@@ -12,6 +12,22 @@ import { offerVideos, applications, analytics, offers, companyProfiles, payments
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { checkClickFraud, logFraudDetection } from "./fraudDetection";
+import {
+  generatePostbackSignature,
+  validatePostbackSignature,
+  isTimestampValid,
+  generateConversionId,
+  generateShortTrackingCode,
+  generateCompanyApiKey,
+  getTransparentPixel,
+  generateTrackingSnippet,
+  generatePostbackUrlExample,
+  type ConversionEventType,
+} from "./trackingService";
+import {
+  generatePaymentInvoice,
+  generateCompanyChargeInvoice,
+} from "./invoiceService";
 import { calculateFees, formatFeePercentage, DEFAULT_PLATFORM_FEE_PERCENTAGE, STRIPE_PROCESSING_FEE_PERCENTAGE, getCompanyPlatformFeePercentage } from "./feeCalculator";
 import { NotificationService } from "./notifications/notificationService";
 import bcrypt from "bcrypt";
@@ -1518,9 +1534,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // TODO: Schedule auto-approval job for 7 minutes later
+      // Schedule auto-approval for 7 minutes later
+      const autoApprovalTime = new Date(Date.now() + 7 * 60 * 1000); // 7 minutes from now
+      await storage.setAutoApprovalTime(application.id, autoApprovalTime);
+      console.log(`[Auto-Approval] Scheduled auto-approval for application ${application.id} at ${autoApprovalTime.toISOString()}`);
 
-      res.json(application);
+      res.json({ ...application, autoApprovalScheduledAt: autoApprovalTime });
     } catch (error: any) {
       console.error('[POST /api/applications] Error:', error);
       res.status(500).send(error.message);
@@ -1534,8 +1553,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).send("Application not found");
       }
 
-      // Generate tracking link and code (must be unique per application)
-      const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}-${application.id.substring(0, 8)}`;
+      // Generate tracking link and code (short 8-character alphanumeric code)
+      const trackingCode = generateShortTrackingCode();
       const port = process.env.PORT || 3000;
       const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
       const trackingLink = `${baseURL}/go/${trackingCode}`;
@@ -4124,6 +4143,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get churn analytics for admin dashboard (admin only)
+  app.get("/api/admin/churn-analytics", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const range = (req.query.range as string) || '30d';
+      const churnData = await storage.getChurnAnalytics(range);
+      res.json(churnData);
+    } catch (error: any) {
+      console.error('[Churn Analytics Error]:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Notify admins about existing pending offers and payments (admin only)
   app.post("/api/admin/notify-pending-items", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -5846,6 +5877,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin send message as platform - allows admins to join conversations and send messages
+  app.post("/api/admin/messages", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { conversationId, content } = req.body;
+      const adminId = (req.user as any).id;
+
+      if (!conversationId || !content?.trim()) {
+        return res.status(400).send("Conversation ID and content are required");
+      }
+
+      // Verify conversation exists
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).send("Conversation not found");
+      }
+
+      // Create the message as platform
+      const message = await storage.createAdminMessage(conversationId, adminId, content.trim());
+
+      // Log admin action for audit trail
+      await storage.createAuditLog({
+        userId: adminId,
+        action: 'admin_message_sent',
+        entityType: 'message',
+        entityId: message.id,
+        changes: {
+          conversationId,
+          messagePreview: content.substring(0, 100),
+        },
+      });
+
+      res.status(201).json(message);
+    } catch (error: any) {
+      console.error('[Admin Messages] Error sending message:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Admin conversation export for legal compliance/dispute resolution
+  app.get("/api/admin/conversations/:conversationId/export", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      const format = (req.query.format as string) || 'json';
+
+      if (!['json', 'csv'].includes(format)) {
+        return res.status(400).send("Invalid format. Supported formats: json, csv");
+      }
+
+      // Get conversation details
+      const conversation = await storage.getConversationWithDetails(conversationId);
+      if (!conversation) {
+        return res.status(404).send("Conversation not found");
+      }
+
+      // Get all messages
+      const messages = await storage.getMessages(conversationId);
+
+      // Get user details for sender names
+      const creatorUser = await storage.getUser(conversation.creatorId);
+      const companyProfile = await storage.getCompanyProfile(conversation.companyId);
+      const companyUser = companyProfile ? await storage.getUser(companyProfile.userId) : null;
+
+      const creatorName = creatorUser
+        ? `${creatorUser.firstName || ''} ${creatorUser.lastName || ''}`.trim() || creatorUser.email
+        : 'Unknown Creator';
+      const companyName = companyProfile?.tradeName || companyProfile?.legalName || 'Unknown Company';
+
+      // Format messages with sender info
+      const formattedMessages = messages.map(msg => {
+        // Check if this is a platform/admin message
+        const isPlatformMessage = (msg as any).senderType === 'platform';
+
+        let senderName: string;
+        let senderType: string;
+
+        if (isPlatformMessage) {
+          senderName = 'Platform';
+          senderType = 'platform';
+        } else if (msg.senderId === conversation.creatorId) {
+          senderName = creatorName;
+          senderType = 'creator';
+        } else {
+          senderName = companyName;
+          senderType = 'company';
+        }
+
+        return {
+          id: msg.id,
+          senderId: msg.senderId,
+          senderName,
+          senderType,
+          content: msg.content,
+          attachments: msg.attachments || [],
+          createdAt: msg.createdAt,
+          isRead: msg.isRead,
+        };
+      });
+
+      const exportData = {
+        exportMetadata: {
+          exportDate: new Date().toISOString(),
+          exportedBy: (req.user as any).id,
+          exportPurpose: 'Legal compliance and dispute resolution',
+          platform: 'AffiliateXchange',
+        },
+        conversation: {
+          id: conversationId,
+          offerTitle: conversation.offerTitle || 'Unknown Offer',
+          creator: {
+            id: conversation.creatorId,
+            name: creatorName,
+            email: creatorUser?.email || '',
+          },
+          company: {
+            id: conversation.companyId,
+            name: companyName,
+          },
+          createdAt: conversation.createdAt,
+          lastMessageAt: conversation.lastMessageAt,
+          totalMessages: messages.length,
+        },
+        messages: formattedMessages,
+      };
+
+      if (format === 'csv') {
+        // Generate CSV format
+        const csvHeaders = ['Message ID', 'Timestamp', 'Sender Name', 'Sender Type', 'Message Content', 'Has Attachments', 'Attachment Count', 'Is Read'];
+        const csvRows = [
+          ['--- CONVERSATION METADATA ---', '', '', '', '', '', '', ''],
+          ['Conversation ID', conversationId, '', '', '', '', '', ''],
+          ['Offer', exportData.conversation.offerTitle, '', '', '', '', '', ''],
+          ['Creator', creatorName, creatorUser?.email || '', '', '', '', '', ''],
+          ['Company', companyName, '', '', '', '', '', ''],
+          ['Started', exportData.conversation.createdAt?.toString() || '', '', '', '', '', '', ''],
+          ['Last Message', exportData.conversation.lastMessageAt?.toString() || '', '', '', '', '', '', ''],
+          ['Total Messages', messages.length.toString(), '', '', '', '', '', ''],
+          ['Export Date', new Date().toISOString(), '', '', '', '', '', ''],
+          ['--- MESSAGE HISTORY ---', '', '', '', '', '', '', ''],
+          csvHeaders,
+          ...formattedMessages.map(msg => [
+            msg.id,
+            new Date(msg.createdAt!).toISOString(),
+            msg.senderName,
+            msg.senderType,
+            msg.content || '',
+            msg.attachments.length > 0 ? 'Yes' : 'No',
+            msg.attachments.length.toString(),
+            msg.isRead ? 'Yes' : 'No',
+          ]),
+        ];
+
+        const csvContent = csvRows
+          .map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))
+          .join('\n');
+
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="conversation-${conversationId}-export.csv"`);
+        return res.send(csvContent);
+      }
+
+      // Default to JSON
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="conversation-${conversationId}-export.json"`);
+      res.json(exportData);
+    } catch (error: any) {
+      console.error('[Admin Conversation Export] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Admin payment disputes routes
   app.get("/api/admin/payments/disputed", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -6038,6 +6239,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Reorder niches (drag-and-drop) - MUST be before /:id route to avoid matching "reorder" as an id
+  app.put("/api/admin/niches/reorder", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { orderedIds } = req.body;
+
+      if (!orderedIds || !Array.isArray(orderedIds)) {
+        return res.status(400).send("orderedIds array is required");
+      }
+
+      const niches = await storage.reorderNiches(orderedIds, userId);
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.REORDER_NICHES,
+        entityType: EntityTypes.NICHE,
+        changes: { orderedIds },
+        reason: 'Reordered niche categories',
+      }, req);
+
+      res.json(niches);
+    } catch (error: any) {
+      console.error('[Admin Niches] Error reordering niches:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   app.put("/api/admin/niches/:id", requireAuth, requireRole('admin'), async (req, res) => {
     try {
       const userId = (req.user as any).id;
@@ -6082,6 +6311,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true, message: 'Niche deleted successfully' });
     } catch (error: any) {
       console.error('[Admin Niches] Error deleting niche:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Set a niche as primary
+  app.put("/api/admin/niches/:id/set-primary", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const nicheId = req.params.id;
+
+      const niche = await storage.setNicheAsPrimary(nicheId, userId);
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.SET_PRIMARY_NICHE,
+        entityType: EntityTypes.NICHE,
+        entityId: nicheId,
+        changes: { isPrimary: true },
+        reason: 'Set niche as primary',
+      }, req);
+
+      res.json(niche);
+    } catch (error: any) {
+      console.error('[Admin Niches] Error setting primary niche:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Merge niches
+  app.post("/api/admin/niches/merge", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { sourceId, targetId } = req.body;
+
+      if (!sourceId || !targetId) {
+        return res.status(400).send("sourceId and targetId are required");
+      }
+
+      if (sourceId === targetId) {
+        return res.status(400).send("Cannot merge a niche with itself");
+      }
+
+      const result = await storage.mergeNiches(sourceId, targetId, userId);
+
+      // Log the action
+      const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
+      await logAuditAction(userId, {
+        action: AuditActions.MERGE_NICHES,
+        entityType: EntityTypes.NICHE,
+        entityId: targetId,
+        changes: {
+          sourceId,
+          targetId,
+          updatedOffers: result.updatedOffers,
+          updatedCreators: result.updatedCreators
+        },
+        reason: 'Merged niche categories',
+      }, req);
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[Admin Niches] Error merging niches:', error);
       res.status(500).send(error.message);
     }
   });
@@ -8360,7 +8652,8 @@ res.json(approved);
           // Check if the application is past its 7-minute auto-approval window
           if (now >= scheduledTime) {
             try {
-              const trackingCode = `CR-${application.creatorId.substring(0, 8)}-${application.offerId.substring(0, 8)}-${Date.now()}`;
+              // Generate short 8-character alphanumeric tracking code
+              const trackingCode = generateShortTrackingCode();
               const port = process.env.PORT || 3000;
               const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
               const trackingLink = `${baseURL}/go/${trackingCode}`;
@@ -8697,6 +8990,748 @@ res.json(approved);
     } catch (error: any) {
       console.error('[Migration] Error:', error);
       res.status(500).json({ error: "Migration failed", details: error.message });
+    }
+  });
+
+  // ============ Advanced Tracking Endpoints (Postback, Pixel, JS Snippet) ============
+
+  /**
+   * Postback URL Endpoint - Server-to-server conversion tracking
+   * METHOD A from specification: Most secure, recommended for SaaS/Apps/eCommerce
+   *
+   * POST /api/tracking/postback
+   * Headers: X-API-Key: company_api_key
+   * Body: { trackingCode, eventType, saleAmount, currency, orderId, timestamp, signature }
+   */
+  app.post("/api/tracking/postback", async (req, res) => {
+    try {
+      const apiKey = req.headers['x-api-key'] as string;
+      const {
+        trackingCode,
+        eventType = 'sale',
+        saleAmount,
+        currency = 'USD',
+        orderId,
+        timestamp,
+        signature,
+        customData
+      } = req.body;
+
+      // Validate required fields
+      if (!trackingCode) {
+        return res.status(400).json({ success: false, error: "Missing trackingCode" });
+      }
+
+      // Look up application by tracking code
+      const application = await storage.getApplicationByTrackingCode(trackingCode);
+      if (!application) {
+        return res.status(404).json({ success: false, error: "Invalid tracking code" });
+      }
+
+      // Get offer and company for API key validation
+      const offer = await storage.getOffer(application.offerId);
+      if (!offer) {
+        return res.status(404).json({ success: false, error: "Offer not found" });
+      }
+
+      const company = await storage.getCompanyProfileById(offer.companyId);
+      if (!company) {
+        return res.status(404).json({ success: false, error: "Company not found" });
+      }
+
+      // Validate API key if company has one set up
+      if (company.trackingApiKey) {
+        if (!apiKey) {
+          return res.status(401).json({ success: false, error: "Missing API key" });
+        }
+        if (apiKey !== company.trackingApiKey) {
+          return res.status(403).json({ success: false, error: "Invalid API key" });
+        }
+
+        // Validate signature if timestamp is provided
+        if (timestamp && signature) {
+          if (!isTimestampValid(timestamp)) {
+            return res.status(400).json({ success: false, error: "Timestamp expired (must be within 5 minutes)" });
+          }
+
+          const isValidSignature = validatePostbackSignature(
+            trackingCode,
+            eventType,
+            saleAmount,
+            timestamp,
+            signature,
+            company.trackingApiKey
+          );
+
+          if (!isValidSignature) {
+            return res.status(403).json({ success: false, error: "Invalid signature" });
+          }
+        }
+      }
+
+      // Validate event type
+      const validEventTypes: ConversionEventType[] = ['sale', 'lead', 'click', 'signup', 'install', 'custom'];
+      if (!validEventTypes.includes(eventType as ConversionEventType)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid eventType. Must be one of: ${validEventTypes.join(', ')}`
+        });
+      }
+
+      // Map event type to commission calculation
+      let effectiveSaleAmount = saleAmount;
+      if (eventType === 'lead' || eventType === 'signup') {
+        // For leads, use the offer's fixed commission amount
+        effectiveSaleAmount = undefined;
+      } else if (eventType === 'click') {
+        // Click tracking is handled by the /go/:code endpoint
+        return res.json({
+          success: true,
+          message: "Click events are tracked via the redirect endpoint",
+          note: "Use /go/:trackingCode for click tracking"
+        });
+      }
+
+      // Record the conversion
+      const conversionId = generateConversionId();
+      await storage.recordConversion(application.id, effectiveSaleAmount ? parseFloat(effectiveSaleAmount) : undefined);
+
+      // Log the postback for audit trail
+      console.log(`[Postback] Conversion recorded - Code: ${trackingCode}, Event: ${eventType}, Amount: ${saleAmount}, Order: ${orderId}`);
+
+      res.json({
+        success: true,
+        message: "Conversion recorded successfully",
+        conversionId,
+        eventType,
+        trackingCode,
+        orderId: orderId || null
+      });
+
+    } catch (error: any) {
+      console.error('[Postback] Error:', error);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  });
+
+  /**
+   * Tracking Pixel Endpoint - Image-based conversion tracking
+   * METHOD B from specification: Easy for websites/ecommerce
+   *
+   * GET /api/tracking/pixel/:code
+   * Query params: ?event=sale&amount=99.99&order_id=123
+   *
+   * Usage: <img src="https://yourapp.com/api/tracking/pixel/AB12CD34?event=sale&amount=99.99" />
+   */
+  app.get("/api/tracking/pixel/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const {
+        event = 'sale',
+        amount,
+        order_id,
+        currency = 'USD'
+      } = req.query;
+
+      // Set headers for pixel response (1x1 transparent GIF)
+      res.set({
+        'Content-Type': 'image/gif',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+
+      // Look up application by tracking code
+      const application = await storage.getApplicationByTrackingCode(code);
+      if (!application) {
+        console.log(`[Pixel] Invalid tracking code: ${code}`);
+        return res.send(getTransparentPixel());
+      }
+
+      // Record conversion asynchronously (don't block pixel response)
+      const saleAmount = amount ? parseFloat(amount as string) : undefined;
+
+      storage.recordConversion(application.id, saleAmount)
+        .then(() => {
+          console.log(`[Pixel] Conversion recorded - Code: ${code}, Event: ${event}, Amount: ${amount}`);
+        })
+        .catch((err: any) => {
+          console.error('[Pixel] Error recording conversion:', err);
+        });
+
+      // Return transparent 1x1 GIF immediately
+      res.send(getTransparentPixel());
+
+    } catch (error: any) {
+      console.error('[Pixel] Error:', error);
+      // Always return pixel to avoid breaking page load
+      res.set('Content-Type', 'image/gif');
+      res.send(getTransparentPixel());
+    }
+  });
+
+  /**
+   * Alternative pixel endpoint using /conversion path for cleaner URLs
+   * GET /conversion?code=AB12CD34&event=sale&amount=99.99
+   */
+  app.get("/conversion", async (req, res) => {
+    try {
+      const { code, event = 'sale', amount, order_id } = req.query;
+
+      res.set({
+        'Content-Type': 'image/gif',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+
+      if (!code) {
+        return res.send(getTransparentPixel());
+      }
+
+      const application = await storage.getApplicationByTrackingCode(code as string);
+      if (!application) {
+        return res.send(getTransparentPixel());
+      }
+
+      const saleAmount = amount ? parseFloat(amount as string) : undefined;
+
+      storage.recordConversion(application.id, saleAmount)
+        .then(() => {
+          console.log(`[Pixel] Conversion via /conversion - Code: ${code}, Amount: ${amount}`);
+        })
+        .catch((err: any) => {
+          console.error('[Pixel] Error:', err);
+        });
+
+      res.send(getTransparentPixel());
+
+    } catch (error: any) {
+      res.set('Content-Type', 'image/gif');
+      res.send(getTransparentPixel());
+    }
+  });
+
+  /**
+   * Generate/Regenerate API Key for company's tracking integration
+   * POST /api/company/tracking/api-key
+   */
+  app.post("/api/company/tracking/api-key", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      // Generate new API key
+      const apiKey = generateCompanyApiKey(companyProfile.id);
+
+      // Update company profile with new API key
+      await db.update(companyProfiles)
+        .set({
+          trackingApiKey: apiKey,
+          trackingApiKeyCreatedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(eq(companyProfiles.id, companyProfile.id));
+
+      res.json({
+        success: true,
+        apiKey,
+        createdAt: new Date().toISOString(),
+        message: "API key generated successfully. Store this securely - it won't be shown again in full."
+      });
+
+    } catch (error: any) {
+      console.error('[API Key] Error generating:', error);
+      res.status(500).json({ error: "Failed to generate API key" });
+    }
+  });
+
+  /**
+   * Get tracking integration details for company
+   * GET /api/company/tracking/integration
+   */
+  app.get("/api/company/tracking/integration", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      const port = process.env.PORT || 3000;
+      const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
+
+      // Mask API key if it exists
+      const maskedApiKey = companyProfile.trackingApiKey
+        ? `${companyProfile.trackingApiKey.substring(0, 8)}...${companyProfile.trackingApiKey.substring(companyProfile.trackingApiKey.length - 4)}`
+        : null;
+
+      res.json({
+        hasApiKey: !!companyProfile.trackingApiKey,
+        apiKeyMasked: maskedApiKey,
+        apiKeyCreatedAt: companyProfile.trackingApiKeyCreatedAt,
+        endpoints: {
+          postback: `${baseURL}/api/tracking/postback`,
+          pixel: `${baseURL}/api/tracking/pixel/{trackingCode}`,
+          pixelAlt: `${baseURL}/conversion?code={trackingCode}&event=sale&amount={amount}`,
+          redirect: `${baseURL}/go/{trackingCode}`
+        },
+        documentation: generatePostbackUrlExample(baseURL),
+        javascriptSnippet: companyProfile.trackingApiKey
+          ? generateTrackingSnippet(companyProfile.id, companyProfile.trackingApiKey, baseURL)
+          : "Generate an API key first to get your JavaScript snippet"
+      });
+
+    } catch (error: any) {
+      console.error('[Integration] Error:', error);
+      res.status(500).json({ error: "Failed to get integration details" });
+    }
+  });
+
+  /**
+   * Get JavaScript tracking snippet
+   * GET /api/company/tracking/snippet
+   */
+  app.get("/api/company/tracking/snippet", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      if (!companyProfile.trackingApiKey) {
+        return res.status(400).json({
+          error: "No API key found",
+          message: "Generate an API key first using POST /api/company/tracking/api-key"
+        });
+      }
+
+      const port = process.env.PORT || 3000;
+      const baseURL = process.env.BASE_URL || `http://localhost:${port}`;
+
+      const snippet = generateTrackingSnippet(companyProfile.id, companyProfile.trackingApiKey, baseURL);
+
+      res.type('text/javascript').send(snippet);
+
+    } catch (error: any) {
+      console.error('[Snippet] Error:', error);
+      res.status(500).json({ error: "Failed to generate snippet" });
+    }
+  });
+
+  /**
+   * Generate signature for postback (helper endpoint for testing)
+   * POST /api/company/tracking/generate-signature
+   */
+  app.post("/api/company/tracking/generate-signature", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile || !companyProfile.trackingApiKey) {
+        return res.status(400).json({ error: "Generate an API key first" });
+      }
+
+      const { trackingCode, eventType = 'sale', saleAmount } = req.body;
+      const timestamp = Date.now();
+
+      const signature = generatePostbackSignature(
+        trackingCode,
+        eventType,
+        saleAmount,
+        timestamp,
+        companyProfile.trackingApiKey
+      );
+
+      res.json({
+        trackingCode,
+        eventType,
+        saleAmount,
+        timestamp,
+        signature,
+        exampleRequest: {
+          method: 'POST',
+          url: `${process.env.BASE_URL || 'http://localhost:3000'}/api/tracking/postback`,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': companyProfile.trackingApiKey
+          },
+          body: {
+            trackingCode,
+            eventType,
+            saleAmount,
+            timestamp,
+            signature
+          }
+        }
+      });
+
+    } catch (error: any) {
+      console.error('[Generate Signature] Error:', error);
+      res.status(500).json({ error: "Failed to generate signature" });
+    }
+  });
+
+  // ============ Invoice Endpoints ============
+
+  /**
+   * Generate invoice for a payment
+   * GET /api/payments/:id/invoice
+   */
+  app.get("/api/payments/:id/invoice", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const userRole = (req.user as any).role;
+      const paymentId = req.params.id;
+
+      // Get payment to verify access
+      const payment = await storage.getPayment(paymentId);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      // Verify access - creator can view their own payments, company can view payments for their offers
+      if (userRole === 'creator' && payment.creatorId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (userRole === 'company') {
+        const companyProfile = await storage.getCompanyProfile(userId);
+        if (!companyProfile || payment.companyId !== companyProfile.id) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      // Generate invoice
+      const invoice = await generatePaymentInvoice(paymentId);
+      if (!invoice) {
+        return res.status(500).json({ error: "Failed to generate invoice" });
+      }
+
+      // Return HTML or JSON based on Accept header
+      const acceptHeader = req.headers.accept || '';
+      if (acceptHeader.includes('text/html')) {
+        res.type('text/html').send(invoice.html);
+      } else {
+        res.json({
+          success: true,
+          invoiceNumber: invoice.invoiceNumber,
+          data: invoice.data,
+          html: invoice.html
+        });
+      }
+
+    } catch (error: any) {
+      console.error('[Invoice] Error:', error);
+      res.status(500).json({ error: "Failed to generate invoice" });
+    }
+  });
+
+  /**
+   * Download invoice as HTML (for print to PDF)
+   * GET /api/payments/:id/invoice/download
+   */
+  app.get("/api/payments/:id/invoice/download", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const userRole = (req.user as any).role;
+      const paymentId = req.params.id;
+
+      const payment = await storage.getPayment(paymentId);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+
+      // Verify access
+      if (userRole === 'creator' && payment.creatorId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (userRole === 'company') {
+        const companyProfile = await storage.getCompanyProfile(userId);
+        if (!companyProfile || payment.companyId !== companyProfile.id) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const invoice = await generatePaymentInvoice(paymentId);
+      if (!invoice) {
+        return res.status(500).json({ error: "Failed to generate invoice" });
+      }
+
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.html"`);
+      res.send(invoice.html);
+
+    } catch (error: any) {
+      console.error('[Invoice Download] Error:', error);
+      res.status(500).json({ error: "Failed to download invoice" });
+    }
+  });
+
+  // ============ Company Re-apply Restriction (90-Day) ============
+
+  /**
+   * Check if a rejected company can re-apply
+   * GET /api/company/can-reapply
+   */
+  app.get("/api/company/can-reapply", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.json({
+          canReapply: true,
+          daysRemaining: 0,
+          message: "No company profile found - you can create one"
+        });
+      }
+
+      const result = await storage.canCompanyReapply(companyProfile.id);
+      res.json(result);
+
+    } catch (error: any) {
+      console.error('[Can Reapply] Error:', error);
+      res.status(500).json({ error: "Failed to check re-apply status" });
+    }
+  });
+
+  /**
+   * Company re-applies after rejection (with 90-day restriction)
+   * POST /api/company/reapply
+   */
+  app.post("/api/company/reapply", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      // Check 90-day restriction
+      const reapplyCheck = await storage.canCompanyReapply(companyProfile.id);
+      if (!reapplyCheck.canReapply) {
+        return res.status(403).json({
+          error: "Re-apply restriction active",
+          message: reapplyCheck.message,
+          daysRemaining: reapplyCheck.daysRemaining
+        });
+      }
+
+      // Reset company status to pending for re-review
+      await db.update(companyProfiles)
+        .set({
+          status: 'pending',
+          rejectionReason: null,
+          updatedAt: new Date()
+        })
+        .where(eq(companyProfiles.id, companyProfile.id));
+
+      // Notify admins
+      const adminUsers = await storage.getUsersByRole('admin');
+      for (const admin of adminUsers) {
+        await notificationService.sendNotification(
+          admin.id,
+          'high_risk_company',
+          'Company Re-application',
+          `${companyProfile.legalName || companyProfile.tradeName} has re-applied after rejection (attempt #${(companyProfile.rejectionCount || 0) + 1}).`,
+          {
+            userName: admin.firstName || admin.username,
+            companyName: companyProfile.legalName || companyProfile.tradeName || '',
+            companyId: companyProfile.id,
+          }
+        );
+      }
+
+      res.json({
+        success: true,
+        message: "Re-application submitted successfully. Your application is now pending review."
+      });
+
+    } catch (error: any) {
+      console.error('[Reapply] Error:', error);
+      res.status(500).json({ error: "Failed to submit re-application" });
+    }
+  });
+
+  // ============ Company Charging Endpoints ============
+
+  /**
+   * Create a charge for company (for commissions due)
+   * POST /api/admin/companies/:id/charge
+   */
+  app.post("/api/admin/companies/:id/charge", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const companyId = req.params.id;
+      const { amount, description, applicationIds } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid charge amount" });
+      }
+
+      const company = await storage.getCompanyProfileById(companyId);
+      if (!company) {
+        return res.status(404).json({ error: "Company not found" });
+      }
+
+      // Generate invoice for the charge
+      const invoice = await generateCompanyChargeInvoice(companyId, amount, description || 'Commission charges');
+
+      // Create a charge record (you may want to integrate with Stripe here)
+      const chargeRecord = {
+        id: `charge_${Date.now()}`,
+        companyId,
+        amount,
+        description: description || 'Commission charges',
+        invoiceNumber: invoice?.invoiceNumber,
+        status: 'pending',
+        applicationIds: applicationIds || [],
+        createdAt: new Date()
+      };
+
+      // Notify company about the charge
+      if (company.userId) {
+        await notificationService.sendNotification(
+          company.userId,
+          'payment_pending',
+          'New Charge Created',
+          `A charge of $${amount.toFixed(2)} has been created for your account. ${description || ''}`,
+          {
+            userName: company.contactName || 'there',
+            amount: amount.toFixed(2),
+            invoiceNumber: invoice?.invoiceNumber
+          }
+        );
+      }
+
+      res.json({
+        success: true,
+        charge: chargeRecord,
+        invoice: invoice?.data
+      });
+
+    } catch (error: any) {
+      console.error('[Company Charge] Error:', error);
+      res.status(500).json({ error: "Failed to create charge" });
+    }
+  });
+
+  /**
+   * Get company's pending charges
+   * GET /api/company/charges
+   */
+  app.get("/api/company/charges", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const companyProfile = await storage.getCompanyProfile(userId);
+
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      // Get all pending payments (commissions) that need to be paid by this company
+      const pendingPayments = await storage.getPaymentsByCompany(companyProfile.id);
+
+      // Calculate totals
+      const pendingTotal = pendingPayments
+        .filter((p: any) => p.status === 'pending')
+        .reduce((sum: number, p: any) => sum + parseFloat(p.grossAmount || 0), 0);
+
+      const completedTotal = pendingPayments
+        .filter((p: any) => p.status === 'completed')
+        .reduce((sum: number, p: any) => sum + parseFloat(p.grossAmount || 0), 0);
+
+      res.json({
+        payments: pendingPayments,
+        summary: {
+          pending: {
+            count: pendingPayments.filter((p: any) => p.status === 'pending').length,
+            total: pendingTotal
+          },
+          completed: {
+            count: pendingPayments.filter((p: any) => p.status === 'completed').length,
+            total: completedTotal
+          }
+        }
+      });
+
+    } catch (error: any) {
+      console.error('[Company Charges] Error:', error);
+      res.status(500).json({ error: "Failed to get charges" });
+    }
+  });
+
+  /**
+   * Company processes a batch payment for pending commissions
+   * POST /api/company/process-batch-payment
+   */
+  app.post("/api/company/process-batch-payment", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { paymentIds } = req.body;
+
+      if (!paymentIds || !Array.isArray(paymentIds) || paymentIds.length === 0) {
+        return res.status(400).json({ error: "No payment IDs provided" });
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      // Verify all payments belong to this company
+      const results = [];
+      let totalAmount = 0;
+
+      for (const paymentId of paymentIds) {
+        const payment = await storage.getPayment(paymentId);
+        if (!payment) {
+          results.push({ paymentId, success: false, error: "Payment not found" });
+          continue;
+        }
+
+        if (payment.companyId !== companyProfile.id) {
+          results.push({ paymentId, success: false, error: "Payment does not belong to this company" });
+          continue;
+        }
+
+        if (payment.status !== 'pending') {
+          results.push({ paymentId, success: false, error: `Payment is not pending (status: ${payment.status})` });
+          continue;
+        }
+
+        // Mark payment as processing
+        await db.update(payments)
+          .set({
+            status: 'processing',
+            updatedAt: new Date()
+          })
+          .where(eq(payments.id, paymentId));
+
+        totalAmount += parseFloat(payment.grossAmount);
+        results.push({ paymentId, success: true, amount: payment.grossAmount });
+      }
+
+      res.json({
+        success: true,
+        message: `Batch payment initiated for ${results.filter(r => r.success).length} payments`,
+        totalAmount,
+        results,
+        note: "Payments will be processed via Stripe Connect. You will be charged the total amount."
+      });
+
+    } catch (error: any) {
+      console.error('[Batch Payment] Error:', error);
+      res.status(500).json({ error: "Failed to process batch payment" });
     }
   });
 

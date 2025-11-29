@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,17 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Checkbox } from "../components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import {
   Users,
   MessageSquare,
@@ -25,6 +36,11 @@ import {
   PauseCircle,
   CheckCircle2,
   FileText,
+  CheckSquare,
+  XCircle,
+  PlayCircle,
+  DollarSign,
+  Loader2,
 } from "lucide-react";
 import { exportCreatorListPDF, type CreatorExportData } from "../lib/export-utils";
 import { Link, useLocation } from "wouter";
@@ -32,6 +48,8 @@ import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest } from "../lib/queryClient";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
+
+type BulkActionType = "approve" | "pause" | "activate" | "complete" | "reject" | "approve_payouts" | null;
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -139,6 +157,11 @@ export default function CompanyCreators() {
   const [payoutProcessingId, setPayoutProcessingId] = useState<string | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
+  // Bulk selection state
+  const [selectedApplications, setSelectedApplications] = useState<Set<string>>(new Set());
+  const [bulkActionDialog, setBulkActionDialog] = useState<BulkActionType>(null);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+
   const startConversationMutation = useMutation({
     mutationFn: async (applicationId: string) => {
       const response = await apiRequest("POST", "/api/conversations/start", { applicationId });
@@ -204,6 +227,74 @@ export default function CompanyCreators() {
     },
     onSettled: () => {
       setPayoutProcessingId(null);
+    },
+  });
+
+  // Bulk status update mutation
+  const bulkUpdateStatusMutation = useMutation({
+    mutationFn: async ({ applicationIds, status }: { applicationIds: string[]; status: string }) => {
+      const results = await Promise.all(
+        applicationIds.map(async (applicationId) => {
+          const response = await apiRequest("PATCH", `/api/company/applications/${applicationId}/status`, { status });
+          return response.json();
+        })
+      );
+      return results;
+    },
+    onMutate: () => {
+      setIsBulkProcessing(true);
+    },
+    onSuccess: (results, { status }) => {
+      toast({
+        title: "Bulk update complete",
+        description: `${results.length} application(s) marked as ${formatStatusLabel(status)}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/applications"] });
+      setSelectedApplications(new Set());
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        title: "Bulk update failed",
+        message: error.message || "Some applications could not be updated. Please try again.",
+      });
+    },
+    onSettled: () => {
+      setIsBulkProcessing(false);
+      setBulkActionDialog(null);
+    },
+  });
+
+  // Bulk payout approval mutation
+  const bulkApprovePayoutsMutation = useMutation({
+    mutationFn: async (paymentIds: string[]) => {
+      const results = await Promise.all(
+        paymentIds.map(async (paymentId) => {
+          const response = await apiRequest("POST", `/api/company/payments/${paymentId}/approve`);
+          return response.json();
+        })
+      );
+      return results;
+    },
+    onMutate: () => {
+      setIsBulkProcessing(true);
+    },
+    onSuccess: (results) => {
+      toast({
+        title: "Payouts approved",
+        description: `${results.length} payout(s) moved to processing.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/applications"] });
+      setSelectedApplications(new Set());
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        title: "Payout approval failed",
+        message: error.message || "Some payouts could not be approved. Please try again.",
+      });
+    },
+    onSettled: () => {
+      setIsBulkProcessing(false);
+      setBulkActionDialog(null);
     },
   });
 
@@ -319,6 +410,155 @@ export default function CompanyCreators() {
       .map(([offerId, value]) => ({ offerId, ...value }))
       .sort((a, b) => a.offerTitle.localeCompare(b.offerTitle));
   }, [filteredApplications]);
+
+  // Selection helper functions (must be after filteredApplications is defined)
+  const toggleApplicationSelection = useCallback((applicationId: string) => {
+    setSelectedApplications((prev) => {
+      const next = new Set(prev);
+      if (next.has(applicationId)) {
+        next.delete(applicationId);
+      } else {
+        next.add(applicationId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllForOffer = useCallback((offerApplicationIds: string[], allSelected: boolean) => {
+    setSelectedApplications((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // Deselect all in this offer
+        offerApplicationIds.forEach((id) => next.delete(id));
+      } else {
+        // Select all in this offer
+        offerApplicationIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    const allIds = filteredApplications.map((app) => app.id);
+    setSelectedApplications(new Set(allIds));
+  }, [filteredApplications]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedApplications(new Set());
+  }, []);
+
+  // Get selected applications data
+  const selectedApplicationsData = useMemo(() => {
+    return filteredApplications.filter((app) => selectedApplications.has(app.id));
+  }, [filteredApplications, selectedApplications]);
+
+  // Get pending payouts from selected applications
+  const selectedPendingPayouts = useMemo(() => {
+    return selectedApplicationsData
+      .filter((app) => app.pendingPayment?.id)
+      .map((app) => app.pendingPayment!);
+  }, [selectedApplicationsData]);
+
+  // Bulk action handlers
+  const handleBulkAction = useCallback((action: BulkActionType) => {
+    if (selectedApplications.size === 0) {
+      toast({
+        title: "No selection",
+        description: "Please select at least one creator to perform bulk actions.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setBulkActionDialog(action);
+  }, [selectedApplications.size, toast]);
+
+  const executeBulkAction = useCallback(() => {
+    const applicationIds = Array.from(selectedApplications);
+
+    switch (bulkActionDialog) {
+      case "approve":
+        bulkUpdateStatusMutation.mutate({ applicationIds, status: "approved" });
+        break;
+      case "pause":
+        bulkUpdateStatusMutation.mutate({ applicationIds, status: "paused" });
+        break;
+      case "activate":
+        bulkUpdateStatusMutation.mutate({ applicationIds, status: "active" });
+        break;
+      case "complete":
+        bulkUpdateStatusMutation.mutate({ applicationIds, status: "completed" });
+        break;
+      case "reject":
+        bulkUpdateStatusMutation.mutate({ applicationIds, status: "rejected" });
+        break;
+      case "approve_payouts":
+        const paymentIds = selectedPendingPayouts.map((p) => p.id);
+        if (paymentIds.length === 0) {
+          toast({
+            title: "No pending payouts",
+            description: "None of the selected creators have pending payouts.",
+            variant: "destructive",
+          });
+          setBulkActionDialog(null);
+          return;
+        }
+        bulkApprovePayoutsMutation.mutate(paymentIds);
+        break;
+    }
+  }, [bulkActionDialog, selectedApplications, selectedPendingPayouts, bulkUpdateStatusMutation, bulkApprovePayoutsMutation, toast]);
+
+  // Get bulk action dialog content
+  const getBulkActionDialogContent = useCallback(() => {
+    const count = selectedApplications.size;
+    switch (bulkActionDialog) {
+      case "approve":
+        return {
+          title: "Approve Selected Creators",
+          description: `Are you sure you want to approve ${count} creator(s)? They will be able to start promoting your offer.`,
+          actionText: "Approve All",
+          actionClass: "bg-blue-600 hover:bg-blue-700",
+        };
+      case "pause":
+        return {
+          title: "Pause Selected Creators",
+          description: `Are you sure you want to pause ${count} creator(s)? They will temporarily stop earning commissions.`,
+          actionText: "Pause All",
+          actionClass: "bg-amber-600 hover:bg-amber-700",
+        };
+      case "activate":
+        return {
+          title: "Activate Selected Creators",
+          description: `Are you sure you want to activate ${count} creator(s)? They have posted content and are actively promoting.`,
+          actionText: "Activate All",
+          actionClass: "bg-emerald-600 hover:bg-emerald-700",
+        };
+      case "complete":
+        return {
+          title: "Mark as Completed",
+          description: `Are you sure you want to mark ${count} creator(s) as completed? This indicates the collaboration has ended successfully.`,
+          actionText: "Complete All",
+          actionClass: "bg-purple-600 hover:bg-purple-700",
+        };
+      case "reject":
+        return {
+          title: "Reject Selected Creators",
+          description: `Are you sure you want to reject ${count} creator(s)? This action cannot be easily undone.`,
+          actionText: "Reject All",
+          actionClass: "bg-red-600 hover:bg-red-700",
+        };
+      case "approve_payouts":
+        const payoutCount = selectedPendingPayouts.length;
+        const totalAmount = selectedPendingPayouts.reduce((sum, p) => sum + Number(p.netAmount || 0), 0);
+        return {
+          title: "Approve Pending Payouts",
+          description: `Approve ${payoutCount} payout(s) totaling $${totalAmount.toFixed(2)}? Funds will be moved to processing.`,
+          actionText: "Approve Payouts",
+          actionClass: "bg-green-600 hover:bg-green-700",
+        };
+      default:
+        return null;
+    }
+  }, [bulkActionDialog, selectedApplications.size, selectedPendingPayouts]);
 
   const totalVisibleCreators = filteredApplications.length;
   const totalCreators = normalizedApplications.length;
@@ -590,6 +830,94 @@ export default function CompanyCreators() {
         </CardContent>
       </Card>
 
+      {/* Bulk Actions Toolbar */}
+      {selectedApplications.size > 0 && (
+        <Card className="border-primary bg-primary/5">
+          <CardContent className="py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="h-5 w-5 text-primary" />
+                  <span className="font-semibold">
+                    {selectedApplications.size} creator{selectedApplications.size === 1 ? "" : "s"} selected
+                  </span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={clearSelection} className="text-muted-foreground">
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Selection
+                </Button>
+                <Button variant="ghost" size="sm" onClick={selectAllFiltered} className="text-muted-foreground">
+                  Select All ({totalVisibleCreators})
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                  onClick={() => handleBulkAction("approve")}
+                  disabled={isBulkProcessing}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => handleBulkAction("activate")}
+                  disabled={isBulkProcessing}
+                >
+                  <PlayCircle className="h-4 w-4" />
+                  Activate
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
+                  onClick={() => handleBulkAction("pause")}
+                  disabled={isBulkProcessing}
+                >
+                  <PauseCircle className="h-4 w-4" />
+                  Pause
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50"
+                  onClick={() => handleBulkAction("complete")}
+                  disabled={isBulkProcessing}
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  Complete
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={() => handleBulkAction("reject")}
+                  disabled={isBulkProcessing}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+                <div className="w-px h-6 bg-border hidden lg:block" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-green-300 text-green-700 hover:bg-green-50"
+                  onClick={() => handleBulkAction("approve_payouts")}
+                  disabled={isBulkProcessing || selectedPendingPayouts.length === 0}
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Approve Payouts ({selectedPendingPayouts.length})
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {loadingCreators ? (
         <div className="text-center py-12">
           <div className="animate-pulse text-lg text-muted-foreground">Loading creators...</div>
@@ -627,9 +955,27 @@ export default function CompanyCreators() {
                 </div>
               </CardHeader>
               <CardContent className="overflow-x-auto">
-                <table className="w-full min-w-[720px] text-sm">
+                {(() => {
+                  const offerAppIds = offer.items.map((app) => app.id);
+                  const allOfferSelected = offerAppIds.length > 0 && offerAppIds.every((id) => selectedApplications.has(id));
+                  const someOfferSelected = offerAppIds.some((id) => selectedApplications.has(id));
+
+                  return (
+                <table className="w-full min-w-[820px] text-sm">
                   <thead className="text-xs uppercase text-muted-foreground border-b">
                     <tr>
+                      <th className="py-3 pl-2 pr-3 w-10">
+                        <Checkbox
+                          checked={allOfferSelected}
+                          ref={(el) => {
+                            if (el) {
+                              (el as HTMLButtonElement).dataset.state = someOfferSelected && !allOfferSelected ? "indeterminate" : allOfferSelected ? "checked" : "unchecked";
+                            }
+                          }}
+                          onCheckedChange={() => toggleSelectAllForOffer(offerAppIds, allOfferSelected)}
+                          aria-label={`Select all creators for ${offer.offerTitle}`}
+                        />
+                      </th>
                       <th className="py-3 text-left font-medium">Creator</th>
                       <th className="py-3 text-left font-medium">Status</th>
                       <th className="py-3 text-left font-medium">Performance</th>
@@ -676,8 +1022,20 @@ export default function CompanyCreators() {
                         }
                       })();
 
+                      const isSelected = selectedApplications.has(application.id);
+
                       return (
-                        <tr key={application.id} className="align-top">
+                        <tr
+                          key={application.id}
+                          className={`align-top transition-colors ${isSelected ? "bg-primary/5" : ""}`}
+                        >
+                          <td className="py-4 pl-2 pr-3 w-10">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => toggleApplicationSelection(application.id)}
+                              aria-label={`Select ${fullName}`}
+                            />
+                          </td>
                           <td className="py-4 pr-4">
                             <div className="flex items-start gap-3">
                               <Avatar className="h-10 w-10">
@@ -824,11 +1182,51 @@ export default function CompanyCreators() {
                     })}
                   </tbody>
                 </table>
+                  );
+                })()}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Bulk Action Confirmation Dialog */}
+      <AlertDialog open={bulkActionDialog !== null} onOpenChange={(open) => !open && setBulkActionDialog(null)}>
+        <AlertDialogContent>
+          {(() => {
+            const content = getBulkActionDialogContent();
+            if (!content) return null;
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{content.title}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {content.description}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isBulkProcessing}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={executeBulkAction}
+                    disabled={isBulkProcessing}
+                    className={content.actionClass}
+                  >
+                    {isBulkProcessing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      content.actionText
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
+
       <GenericErrorDialog
         open={!!errorDialog}
         onOpenChange={(open) => !open && setErrorDialog(null)}

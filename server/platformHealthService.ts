@@ -709,13 +709,15 @@ export async function getStorageMetricsTimeSeries(
       .where(gte(storageMetrics.date, cutoffTime))
       .orderBy(storageMetrics.date);
 
-    return metrics.map(m => ({
-      date: new Date(m.date).toISOString().split('T')[0],
-      totalStorageGb: parseFloat(m.totalStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
-      videoStorageGb: parseFloat(m.videoStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
-      imageStorageGb: parseFloat(m.imageStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
-      documentStorageGb: parseFloat(m.documentStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
-    }));
+    return metrics
+      .filter(m => m.date && !isNaN(new Date(m.date).getTime()))
+      .map(m => ({
+        date: new Date(m.date).toISOString().split('T')[0],
+        totalStorageGb: parseFloat(m.totalStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
+        videoStorageGb: parseFloat(m.videoStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
+        imageStorageGb: parseFloat(m.imageStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
+        documentStorageGb: parseFloat(m.documentStorageBytes?.toString() || '0') / (1024 * 1024 * 1024),
+      }));
   } catch (error) {
     console.error('[Platform Health] Failed to get storage time series:', error);
     return [];
@@ -743,13 +745,15 @@ export async function getVideoCostsTimeSeries(
       .where(gte(videoHostingCosts.date, cutoffTime))
       .orderBy(videoHostingCosts.date);
 
-    return costs.map(c => ({
-      date: new Date(c.date).toISOString().split('T')[0],
-      totalCostUsd: parseFloat(c.totalCostUsd?.toString() || '0'),
-      storageCostUsd: parseFloat(c.storageCostUsd?.toString() || '0'),
-      bandwidthCostUsd: parseFloat(c.bandwidthCostUsd?.toString() || '0'),
-      transcodingCostUsd: parseFloat(c.transcodingCostUsd?.toString() || '0'),
-    }));
+    return costs
+      .filter(c => c.date && !isNaN(new Date(c.date).getTime()))
+      .map(c => ({
+        date: new Date(c.date).toISOString().split('T')[0],
+        totalCostUsd: parseFloat(c.totalCostUsd?.toString() || '0'),
+        storageCostUsd: parseFloat(c.storageCostUsd?.toString() || '0'),
+        bandwidthCostUsd: parseFloat(c.bandwidthCostUsd?.toString() || '0'),
+        transcodingCostUsd: parseFloat(c.transcodingCostUsd?.toString() || '0'),
+      }));
   } catch (error) {
     console.error('[Platform Health] Failed to get video costs time series:', error);
     return [];

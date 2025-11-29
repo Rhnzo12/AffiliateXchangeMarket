@@ -624,6 +624,7 @@ export interface IStorage {
   getPendingCompanies(): Promise<CompanyProfile[]>;
   approveCompany(companyId: string): Promise<CompanyProfile | undefined>;
   rejectCompany(companyId: string, reason: string): Promise<CompanyProfile | undefined>;
+  canCompanyReapply(companyId: string): Promise<{ canReapply: boolean; daysRemaining: number; message: string }>;
   suspendCompany(companyId: string): Promise<CompanyProfile | undefined>;
   unsuspendCompany(companyId: string): Promise<CompanyProfile | undefined>;
   getAllCompanies(filters?: {
@@ -666,11 +667,13 @@ export interface IStorage {
   createApplication(application: InsertApplication): Promise<Application>;
   updateApplication(id: string, updates: Partial<InsertApplication>): Promise<Application | undefined>;
   approveApplication(id: string, trackingLink: string, trackingCode: string): Promise<Application | undefined>;
+  setAutoApprovalTime(id: string, autoApprovalTime: Date): Promise<Application | undefined>;
   completeApplication(id: string): Promise<Application | undefined>;
   getApplicationsByCompany(companyId: string): Promise<any[]>;
 
   // Messages & Conversations
   getConversation(id: string): Promise<any>;
+  getConversationWithDetails(id: string): Promise<any>;
   getConversationsByUser(
     userId: string,
     userRole: string,
@@ -678,6 +681,7 @@ export interface IStorage {
   ): Promise<any[]>;
   createConversation(data: any): Promise<any>;
   createMessage(message: InsertMessage): Promise<Message>;
+  createAdminMessage(conversationId: string, adminId: string, content: string): Promise<Message>;
   getMessages(conversationId: string): Promise<Message[]>;
   markMessagesAsRead(conversationId: string, userId: string): Promise<void>;
 
@@ -1152,12 +1156,69 @@ export class DatabaseStorage implements IStorage {
   }
 
   async rejectCompany(companyId: string, reason: string): Promise<CompanyProfile | undefined> {
+    // Get current rejection count
+    const current = await db.select({ rejectionCount: companyProfiles.rejectionCount })
+      .from(companyProfiles)
+      .where(eq(companyProfiles.id, companyId))
+      .limit(1);
+
+    const currentCount = current[0]?.rejectionCount || 0;
+
     const result = await db
       .update(companyProfiles)
-      .set({ status: "rejected", rejectionReason: reason, updatedAt: new Date() })
+      .set({
+        status: "rejected",
+        rejectionReason: reason,
+        lastRejectedAt: new Date(),
+        rejectionCount: currentCount + 1,
+        updatedAt: new Date()
+      })
       .where(eq(companyProfiles.id, companyId))
       .returning();
     return result[0];
+  }
+
+  /**
+   * Check if a rejected company can re-apply (90-day restriction)
+   */
+  async canCompanyReapply(companyId: string): Promise<{ canReapply: boolean; daysRemaining: number; message: string }> {
+    const company = await db.select({
+      status: companyProfiles.status,
+      lastRejectedAt: companyProfiles.lastRejectedAt,
+      rejectionCount: companyProfiles.rejectionCount
+    })
+      .from(companyProfiles)
+      .where(eq(companyProfiles.id, companyId))
+      .limit(1);
+
+    if (!company[0]) {
+      return { canReapply: true, daysRemaining: 0, message: "Company not found" };
+    }
+
+    const { status, lastRejectedAt, rejectionCount } = company[0];
+
+    if (status !== 'rejected') {
+      return { canReapply: true, daysRemaining: 0, message: "Company is not rejected" };
+    }
+
+    if (!lastRejectedAt) {
+      return { canReapply: true, daysRemaining: 0, message: "No rejection date recorded" };
+    }
+
+    const now = new Date();
+    const daysSinceRejection = Math.floor((now.getTime() - lastRejectedAt.getTime()) / (1000 * 60 * 60 * 24));
+    const restrictionDays = 90;
+    const daysRemaining = Math.max(0, restrictionDays - daysSinceRejection);
+
+    if (daysRemaining > 0) {
+      return {
+        canReapply: false,
+        daysRemaining,
+        message: `You can re-apply in ${daysRemaining} days. Your application was rejected on ${lastRejectedAt.toDateString()}.`
+      };
+    }
+
+    return { canReapply: true, daysRemaining: 0, message: "You can re-apply now" };
   }
 
   async suspendCompany(companyId: string): Promise<CompanyProfile | undefined> {
@@ -2190,6 +2251,18 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async setAutoApprovalTime(id: string, autoApprovalTime: Date): Promise<Application | undefined> {
+    const result = await db
+      .update(applications)
+      .set({
+        autoApprovalScheduledAt: autoApprovalTime,
+        updatedAt: new Date(),
+      })
+      .where(eq(applications.id, id))
+      .returning();
+    return result[0];
+  }
+
   async completeApplication(id: string): Promise<Application | undefined> {
     const result = await db
       .update(applications)
@@ -2288,6 +2361,31 @@ export class DatabaseStorage implements IStorage {
   // Messages & Conversations
   async getConversation(id: string): Promise<any> {
     const result = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+    return result[0];
+  }
+
+  async getConversationWithDetails(id: string): Promise<any> {
+    const result = await db
+      .select({
+        id: conversations.id,
+        applicationId: conversations.applicationId,
+        creatorId: conversations.creatorId,
+        companyId: conversations.companyId,
+        offerId: conversations.offerId,
+        lastMessageAt: conversations.lastMessageAt,
+        creatorUnreadCount: conversations.creatorUnreadCount,
+        companyUnreadCount: conversations.companyUnreadCount,
+        resolved: conversations.resolved,
+        resolvedAt: conversations.resolvedAt,
+        resolvedBy: conversations.resolvedBy,
+        createdAt: conversations.createdAt,
+        updatedAt: conversations.updatedAt,
+        offerTitle: offers.title,
+      })
+      .from(conversations)
+      .leftJoin(offers, eq(conversations.offerId, offers.id))
+      .where(eq(conversations.id, id))
+      .limit(1);
     return result[0];
   }
 
@@ -2536,6 +2634,35 @@ export class DatabaseStorage implements IStorage {
       return result[0];
     } catch (error) {
       console.error("[createMessage] Error:", error);
+      throw error;
+    }
+  }
+
+  async createAdminMessage(conversationId: string, adminId: string, content: string): Promise<Message> {
+    try {
+      // Create message with senderType = 'platform'
+      const result = await db.insert(messages).values({
+        conversationId,
+        senderId: adminId,
+        content,
+        senderType: 'platform',
+      }).returning();
+
+      // Update conversation lastMessageAt and increment unread counts for both parties
+      // Platform messages should be visible to both creator and company
+      await db
+        .update(conversations)
+        .set({
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+          creatorUnreadCount: sql`${conversations.creatorUnreadCount} + 1`,
+          companyUnreadCount: sql`${conversations.companyUnreadCount} + 1`,
+        })
+        .where(eq(conversations.id, conversationId));
+
+      return result[0];
+    } catch (error) {
+      console.error("[createAdminMessage] Error:", error);
       throw error;
     }
   }
@@ -4857,7 +4984,7 @@ export class DatabaseStorage implements IStorage {
 
   // Niche Categories Management
   async getNiches(): Promise<Niche[]> {
-    return await db.select().from(niches).orderBy(niches.name);
+    return await db.select().from(niches).orderBy(niches.displayOrder, niches.name);
   }
 
   async getActiveNiches(): Promise<Niche[]> {
@@ -4865,7 +4992,16 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(niches)
       .where(eq(niches.isActive, true))
-      .orderBy(niches.name);
+      .orderBy(niches.displayOrder, niches.name);
+  }
+
+  async getPrimaryNiche(): Promise<Niche | null> {
+    const result = await db
+      .select()
+      .from(niches)
+      .where(eq(niches.isPrimary, true))
+      .limit(1);
+    return result[0] || null;
   }
 
   async getNicheById(id: string): Promise<Niche | null> {
@@ -4878,10 +5014,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addNiche(name: string, description?: string, isActive: boolean = true, userId?: string): Promise<Niche> {
+    // Get the max displayOrder to append new niche at the end
+    const existingNiches = await this.getNiches();
+    const maxOrder = existingNiches.reduce((max, n) => Math.max(max, n.displayOrder || 0), 0);
+
     const nicheData: InsertNiche = {
       name,
       description: description || null,
       isActive,
+      displayOrder: maxOrder + 1,
     };
 
     const result = await db.insert(niches).values(nicheData).returning();
@@ -4911,6 +5052,120 @@ export class DatabaseStorage implements IStorage {
     if (!result[0]) {
       throw new Error('Niche not found');
     }
+  }
+
+  async reorderNiches(orderedIds: string[], userId?: string): Promise<Niche[]> {
+    // Update display_order for each niche based on the new order
+    const updates = orderedIds.map((id, index) =>
+      db.update(niches)
+        .set({ displayOrder: index + 1, updatedAt: new Date() })
+        .where(eq(niches.id, id))
+    );
+
+    await Promise.all(updates);
+
+    return await this.getNiches();
+  }
+
+  async setNicheAsPrimary(id: string, userId?: string): Promise<Niche> {
+    // First, unset all primary flags
+    await db.update(niches)
+      .set({ isPrimary: false, updatedAt: new Date() });
+
+    // Then set the specified niche as primary
+    const result = await db.update(niches)
+      .set({ isPrimary: true, updatedAt: new Date() })
+      .where(eq(niches.id, id))
+      .returning();
+
+    if (!result[0]) {
+      throw new Error('Niche not found');
+    }
+
+    return result[0];
+  }
+
+  async mergeNiches(sourceId: string, targetId: string, userId?: string): Promise<{
+    updatedOffers: number;
+    updatedCreators: number;
+    targetNiche: Niche
+  }> {
+    // Get source and target niches
+    const sourceNiche = await this.getNicheById(sourceId);
+    const targetNiche = await this.getNicheById(targetId);
+
+    if (!sourceNiche) {
+      throw new Error('Source niche not found');
+    }
+    if (!targetNiche) {
+      throw new Error('Target niche not found');
+    }
+
+    let updatedOffers = 0;
+    let updatedCreators = 0;
+
+    // Update offers: replace source niche with target in primaryNiche
+    const offersWithPrimaryNiche = await db.select().from(offers)
+      .where(eq(offers.primaryNiche, sourceNiche.name));
+
+    for (const offer of offersWithPrimaryNiche) {
+      await db.update(offers)
+        .set({ primaryNiche: targetNiche.name, updatedAt: new Date() })
+        .where(eq(offers.id, offer.id));
+      updatedOffers++;
+    }
+
+    // Update offers: replace source niche in additionalNiches arrays
+    const allOffers = await db.select().from(offers);
+    for (const offer of allOffers) {
+      if (offer.additionalNiches && Array.isArray(offer.additionalNiches)) {
+        const additionalNiches = offer.additionalNiches as string[];
+        if (additionalNiches.includes(sourceNiche.name)) {
+          const updatedNiches = additionalNiches
+            .filter(n => n !== sourceNiche.name)
+            .concat(additionalNiches.includes(targetNiche.name) ? [] : [targetNiche.name]);
+
+          await db.update(offers)
+            .set({ additionalNiches: updatedNiches, updatedAt: new Date() })
+            .where(eq(offers.id, offer.id));
+
+          // Only count if not already counted for primaryNiche
+          if (offer.primaryNiche !== sourceNiche.name) {
+            updatedOffers++;
+          }
+        }
+      }
+    }
+
+    // Update creator profiles: replace source niche in niches arrays
+    const allCreatorProfiles = await db.select().from(creatorProfiles);
+    for (const profile of allCreatorProfiles) {
+      if (profile.niches && Array.isArray(profile.niches)) {
+        const profileNiches = profile.niches as string[];
+        if (profileNiches.includes(sourceNiche.name)) {
+          const updatedNiches = profileNiches
+            .filter(n => n !== sourceNiche.name)
+            .concat(profileNiches.includes(targetNiche.name) ? [] : [targetNiche.name]);
+
+          await db.update(creatorProfiles)
+            .set({ niches: updatedNiches, updatedAt: new Date() })
+            .where(eq(creatorProfiles.userId, profile.userId));
+          updatedCreators++;
+        }
+      }
+    }
+
+    // Delete the source niche
+    await this.deleteNiche(sourceId, userId);
+
+    // Return the updated target niche
+    const updatedTargetNiche = await this.getNicheById(targetId);
+
+    return {
+      updatedOffers,
+      updatedCreators,
+      targetNiche: updatedTargetNiche!
+    };
   }
 
   // Platform Funding Accounts
@@ -5546,6 +5801,398 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
       }
       throw error;
     }
+  }
+
+  // ============================================================
+  // CHURN METRICS - Creator and Company Acquisition/Churn Rates
+  // ============================================================
+
+  /**
+   * Get creator acquisition and churn metrics over time
+   * - Acquisition: New creators who joined (created their first application)
+   * - Churn: Creators whose last application status became 'completed' or 'paused' and have no active ones
+   */
+  async getCreatorChurnMetrics(dateRange: string = "30d"): Promise<{
+    currentCreators: number;
+    newCreatorsThisPeriod: number;
+    churnedCreatorsThisPeriod: number;
+    churnRate: number;
+    acquisitionRate: number;
+    netGrowth: number;
+    timeline: Array<{
+      period: string;
+      newCreators: number;
+      churnedCreators: number;
+      activeCreators: number;
+      churnRate: number;
+    }>;
+  }> {
+    try {
+      const now = new Date();
+      let startDate: Date;
+      let groupBy: 'day' | 'week' | 'month';
+
+      switch (dateRange) {
+        case "7d":
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          groupBy = 'day';
+          break;
+        case "30d":
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          groupBy = 'day';
+          break;
+        case "90d":
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          groupBy = 'week';
+          break;
+        case "all":
+        default:
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          groupBy = 'month';
+          break;
+      }
+
+      // Get total active creators (those with at least one approved/active application)
+      const activeCreatorsResult = await db
+        .select({
+          count: sql<number>`COUNT(DISTINCT ${applications.creatorId})::int`,
+        })
+        .from(applications)
+        .where(
+          or(
+            eq(applications.status, 'approved'),
+            eq(applications.status, 'active')
+          )
+        );
+      const currentCreators = Number(activeCreatorsResult[0]?.count || 0);
+
+      // Get new creators this period (creators whose first application was created in this period)
+      const newCreatorsResult = await db
+        .select({
+          creatorId: applications.creatorId,
+          firstApplication: sql<Date>`MIN(${applications.createdAt})`,
+        })
+        .from(applications)
+        .groupBy(applications.creatorId)
+        .having(sql`MIN(${applications.createdAt}) >= ${startDate}`);
+      const newCreatorsThisPeriod = newCreatorsResult.length;
+
+      // Get churned creators this period (creators who had active apps but now have none)
+      // A churned creator is one where:
+      // 1. They had at least one application before this period
+      // 2. All their applications are now 'completed' or 'paused'
+      // 3. Their last activity was in this period
+      const churnedCreatorsResult = await db
+        .select({
+          count: sql<number>`COUNT(DISTINCT creator_id)::int`,
+        })
+        .from(sql`(
+          SELECT ${applications.creatorId} as creator_id
+          FROM ${applications}
+          WHERE ${applications.createdAt} < ${startDate}
+          GROUP BY ${applications.creatorId}
+          HAVING
+            COUNT(*) FILTER (WHERE ${applications.status} IN ('approved', 'active')) = 0
+            AND COUNT(*) FILTER (WHERE ${applications.status} IN ('completed', 'paused') AND ${applications.updatedAt} >= ${startDate}) > 0
+        ) churned`);
+      const churnedCreatorsThisPeriod = Number(churnedCreatorsResult[0]?.count || 0);
+
+      // Calculate rates
+      const previousPeriodCreators = currentCreators - newCreatorsThisPeriod + churnedCreatorsThisPeriod;
+      const churnRate = previousPeriodCreators > 0
+        ? (churnedCreatorsThisPeriod / previousPeriodCreators) * 100
+        : 0;
+      const acquisitionRate = previousPeriodCreators > 0
+        ? (newCreatorsThisPeriod / previousPeriodCreators) * 100
+        : (newCreatorsThisPeriod > 0 ? 100 : 0);
+      const netGrowth = newCreatorsThisPeriod - churnedCreatorsThisPeriod;
+
+      // Get timeline data
+      const dateFormat = groupBy === 'day'
+        ? 'Mon DD'
+        : groupBy === 'week'
+          ? 'Mon DD'
+          : 'Mon YYYY';
+
+      const groupByExpr = groupBy === 'day'
+        ? sql`DATE(${applications.createdAt})`
+        : groupBy === 'week'
+          ? sql`DATE_TRUNC('week', ${applications.createdAt})`
+          : sql`DATE_TRUNC('month', ${applications.createdAt})`;
+
+      const timelineResult = await db
+        .select({
+          period: sql<string>`TO_CHAR(${groupByExpr}, ${dateFormat})`,
+          newCreators: sql<number>`COUNT(DISTINCT ${applications.creatorId}) FILTER (
+            WHERE ${applications.creatorId} IN (
+              SELECT a2.creator_id
+              FROM ${applications} a2
+              GROUP BY a2.creator_id
+              HAVING MIN(a2.created_at) >= ${groupByExpr}
+                AND MIN(a2.created_at) < ${groupByExpr} + INTERVAL '1 ${sql.raw(groupBy)}'
+            )
+          )::int`,
+          activeCreators: sql<number>`COUNT(DISTINCT ${applications.creatorId}) FILTER (
+            WHERE ${applications.status} IN ('approved', 'active')
+          )::int`,
+        })
+        .from(applications)
+        .where(gte(applications.createdAt, startDate))
+        .groupBy(groupByExpr)
+        .orderBy(groupByExpr);
+
+      const timeline = (timelineResult || []).map((row) => ({
+        period: row.period || '',
+        newCreators: Number(row.newCreators || 0),
+        churnedCreators: 0, // Calculated per period is complex, simplified here
+        activeCreators: Number(row.activeCreators || 0),
+        churnRate: 0,
+      }));
+
+      return {
+        currentCreators,
+        newCreatorsThisPeriod,
+        churnedCreatorsThisPeriod,
+        churnRate: Math.round(churnRate * 100) / 100,
+        acquisitionRate: Math.round(acquisitionRate * 100) / 100,
+        netGrowth,
+        timeline,
+      };
+    } catch (error) {
+      console.error("[getCreatorChurnMetrics] Error:", error);
+      return {
+        currentCreators: 0,
+        newCreatorsThisPeriod: 0,
+        churnedCreatorsThisPeriod: 0,
+        churnRate: 0,
+        acquisitionRate: 0,
+        netGrowth: 0,
+        timeline: [],
+      };
+    }
+  }
+
+  /**
+   * Get company acquisition and churn metrics over time
+   * - Acquisition: New companies that registered
+   * - Churn: Companies that became inactive (no offers or applications in period)
+   */
+  async getCompanyChurnMetrics(dateRange: string = "30d"): Promise<{
+    currentCompanies: number;
+    newCompaniesThisPeriod: number;
+    churnedCompaniesThisPeriod: number;
+    churnRate: number;
+    acquisitionRate: number;
+    netGrowth: number;
+    timeline: Array<{
+      period: string;
+      newCompanies: number;
+      churnedCompanies: number;
+      activeCompanies: number;
+      churnRate: number;
+    }>;
+  }> {
+    try {
+      const now = new Date();
+      let startDate: Date;
+      let groupBy: 'day' | 'week' | 'month';
+
+      switch (dateRange) {
+        case "7d":
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          groupBy = 'day';
+          break;
+        case "30d":
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          groupBy = 'day';
+          break;
+        case "90d":
+          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          groupBy = 'week';
+          break;
+        case "all":
+        default:
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          groupBy = 'month';
+          break;
+      }
+
+      // Get total active companies (those with at least one approved offer)
+      const activeCompaniesResult = await db
+        .select({
+          count: sql<number>`COUNT(DISTINCT ${offers.companyId})::int`,
+        })
+        .from(offers)
+        .where(eq(offers.status, 'approved'));
+      const currentCompanies = Number(activeCompaniesResult[0]?.count || 0);
+
+      // Get new companies this period (companies whose first offer was created in this period)
+      const newCompaniesResult = await db
+        .select({
+          companyId: offers.companyId,
+          firstOffer: sql<Date>`MIN(${offers.createdAt})`,
+        })
+        .from(offers)
+        .groupBy(offers.companyId)
+        .having(sql`MIN(${offers.createdAt}) >= ${startDate}`);
+      const newCompaniesThisPeriod = newCompaniesResult.length;
+
+      // Get churned companies (companies with no live offers but had offers before)
+      // A churned company is one where:
+      // 1. They had offers before this period
+      // 2. All their offers are now 'archived' or 'paused'
+      // 3. Their last offer status change was in this period
+      const churnedCompaniesResult = await db
+        .select({
+          count: sql<number>`COUNT(DISTINCT company_id)::int`,
+        })
+        .from(sql`(
+          SELECT ${offers.companyId} as company_id
+          FROM ${offers}
+          WHERE ${offers.createdAt} < ${startDate}
+          GROUP BY ${offers.companyId}
+          HAVING
+            COUNT(*) FILTER (WHERE ${offers.status} = 'approved') = 0
+            AND COUNT(*) FILTER (WHERE ${offers.status} IN ('archived', 'paused') AND ${offers.updatedAt} >= ${startDate}) > 0
+        ) churned`);
+      const churnedCompaniesThisPeriod = Number(churnedCompaniesResult[0]?.count || 0);
+
+      // Calculate rates
+      const previousPeriodCompanies = currentCompanies - newCompaniesThisPeriod + churnedCompaniesThisPeriod;
+      const churnRate = previousPeriodCompanies > 0
+        ? (churnedCompaniesThisPeriod / previousPeriodCompanies) * 100
+        : 0;
+      const acquisitionRate = previousPeriodCompanies > 0
+        ? (newCompaniesThisPeriod / previousPeriodCompanies) * 100
+        : (newCompaniesThisPeriod > 0 ? 100 : 0);
+      const netGrowth = newCompaniesThisPeriod - churnedCompaniesThisPeriod;
+
+      // Get timeline data
+      const dateFormat = groupBy === 'day'
+        ? 'Mon DD'
+        : groupBy === 'week'
+          ? 'Mon DD'
+          : 'Mon YYYY';
+
+      const groupByExpr = groupBy === 'day'
+        ? sql`DATE(${offers.createdAt})`
+        : groupBy === 'week'
+          ? sql`DATE_TRUNC('week', ${offers.createdAt})`
+          : sql`DATE_TRUNC('month', ${offers.createdAt})`;
+
+      const timelineResult = await db
+        .select({
+          period: sql<string>`TO_CHAR(${groupByExpr}, ${dateFormat})`,
+          newCompanies: sql<number>`COUNT(DISTINCT ${offers.companyId}) FILTER (
+            WHERE ${offers.companyId} IN (
+              SELECT o2.company_id
+              FROM ${offers} o2
+              GROUP BY o2.company_id
+              HAVING MIN(o2.created_at) >= ${groupByExpr}
+                AND MIN(o2.created_at) < ${groupByExpr} + INTERVAL '1 ${sql.raw(groupBy)}'
+            )
+          )::int`,
+          activeCompanies: sql<number>`COUNT(DISTINCT ${offers.companyId}) FILTER (
+            WHERE ${offers.status} = 'approved'
+          )::int`,
+        })
+        .from(offers)
+        .where(gte(offers.createdAt, startDate))
+        .groupBy(groupByExpr)
+        .orderBy(groupByExpr);
+
+      const timeline = (timelineResult || []).map((row) => ({
+        period: row.period || '',
+        newCompanies: Number(row.newCompanies || 0),
+        churnedCompanies: 0, // Simplified
+        activeCompanies: Number(row.activeCompanies || 0),
+        churnRate: 0,
+      }));
+
+      return {
+        currentCompanies,
+        newCompaniesThisPeriod,
+        churnedCompaniesThisPeriod,
+        churnRate: Math.round(churnRate * 100) / 100,
+        acquisitionRate: Math.round(acquisitionRate * 100) / 100,
+        netGrowth,
+        timeline,
+      };
+    } catch (error) {
+      console.error("[getCompanyChurnMetrics] Error:", error);
+      return {
+        currentCompanies: 0,
+        newCompaniesThisPeriod: 0,
+        churnedCompaniesThisPeriod: 0,
+        churnRate: 0,
+        acquisitionRate: 0,
+        netGrowth: 0,
+        timeline: [],
+      };
+    }
+  }
+
+  /**
+   * Get combined churn analytics for admin dashboard
+   */
+  async getChurnAnalytics(dateRange: string = "30d"): Promise<{
+    creators: {
+      currentCreators: number;
+      newCreatorsThisPeriod: number;
+      churnedCreatorsThisPeriod: number;
+      churnRate: number;
+      acquisitionRate: number;
+      netGrowth: number;
+      timeline: Array<{ period: string; newCreators: number; churnedCreators: number; activeCreators: number; churnRate: number; }>;
+    };
+    companies: {
+      currentCompanies: number;
+      newCompaniesThisPeriod: number;
+      churnedCompaniesThisPeriod: number;
+      churnRate: number;
+      acquisitionRate: number;
+      netGrowth: number;
+      timeline: Array<{ period: string; newCompanies: number; churnedCompanies: number; activeCompanies: number; churnRate: number; }>;
+    };
+    summary: {
+      totalActiveUsers: number;
+      overallChurnRate: number;
+      overallAcquisitionRate: number;
+      healthScore: number;
+    };
+  }> {
+    const [creators, companies] = await Promise.all([
+      this.getCreatorChurnMetrics(dateRange),
+      this.getCompanyChurnMetrics(dateRange),
+    ]);
+
+    const totalActiveUsers = creators.currentCreators + companies.currentCompanies;
+    const totalChurned = creators.churnedCreatorsThisPeriod + companies.churnedCompaniesThisPeriod;
+    const totalNew = creators.newCreatorsThisPeriod + companies.newCompaniesThisPeriod;
+
+    const overallChurnRate = totalActiveUsers > 0
+      ? (totalChurned / (totalActiveUsers + totalChurned)) * 100
+      : 0;
+    const overallAcquisitionRate = totalActiveUsers > 0
+      ? (totalNew / totalActiveUsers) * 100
+      : (totalNew > 0 ? 100 : 0);
+
+    // Health score: 100 if acquisition > churn, decreases as churn increases
+    const netGrowth = totalNew - totalChurned;
+    const healthScore = Math.min(100, Math.max(0,
+      50 + (netGrowth * 5) - (overallChurnRate * 2)
+    ));
+
+    return {
+      creators,
+      companies,
+      summary: {
+        totalActiveUsers,
+        overallChurnRate: Math.round(overallChurnRate * 100) / 100,
+        overallAcquisitionRate: Math.round(overallAcquisitionRate * 100) / 100,
+        healthScore: Math.round(healthScore),
+      },
+    };
   }
 }
 

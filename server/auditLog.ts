@@ -86,6 +86,9 @@ export const AuditActions = {
   CREATE_NICHE: 'create_niche',
   UPDATE_NICHE: 'update_niche',
   DELETE_NICHE: 'delete_niche',
+  REORDER_NICHES: 'reorder_niches',
+  SET_PRIMARY_NICHE: 'set_primary_niche',
+  MERGE_NICHES: 'merge_niches',
 
   // Email Template actions
   CREATE_EMAIL_TEMPLATE: 'create_email_template',

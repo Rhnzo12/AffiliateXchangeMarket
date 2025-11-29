@@ -52,6 +52,7 @@ import { z } from "zod";
 import { useAuth } from "../hooks/useAuth";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { TopNavBar } from "../components/TopNavBar";
+import { useSidebar } from "../components/ui/sidebar";
 import {
   Tooltip,
   TooltipContent,
@@ -89,6 +90,7 @@ export default function CreatorRetainerDetail() {
   const [, params] = useRoute("/retainers/:id");
   const { toast} = useToast();
   const { user } = useAuth();
+  const { state: sidebarState, isMobile } = useSidebar();
   const contractId = params?.id;
   const [open, setOpen] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
@@ -1416,7 +1418,12 @@ export default function CreatorRetainerDetail() {
 
       {/* Sticky Apply Button */}
       {!currentApplication && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50">
+        <div
+          className="fixed bottom-0 right-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t z-50"
+          style={{
+            left: isMobile ? 0 : sidebarState === 'expanded' ? 'var(--sidebar-width, 16rem)' : 'var(--sidebar-width-icon, 3rem)'
+          }}
+        >
           <div className="container max-w-7xl mx-auto px-4 py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1">

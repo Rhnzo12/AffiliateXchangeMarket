@@ -928,3 +928,230 @@ export function exportAdminFinancialReportCSV(data: AdminFinancialData): void {
 
   downloadCSV(rows, 'admin-financial-report', headers);
 }
+
+// ================== Conversation Export Functions ==================
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderType: 'creator' | 'company' | 'platform';
+  content: string;
+  attachments?: string[];
+  createdAt: string;
+  isRead: boolean;
+}
+
+export interface ConversationExportData {
+  id: string;
+  offerTitle: string;
+  creator: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  company: {
+    id: string;
+    name: string;
+  };
+  messages: ConversationMessage[];
+  createdAt: string;
+  lastMessageAt: string;
+  totalMessages: number;
+}
+
+export function exportConversationPDF(data: ConversationExportData): void {
+  const doc = createPDFDocument({
+    title: 'Conversation Export',
+    subtitle: `${data.creator.name} ↔ ${data.company.name}`,
+    dateRange: `Offer: ${data.offerTitle}`,
+  });
+
+  let y = 45;
+
+  // Conversation Summary Section
+  y = addSectionHeader(doc, 'Conversation Summary', y);
+
+  const metrics: MetricItem[] = [
+    { label: 'Total Messages', value: formatNumber(data.totalMessages) },
+    { label: 'Creator', value: data.creator.name, subValue: data.creator.email },
+    { label: 'Company', value: data.company.name },
+    { label: 'Started', value: formatDate(data.createdAt) },
+  ];
+
+  y = addMetricsGrid(doc, metrics, y);
+
+  // Legal Compliance Notice
+  y = addSectionHeader(doc, 'Export Information', y);
+  y = addParagraph(
+    doc,
+    `This conversation export was generated for legal compliance and dispute resolution purposes. ` +
+    `Export Date: ${new Date().toLocaleString()}. ` +
+    `Conversation ID: ${data.id}`,
+    y,
+    { fontSize: 9, color: COLORS.muted }
+  );
+
+  y += 5;
+
+  // Messages Section
+  y = addSectionHeader(doc, 'Message History', y);
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+
+  // Add each message
+  data.messages.forEach((message, index) => {
+    // Check if we need a new page
+    if (y > pageHeight - 40) {
+      doc.addPage();
+      y = 20;
+    }
+
+    const messageDate = new Date(message.createdAt);
+    const dateStr = messageDate.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    // Sender info with role badge
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    const senderColor = message.senderType === 'platform'
+      ? COLORS.warning
+      : (message.senderType === 'creator' ? COLORS.primary : COLORS.success);
+    const senderLabel = message.senderType === 'platform'
+      ? 'Platform'
+      : (message.senderType === 'creator' ? 'Creator' : 'Company');
+    doc.setTextColor(...senderColor);
+    doc.text(`${message.senderName} (${senderLabel})`, margin, y);
+
+    // Timestamp
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.muted);
+    doc.setFontSize(8);
+    doc.text(dateStr, pageWidth - margin, y, { align: 'right' });
+
+    y += 5;
+
+    // Message content
+    doc.setTextColor(...COLORS.text);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+
+    const messageContent = message.content || (message.attachments?.length ? '[Attachment]' : '[Empty message]');
+    const lines = doc.splitTextToSize(messageContent, pageWidth - margin * 2);
+
+    lines.forEach((line: string) => {
+      if (y > pageHeight - 30) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(line, margin, y);
+      y += 4;
+    });
+
+    // Show attachment indicator
+    if (message.attachments && message.attachments.length > 0) {
+      doc.setTextColor(...COLORS.muted);
+      doc.setFontSize(8);
+      doc.text(`[${message.attachments.length} attachment(s)]`, margin, y);
+      y += 4;
+    }
+
+    y += 4;
+
+    // Add separator line between messages (except last)
+    if (index < data.messages.length - 1) {
+      doc.setDrawColor(...COLORS.background);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 6;
+    }
+  });
+
+  savePDF(doc, `conversation-${data.id}-export`);
+}
+
+export function exportConversationCSV(data: ConversationExportData): void {
+  const headers = [
+    'Message ID',
+    'Timestamp',
+    'Sender Name',
+    'Sender Type',
+    'Message Content',
+    'Has Attachments',
+    'Attachment Count',
+    'Is Read',
+  ];
+
+  const rows = data.messages.map((message) => [
+    message.id,
+    new Date(message.createdAt).toISOString(),
+    message.senderName,
+    message.senderType,
+    message.content || '',
+    message.attachments && message.attachments.length > 0 ? 'Yes' : 'No',
+    (message.attachments?.length || 0).toString(),
+    message.isRead ? 'Yes' : 'No',
+  ]);
+
+  // Add metadata rows at the beginning
+  const metadataRows = [
+    ['--- CONVERSATION METADATA ---', '', '', '', '', '', '', ''],
+    ['Conversation ID', data.id, '', '', '', '', '', ''],
+    ['Offer', data.offerTitle, '', '', '', '', '', ''],
+    ['Creator', data.creator.name, data.creator.email, '', '', '', '', ''],
+    ['Company', data.company.name, '', '', '', '', '', ''],
+    ['Started', formatDate(data.createdAt), '', '', '', '', '', ''],
+    ['Last Message', formatDate(data.lastMessageAt), '', '', '', '', '', ''],
+    ['Total Messages', data.totalMessages.toString(), '', '', '', '', '', ''],
+    ['Export Date', new Date().toISOString(), '', '', '', '', '', ''],
+    ['--- MESSAGE HISTORY ---', '', '', '', '', '', '', ''],
+  ];
+
+  downloadCSV([...metadataRows, ...rows], `conversation-${data.id}-export`, headers);
+}
+
+export function exportConversationJSON(data: ConversationExportData): void {
+  const exportData = {
+    exportMetadata: {
+      exportDate: new Date().toISOString(),
+      exportPurpose: 'Legal compliance and dispute resolution',
+      platform: 'AffiliateXchange',
+    },
+    conversation: {
+      id: data.id,
+      offerTitle: data.offerTitle,
+      creator: data.creator,
+      company: data.company,
+      createdAt: data.createdAt,
+      lastMessageAt: data.lastMessageAt,
+      totalMessages: data.totalMessages,
+    },
+    messages: data.messages.map((msg) => ({
+      id: msg.id,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      senderType: msg.senderType,
+      content: msg.content,
+      attachments: msg.attachments || [],
+      createdAt: msg.createdAt,
+      isRead: msg.isRead,
+    })),
+  };
+
+  const jsonString = JSON.stringify(exportData, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `conversation-${data.id}-export-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
+}

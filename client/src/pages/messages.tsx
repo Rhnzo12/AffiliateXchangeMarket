@@ -45,7 +45,8 @@ import {
   ZoomIn,
   ZoomOut,
   MoreVertical,
-  Trash2
+  Trash2,
+  Shield
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
@@ -65,6 +66,7 @@ interface EnhancedMessage {
   isRead: boolean;
   status?: MessageStatus;
   tempId?: string;
+  senderType?: 'user' | 'platform';
 }
 
 export default function Messages() {
@@ -1095,7 +1097,8 @@ export default function Messages() {
                     const previousMessage = index > 0 ? messages[index - 1] : null;
                     const showDateSeparator = shouldShowDateSeparator(message, previousMessage);
                     const groupWithPrevious = shouldGroupMessage(message, previousMessage);
-                    const isOwnMessage = message.senderId === user?.id;
+                    const isPlatformMessage = message.senderType === 'platform';
+                    const isOwnMessage = !isPlatformMessage && message.senderId === user?.id;
                     return (
                       <div key={message.id}>
                         {showDateSeparator && (
@@ -1110,17 +1113,24 @@ export default function Messages() {
                             groupWithPrevious ? 'mt-1' : 'mt-4'
                           } group`}
                         >
+                          {/* Avatar for other user or platform messages */}
                           {!isOwnMessage && (
-                            <Avatar className={`h-8 w-8 shrink-0 ${groupWithPrevious ? 'invisible' : ''}`}>
-                              <AvatarImage src={proxiedSrc(otherUser?.profileImageUrl || otherUser?.logoUrl)} />
-                              <AvatarFallback className="text-xs">
-                                {getAvatarFallback(otherUser)}
-                              </AvatarFallback>
-                            </Avatar>
+                            isPlatformMessage ? (
+                              <div className={`h-8 w-8 shrink-0 rounded-full bg-primary flex items-center justify-center ${groupWithPrevious ? 'invisible' : ''}`}>
+                                <Shield className="h-4 w-4 text-primary-foreground" />
+                              </div>
+                            ) : (
+                              <Avatar className={`h-8 w-8 shrink-0 ${groupWithPrevious ? 'invisible' : ''}`}>
+                                <AvatarImage src={proxiedSrc(otherUser?.profileImageUrl || otherUser?.logoUrl)} />
+                                <AvatarFallback className="text-xs">
+                                  {getAvatarFallback(otherUser)}
+                                </AvatarFallback>
+                              </Avatar>
+                            )
                           )}
 
-                          {/* Delete menu for own messages - appears on left */}
-                          {isOwnMessage && (
+                          {/* Delete menu for own messages - appears on left (not for platform messages) */}
+                          {isOwnMessage && !isPlatformMessage && (
                             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -1153,13 +1163,23 @@ export default function Messages() {
                             </div>
                           )}
 
-                          <div
-                            className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-4 py-2.5 ${
-                              isOwnMessage
-                                ? 'bg-primary text-primary-foreground rounded-br-md'
-                                : 'bg-muted rounded-bl-md'
-                            }`}
-                          >
+                          <div className={`max-w-[85%] sm:max-w-[70%] ${!groupWithPrevious && !isOwnMessage ? '' : ''}`}>
+                            {/* Platform badge for platform messages */}
+                            {isPlatformMessage && !groupWithPrevious && (
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium">Platform</span>
+                                <Badge className="text-xs bg-primary">Admin</Badge>
+                              </div>
+                            )}
+                            <div
+                              className={`rounded-2xl px-4 py-2.5 ${
+                                isPlatformMessage
+                                  ? 'bg-primary/10 border border-primary/20 rounded-bl-md'
+                                  : isOwnMessage
+                                    ? 'bg-primary text-primary-foreground rounded-br-md'
+                                    : 'bg-muted rounded-bl-md'
+                              }`}
+                            >
                             {message.attachments && message.attachments.length > 0 && (
                               <div className="mb-2 space-y-2">
                                 {message.attachments.map((url, idx) => (
@@ -1197,10 +1217,11 @@ export default function Messages() {
                                 </span>
                               )}
                             </div>
+                            </div>
                           </div>
 
-                          {/* Delete menu for received messages - appears on right */}
-                          {!isOwnMessage && (
+                          {/* Delete menu for received messages - appears on right (not for platform messages) */}
+                          {!isOwnMessage && !isPlatformMessage && (
                             <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>

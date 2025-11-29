@@ -62,9 +62,9 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
-import { TopNavBar } from "../components/TopNavBar";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { DetailPageSkeleton } from "../components/skeletons";
+import { useSidebar } from "../components/ui/sidebar";
 
 // Helper function to format duration in seconds to MM:SS
 function formatDuration(seconds: number | string): string {
@@ -134,6 +134,7 @@ export default function OfferDetail() {
   const { isAuthenticated, isLoading } = useAuth();
   const [, params] = useRoute("/offers/:id");
   const [, setLocation] = useLocation();
+  const { state: sidebarState, isMobile } = useSidebar();
   const offerId = params?.id;
 
   const [showApplyDialog, setShowApplyDialog] = useState(false);
@@ -171,8 +172,9 @@ export default function OfferDetail() {
   useEffect(() => {
     const observerOptions = {
       root: null,
-      rootMargin: "-100px 0px -60% 0px",
-      threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
+      // Account for both sticky navs (~65px top nav + ~50px tab nav = ~115px)
+      rootMargin: "-120px 0px -50% 0px",
+      threshold: [0, 0.1, 0.25, 0.5],
     };
 
     const observerCallback = (entries: IntersectionObserverEntry[]) => {
@@ -220,7 +222,7 @@ export default function OfferDetail() {
     setActiveSection(sectionId);
     setIsScrolling(true);
 
-    const refs: Record<string, React.RefObject<HTMLDivElement>> = {
+    const refs: Record<string, React.RefObject<HTMLDivElement | null>> = {
       overview: overviewRef,
       videos: videosRef,
       requirements: requirementsRef,
@@ -228,13 +230,17 @@ export default function OfferDetail() {
     };
 
     const ref = refs[sectionId];
-    if (ref.current) {
-      const stickyNavElement = document.querySelector('[data-sticky-nav]');
-      const navHeight = stickyNavElement ? stickyNavElement.getBoundingClientRect().height : 100;
-      
+    if (ref?.current) {
+      // Account for both sticky navs: top nav bar + tab navigation
+      const topNavElement = document.querySelector('[data-top-nav]');
+      const tabNavElement = document.querySelector('[data-sticky-nav]');
+      const topNavHeight = topNavElement ? topNavElement.getBoundingClientRect().height : 65;
+      const tabNavHeight = tabNavElement ? tabNavElement.getBoundingClientRect().height : 50;
+      const totalStickyHeight = topNavHeight + tabNavHeight;
+
       const elementPosition = ref.current.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - navHeight - 20;
-      
+      const offsetPosition = elementPosition + window.scrollY - totalStickyHeight - 16;
+
       window.scrollTo({
         top: offsetPosition,
         behavior: "smooth",
@@ -242,7 +248,7 @@ export default function OfferDetail() {
 
       setTimeout(() => {
         setIsScrolling(false);
-      }, 1000);
+      }, 800);
     }
   };
 
@@ -450,7 +456,6 @@ export default function OfferDetail() {
   if (isLoading || offerLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <TopNavBar />
         <DetailPageSkeleton />
       </div>
     );
@@ -475,9 +480,8 @@ export default function OfferDetail() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pb-24">
-      <TopNavBar />
       {/* Top Navigation Bar */}
-      <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b shadow-sm">
+      <div data-top-nav className="sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
           <Button
             variant="ghost"
@@ -865,7 +869,7 @@ export default function OfferDetail() {
       {/* Content Sections */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-12 sm:space-y-16">
         {/* Overview Section */}
-        <div ref={overviewRef} data-section="overview" className="scroll-mt-32">
+        <div ref={overviewRef} data-section="overview" className="scroll-mt-36">
           <Card className="rounded-2xl shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl sm:text-2xl lg:text-3xl flex items-center gap-3">
@@ -1005,7 +1009,7 @@ export default function OfferDetail() {
         </div>
 
         {/* Videos Section */}
-        <div ref={videosRef} data-section="videos" className="scroll-mt-32">
+        <div ref={videosRef} data-section="videos" className="scroll-mt-36">
           <div className="flex items-center gap-2 mb-6">
             <Video className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             <h2 className="text-xl sm:text-2xl font-bold">
@@ -1073,7 +1077,7 @@ export default function OfferDetail() {
         </div>
 
         {/* Requirements Section */}
-        <div ref={requirementsRef} data-section="requirements" className="scroll-mt-32">
+        <div ref={requirementsRef} data-section="requirements" className="scroll-mt-36">
           <div className="flex items-center gap-2 mb-6">
             <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
             <h2 className="text-xl sm:text-2xl font-bold">Creator Requirements</h2>
@@ -1214,7 +1218,7 @@ export default function OfferDetail() {
         </div>
 
         {/* Reviews Section */}
-        <div ref={reviewsRef} data-section="reviews" className="scroll-mt-32">
+        <div ref={reviewsRef} data-section="reviews" className="scroll-mt-36">
           <div className="flex items-center gap-2 mb-6">
             <Star className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
             <h2 className="text-xl sm:text-2xl font-bold">Creator Reviews</h2>
@@ -1396,20 +1400,25 @@ export default function OfferDetail() {
       </div>
 
       {/* Sticky Apply Button */}
-      <div className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-lg shadow-2xl p-3 sm:p-4 z-50">
+      <div
+        className="fixed bottom-0 right-0 border-t bg-background/95 backdrop-blur-lg shadow-2xl p-3 sm:p-4 z-50"
+        style={{
+          left: isMobile ? 0 : sidebarState === 'expanded' ? 'var(--sidebar-width, 16rem)' : 'var(--sidebar-width-icon, 3rem)'
+        }}
+      >
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div>
-              <div className="text-xs text-muted-foreground">Earn Commission</div>
-              <div className="text-lg sm:text-2xl font-bold text-green-600">
+          <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground whitespace-nowrap">Earn Commission</div>
+              <div className="text-lg sm:text-2xl font-bold text-green-600 whitespace-nowrap">
                 {formatCommission(offer)}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {hasApplied && existingApplication?.createdAt && (
-              <Badge variant="secondary" className="hidden md:flex text-xs">
+              <Badge variant="secondary" className="hidden lg:flex text-xs whitespace-nowrap">
                 Applied {new Date(existingApplication.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </Badge>
             )}

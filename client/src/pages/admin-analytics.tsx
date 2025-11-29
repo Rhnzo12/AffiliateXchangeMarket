@@ -18,6 +18,7 @@ import {
   Users,
   Building2,
   TrendingUp,
+  TrendingDown,
   Download,
   FileText,
   BarChart3,
@@ -33,6 +34,9 @@ import {
   AlertCircle,
   AlertTriangle,
   Video,
+  UserPlus,
+  UserMinus,
+  Gauge,
 } from "lucide-react";
 import {
   Table,
@@ -233,6 +237,40 @@ interface PlatformHealthReport {
   recentErrors: ErrorLog[];
 }
 
+// Churn Analytics Types
+interface ChurnMetrics {
+  currentCreators?: number;
+  currentCompanies?: number;
+  newCreatorsThisPeriod?: number;
+  newCompaniesThisPeriod?: number;
+  churnedCreatorsThisPeriod?: number;
+  churnedCompaniesThisPeriod?: number;
+  churnRate: number;
+  acquisitionRate: number;
+  netGrowth: number;
+  timeline: Array<{
+    period: string;
+    newCreators?: number;
+    newCompanies?: number;
+    churnedCreators?: number;
+    churnedCompanies?: number;
+    activeCreators?: number;
+    activeCompanies?: number;
+    churnRate: number;
+  }>;
+}
+
+interface ChurnAnalytics {
+  creators: ChurnMetrics;
+  companies: ChurnMetrics;
+  summary: {
+    totalActiveUsers: number;
+    overallChurnRate: number;
+    overallAcquisitionRate: number;
+    healthScore: number;
+  };
+}
+
 // Helper functions for Platform Health
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -319,6 +357,25 @@ export default function AdminAnalytics() {
     },
     enabled: isAuthenticated && user?.role === "admin",
     refetchInterval: 60000, // Refresh every minute
+  });
+
+  // Churn Analytics Query
+  const { data: churnData, isLoading: churnLoading } = useQuery<ChurnAnalytics>({
+    queryKey: ["/api/admin/churn-analytics", { range: dateRange }],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/churn-analytics?range=${dateRange}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          window.location.href = "/login";
+          throw new Error("Unauthorized");
+        }
+        throw new Error("Failed to fetch churn analytics");
+      }
+      return res.json();
+    },
+    enabled: isAuthenticated && user?.role === "admin",
   });
 
   // Mutation to create health snapshot
@@ -906,6 +963,186 @@ export default function AdminAnalytics() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Churn & Acquisition Metrics */}
+            <Card className="border-card-border">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Acquisition & Churn Metrics</CardTitle>
+                    <CardDescription className="mt-1">
+                      User retention and growth analysis for the selected period
+                    </CardDescription>
+                  </div>
+                  {churnData?.summary && (
+                    <Badge
+                      variant={churnData.summary.healthScore >= 70 ? "default" :
+                               churnData.summary.healthScore >= 50 ? "secondary" : "destructive"}
+                      className="gap-1"
+                    >
+                      <Gauge className="h-3 w-3" />
+                      Health Score: {churnData.summary.healthScore}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {churnLoading ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading churn data...</div>
+                ) : churnData ? (
+                  <div className="space-y-6">
+                    {/* Summary Stats */}
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <UserPlus className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-800">New This Period</span>
+                        </div>
+                        <div className="text-2xl font-bold text-green-700">
+                          +{(churnData.creators.newCreatorsThisPeriod || 0) + (churnData.companies.newCompaniesThisPeriod || 0)}
+                        </div>
+                        <p className="text-xs text-green-600 mt-1">
+                          {churnData.creators.newCreatorsThisPeriod || 0} creators, {churnData.companies.newCompaniesThisPeriod || 0} companies
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-red-50 border border-red-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <UserMinus className="h-4 w-4 text-red-600" />
+                          <span className="text-sm font-medium text-red-800">Churned This Period</span>
+                        </div>
+                        <div className="text-2xl font-bold text-red-700">
+                          -{(churnData.creators.churnedCreatorsThisPeriod || 0) + (churnData.companies.churnedCompaniesThisPeriod || 0)}
+                        </div>
+                        <p className="text-xs text-red-600 mt-1">
+                          {churnData.creators.churnedCreatorsThisPeriod || 0} creators, {churnData.companies.churnedCompaniesThisPeriod || 0} companies
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp className="h-4 w-4 text-blue-600" />
+                          <span className="text-sm font-medium text-blue-800">Acquisition Rate</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-700">
+                          {churnData.summary.overallAcquisitionRate.toFixed(1)}%
+                        </div>
+                        <p className="text-xs text-blue-600 mt-1">New users vs existing</p>
+                      </div>
+
+                      <div className="p-4 rounded-lg bg-orange-50 border border-orange-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingDown className="h-4 w-4 text-orange-600" />
+                          <span className="text-sm font-medium text-orange-800">Churn Rate</span>
+                        </div>
+                        <div className="text-2xl font-bold text-orange-700">
+                          {churnData.summary.overallChurnRate.toFixed(1)}%
+                        </div>
+                        <p className="text-xs text-orange-600 mt-1">Lost users vs total</p>
+                      </div>
+                    </div>
+
+                    {/* Detailed Breakdown */}
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      {/* Creator Churn */}
+                      <div className="p-4 border rounded-lg">
+                        <h4 className="font-semibold mb-4 flex items-center gap-2">
+                          <Users className="h-4 w-4 text-blue-600" />
+                          Creator Metrics
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Active Creators</span>
+                            <span className="font-semibold">{churnData.creators.currentCreators || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">New This Period</span>
+                            <span className="font-semibold text-green-600">+{churnData.creators.newCreatorsThisPeriod || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Churned This Period</span>
+                            <span className="font-semibold text-red-600">-{churnData.creators.churnedCreatorsThisPeriod || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t">
+                            <span className="text-sm font-medium">Net Growth</span>
+                            <span className={`font-bold ${churnData.creators.netGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {churnData.creators.netGrowth >= 0 ? '+' : ''}{churnData.creators.netGrowth}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Churn Rate</span>
+                            <Badge variant={churnData.creators.churnRate < 5 ? "default" : churnData.creators.churnRate < 10 ? "secondary" : "destructive"}>
+                              {churnData.creators.churnRate.toFixed(1)}%
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Company Churn */}
+                      <div className="p-4 border rounded-lg">
+                        <h4 className="font-semibold mb-4 flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-green-600" />
+                          Company Metrics
+                        </h4>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Active Companies</span>
+                            <span className="font-semibold">{churnData.companies.currentCompanies || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">New This Period</span>
+                            <span className="font-semibold text-green-600">+{churnData.companies.newCompaniesThisPeriod || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Churned This Period</span>
+                            <span className="font-semibold text-red-600">-{churnData.companies.churnedCompaniesThisPeriod || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t">
+                            <span className="text-sm font-medium">Net Growth</span>
+                            <span className={`font-bold ${churnData.companies.netGrowth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {churnData.companies.netGrowth >= 0 ? '+' : ''}{churnData.companies.netGrowth}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Churn Rate</span>
+                            <Badge variant={churnData.companies.churnRate < 5 ? "default" : churnData.companies.churnRate < 10 ? "secondary" : "destructive"}>
+                              {churnData.companies.churnRate.toFixed(1)}%
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Net Growth Visualization */}
+                    <div className="pt-4 border-t">
+                      <div className="flex items-center justify-center gap-8">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold">
+                            {churnData.summary.totalActiveUsers}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Total Active Users</p>
+                        </div>
+                        <div className="text-center">
+                          <div className={`text-3xl font-bold ${
+                            (churnData.creators.netGrowth + churnData.companies.netGrowth) >= 0
+                              ? 'text-green-600'
+                              : 'text-red-600'
+                          }`}>
+                            {(churnData.creators.netGrowth + churnData.companies.netGrowth) >= 0 ? '+' : ''}
+                            {churnData.creators.netGrowth + churnData.companies.netGrowth}
+                          </div>
+                          <p className="text-sm text-muted-foreground">Net Growth This Period</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No churn data available for this period.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* User Growth Chart */}
             <Card className="border-card-border">

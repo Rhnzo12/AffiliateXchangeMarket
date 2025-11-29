@@ -187,6 +187,12 @@ export const companyProfiles = pgTable("company_profiles", {
   websiteVerifiedAt: timestamp("website_verified_at"),
   // Per-company fee override (null means use default platform fee)
   customPlatformFeePercentage: decimal("custom_platform_fee_percentage", { precision: 5, scale: 4 }),
+  // API key for postback/tracking integrations
+  trackingApiKey: varchar("tracking_api_key", { length: 64 }),
+  trackingApiKeyCreatedAt: timestamp("tracking_api_key_created_at"),
+  // Rejection retry restriction
+  lastRejectedAt: timestamp("last_rejected_at"),
+  rejectionCount: integer("rejection_count").default(0),
   status: companyStatusEnum("status").notNull().default('pending'),
   approvedAt: timestamp("approved_at"),
   rejectionReason: text("rejection_reason"),
@@ -371,6 +377,7 @@ export const messages = pgTable("messages", {
   attachments: text("attachments").array().default(sql`ARRAY[]::text[]`),
   isRead: boolean("is_read").default(false),
   deletedFor: text("deleted_for").array().default(sql`ARRAY[]::text[]`), // Array of user IDs who deleted "for me"
+  senderType: varchar("sender_type", { length: 20 }).default("user"), // 'user' | 'platform' - platform messages are from admin
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -868,6 +875,8 @@ export const niches = pgTable("niches", {
   name: varchar("name", { length: 100 }).notNull().unique(),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  displayOrder: integer("display_order"),
+  isPrimary: boolean("is_primary").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

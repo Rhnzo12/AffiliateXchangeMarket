@@ -229,12 +229,12 @@ export function AppSidebar() {
   const menuItems = getMenuItems();
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b px-4 py-4">
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2">
         <Link href="/" onClick={handleNavClick}>
           <div className="flex items-center gap-2 cursor-pointer">
-            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
-            <span className="font-bold text-lg">AffiliateXchange</span>
+            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover shrink-0" />
+            <span className="font-bold text-lg group-data-[collapsible=icon]:hidden">AffiliateXchange</span>
           </div>
         </Link>
       </SidebarHeader>
@@ -248,9 +248,10 @@ export function AppSidebar() {
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton 
-                        asChild 
-                        isActive={location === item.url} 
+                  <SidebarMenuButton
+                        asChild
+                        isActive={location === item.url}
+                        tooltip={item.title}
                         className="hover:bg-primary/15 hover:text-primary hover:font-bold hover:scale-105 transition-all duration-200"
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                       >
@@ -266,7 +267,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-4">
+      <SidebarFooter className="p-4 group-data-[collapsible=icon]:hidden">
         <div className="rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-primary" />
