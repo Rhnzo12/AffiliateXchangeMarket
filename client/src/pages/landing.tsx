@@ -2,6 +2,92 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { TrendingUp, Users, DollarSign, Shield, Zap, Target, Star, CheckCircle2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
+import { useEffect, useRef, useState } from "react";
+
+function useScrollAnimation(threshold = 0.1) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+        }
+      },
+      { threshold }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return { ref, isVisible };
+}
+
+function FeaturesSection() {
+  const { ref: headerRef, isVisible: headerVisible } = useScrollAnimation();
+  const features = [
+    { icon: Zap, title: "Instant Approvals", description: "Get approved in minutes, not days. Start promoting offers within 7 minutes of applying." },
+    { icon: DollarSign, title: "High Commissions", description: "Earn competitive rates with multiple commission structures: per-sale, retainers, and hybrid models." },
+    { icon: Target, title: "Smart Matching", description: "Find offers tailored to your niche and audience with advanced filtering and recommendations." },
+    { icon: Users, title: "Direct Communication", description: "Chat directly with brands through our built-in messaging system. No middlemen." },
+    { icon: TrendingUp, title: "Real-Time Analytics", description: "Track clicks, conversions, and earnings with comprehensive analytics dashboards." },
+    { icon: Shield, title: "Verified Brands", description: "Work with confidence. All companies are manually verified to ensure legitimacy." },
+  ];
+
+  return (
+    <section className="py-20 bg-card/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div 
+          ref={headerRef}
+          className={`text-center space-y-4 mb-16 transition-all duration-700 ${
+            headerVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          }`}
+        >
+          <h2 className="text-3xl sm:text-4xl font-bold">Why Choose AffiliateXchange?</h2>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Everything you need to monetize your audience and grow your income
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((feature, index) => (
+            <FeatureCard key={feature.title} feature={feature} index={index} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FeatureCard({ feature, index }: { feature: { icon: any; title: string; description: string }; index: number }) {
+  const { ref, isVisible } = useScrollAnimation(0.1);
+  const Icon = feature.icon;
+
+  return (
+    <div
+      ref={ref}
+      className={`transition-all duration-700 ${
+        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
+      }`}
+      style={{ transitionDelay: `${index * 100}ms` }}
+    >
+      <Card className="border-card-border h-full">
+        <CardContent className="p-6 space-y-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
+            <Icon className="h-6 w-6" />
+          </div>
+          <h3 className="text-xl font-semibold">{feature.title}</h3>
+          <p className="text-muted-foreground">{feature.description}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function Landing() {
   const [, setLocation] = useLocation();
@@ -68,104 +154,18 @@ export default function Landing() {
             </div>
 
             <div className="relative">
-              <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 p-8 flex items-center justify-center">
-                <div className="text-center space-y-4">
-                  <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-primary text-primary-foreground">
-                    <TrendingUp className="h-12 w-12" />
-                  </div>
-                  <p className="text-lg font-semibold">Start earning today with instant approvals</p>
-                </div>
-              </div>
+              <img 
+                src="/affiliate.png" 
+                alt="Affiliate marketing illustration" 
+                className="w-full h-auto object-contain rounded-2xl"
+              />
             </div>
           </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="py-20 bg-card/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">Why Choose AffiliateXchange?</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Everything you need to monetize your audience and grow your income
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <Zap className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">Instant Approvals</h3>
-                <p className="text-muted-foreground">
-                  Get approved in minutes, not days. Start promoting offers within 7 minutes of applying.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <DollarSign className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">High Commissions</h3>
-                <p className="text-muted-foreground">
-                  Earn competitive rates with multiple commission structures: per-sale, retainers, and hybrid models.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <Target className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">Smart Matching</h3>
-                <p className="text-muted-foreground">
-                  Find offers tailored to your niche and audience with advanced filtering and recommendations.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <Users className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">Direct Communication</h3>
-                <p className="text-muted-foreground">
-                  Chat directly with brands through our built-in messaging system. No middlemen.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <TrendingUp className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">Real-Time Analytics</h3>
-                <p className="text-muted-foreground">
-                  Track clicks, conversions, and earnings with comprehensive analytics dashboards.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate border-card-border">
-              <CardContent className="p-6 space-y-4">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
-                  <Shield className="h-6 w-6" />
-                </div>
-                <h3 className="text-xl font-semibold">Verified Brands</h3>
-                <p className="text-muted-foreground">
-                  Work with confidence. All companies are manually verified to ensure legitimacy.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
+      <FeaturesSection />
 
       {/* How It Works */}
       <section className="py-20">
