@@ -57,6 +57,8 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'work_completion_approval',
   'priority_listing_expiring',
   'deliverable_rejected',
+  'deliverable_submitted',
+  'deliverable_resubmitted',
   'revision_requested',
   'email_verification',
   'password_reset',

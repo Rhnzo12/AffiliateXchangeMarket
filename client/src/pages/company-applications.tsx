@@ -393,7 +393,7 @@ export default function CompanyApplications({ hideTopNav = false }: CompanyAppli
                 <DropdownMenuContent align="end" className="w-72 space-y-2">
                   <DropdownMenuLabel>Filter applications</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <Accordion type="multiple" className="px-2" collapsible defaultValue={[]}>
+                  <Accordion type="multiple" className="px-2" defaultValue={[]}>
                     <AccordionItem value="status">
                       <AccordionTrigger className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Status

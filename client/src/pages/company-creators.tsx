@@ -52,6 +52,13 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 
 type CompanyCreatorsProps = {
   hideTopNav?: boolean;
@@ -1094,7 +1101,7 @@ export default function CompanyCreators({ hideTopNav = false }: CompanyCreatorsP
                               </Badge>
                               <Select
                                 value={application.status}
-                                onValueChange={(nextStatus) => {
+                                onValueChange={(nextStatus: string) => {
                                   if (nextStatus !== application.status) {
                                     updateStatusMutation.mutate({ applicationId: application.id, status: nextStatus });
                                   }
