@@ -27,8 +27,8 @@ interface EmailTemplateData {
   riskIndicators?: string[];
   // Deliverable fields
   contractTitle?: string;
-  monthNumber?: string;
-  videoNumber?: string;
+  monthNumber?: number;
+  videoNumber?: number;
   reason?: string;
   revisionInstructions?: string;
 }
