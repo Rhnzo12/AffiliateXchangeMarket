@@ -7776,48 +7776,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
 
-      // Cloudinary assets are public by default; legacy GCS signing logic kept for reference
-      // let fetchUrl = url;
-      // if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
-      //   try {
-      //     const pathParts = parsed.pathname.split('/').filter(p => p);
-      //     if (pathParts.length >= 2) {
-      //       const filePath = pathParts.slice(1).join('/');
-      //       const { Storage } = await import('@google-cloud/storage');
-      //       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-      //       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
-      //       let gcsStorage: any;
-      //       const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-      //       if (credentialsJson) {
-      //         const credentials = JSON.parse(credentialsJson);
-      //         gcsStorage = new Storage({
-      //           projectId: projectId || credentials.project_id,
-      //           credentials,
-      //         });
-      //       } else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-      //         gcsStorage = new Storage({
-      //           projectId,
-      //           keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-      //         });
-      //       } else {
-      //         gcsStorage = new Storage({ projectId });
-      //       }
-      //       const [signedUrl] = await gcsStorage
-      //         .bucket(bucketName)
-      //         .file(filePath)
-      //         .getSignedUrl({
-      //           version: 'v4',
-      //           action: 'read',
-      //           expires: Date.now() + 60 * 60 * 1000,
-      //         });
-      //       fetchUrl = signedUrl;
-      //       console.log('[Proxy Image] Generated signed URL for GCS file:', filePath);
-      //     }
-      //   } catch (signedUrlError) {
-      //     console.error('[Proxy Image] Failed to generate signed URL:', signedUrlError);
-      //   }
-      // }
-      const fetchUrl = url;
+      // Generate signed URLs for GCS files (they are private by default)
+      let fetchUrl = url;
+      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+        try {
+          const pathParts = parsed.pathname.split('/').filter(p => p);
+          if (pathParts.length >= 2) {
+            const filePath = pathParts.slice(1).join('/');
+            const { Storage } = await import('@google-cloud/storage');
+            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+            let gcsStorage: any;
+            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+            if (credentialsJson) {
+              const credentials = JSON.parse(credentialsJson);
+              gcsStorage = new Storage({
+                projectId: projectId || credentials.project_id,
+                credentials,
+              });
+            } else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+              gcsStorage = new Storage({
+                projectId,
+                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+              });
+            } else {
+              gcsStorage = new Storage({ projectId });
+            }
+            const [signedUrl] = await gcsStorage
+              .bucket(bucketName)
+              .file(filePath)
+              .getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 60 * 60 * 1000,
+              });
+            fetchUrl = signedUrl;
+            console.log('[Proxy Image] Generated signed URL for GCS file:', filePath);
+          }
+        } catch (signedUrlError) {
+          console.error('[Proxy Image] Failed to generate signed URL:', signedUrlError);
+        }
+      }
 
       const fetchRes = await fetch(fetchUrl, { method: "GET" });
       if (!fetchRes.ok) return res.status(fetchRes.status).send("failed to fetch image");
@@ -7860,50 +7859,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
 
-      // Cloudinary assets are public by default; legacy GCS signing logic kept for reference
-      // let fetchUrl = url;
-      // if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
-      //   try {
-      //     const pathParts = parsed.pathname.split('/').filter(p => p);
-      //     if (pathParts.length >= 2) {
-      //       const filePath = pathParts.slice(1).join('/');
-      //       const { Storage } = await import('@google-cloud/storage');
-      //       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-      //       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
-      //       let gcsStorage: any;
-      //       const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-      //       if (credentialsJson) {
-      //         const credentials = JSON.parse(credentialsJson);
-      //         gcsStorage = new Storage({
-      //           projectId: projectId || credentials.project_id,
-      //           credentials,
-      //         });
-      //       }
-      //       else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-      //         gcsStorage = new Storage({
-      //           projectId,
-      //           keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-      //         });
-      //       }
-      //       else {
-      //         gcsStorage = new Storage({ projectId });
-      //       }
-      //       const [signedUrl] = await gcsStorage
-      //         .bucket(bucketName)
-      //         .file(filePath)
-      //         .getSignedUrl({
-      //           version: 'v4',
-      //           action: 'read',
-      //           expires: Date.now() + 60 * 60 * 1000,
-      //         });
-      //       fetchUrl = signedUrl;
-      //       console.log('[Proxy Video] Generated signed URL for GCS file:', filePath);
-      //     }
-      //   } catch (signedUrlError) {
-      //     console.error('[Proxy Video] Failed to generate signed URL:', signedUrlError);
-      //   }
-      // }
-      const fetchUrl = url;
+      // Generate signed URLs for GCS files (they are private by default)
+      let fetchUrl = url;
+      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+        try {
+          const pathParts = parsed.pathname.split('/').filter(p => p);
+          if (pathParts.length >= 2) {
+            const filePath = pathParts.slice(1).join('/');
+            const { Storage } = await import('@google-cloud/storage');
+            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+            let gcsStorage: any;
+            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+            if (credentialsJson) {
+              const credentials = JSON.parse(credentialsJson);
+              gcsStorage = new Storage({
+                projectId: projectId || credentials.project_id,
+                credentials,
+              });
+            } else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+              gcsStorage = new Storage({
+                projectId,
+                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+              });
+            } else {
+              gcsStorage = new Storage({ projectId });
+            }
+            const [signedUrl] = await gcsStorage
+              .bucket(bucketName)
+              .file(filePath)
+              .getSignedUrl({
+                version: 'v4',
+                action: 'read',
+                expires: Date.now() + 60 * 60 * 1000,
+              });
+            fetchUrl = signedUrl;
+            console.log('[Proxy Video] Generated signed URL for GCS file:', filePath);
+          }
+        } catch (signedUrlError) {
+          console.error('[Proxy Video] Failed to generate signed URL:', signedUrlError);
+        }
+      }
 
       // Get the range header from the request (for video seeking)
       const range = req.headers.range;
