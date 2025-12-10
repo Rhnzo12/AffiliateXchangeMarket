@@ -7,14 +7,6 @@ import passport from "passport";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { v2 as cloudinary } from "cloudinary";
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dilp6tuin",
-  api_key: process.env.CLOUDINARY_API_KEY || "167124276676481",
-  api_secret: process.env.CLOUDINARY_API_SECRET || "BWaaOtS7sZ_ellwAV-zE-eyxanU",
-});
 import { db } from "./db";
 import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -870,51 +862,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Not authorized to delete this document" });
       }
 
-      // Delete from cloud storage first
+      // Delete from GCS storage first
       if (document.documentUrl) {
         try {
+          const objectStorageService = new ObjectStorageService();
           const url = new URL(document.documentUrl);
+          const pathParts = url.pathname.split('/').filter(Boolean);
+          // Remove bucket name, keep the rest as file path
+          // URL format: https://storage.googleapis.com/bucket-name/path/to/file
+          const filePath = pathParts.slice(1).join('/');
 
-          // Handle Cloudinary URLs
-          if (document.documentUrl.includes('cloudinary.com')) {
-            // Extract public_id from Cloudinary URL
-            // URL format: https://res.cloudinary.com/{cloud}/{resource_type}/upload/v{version}/{public_id}.{extension}
-            const pathParts = url.pathname.split('/');
-            const uploadIndex = pathParts.findIndex(part => part === 'upload' || part === 'authenticated');
-
-            if (uploadIndex !== -1) {
-              // Get resource type (image, raw, video)
-              const resourceType = pathParts[uploadIndex - 1] || 'image';
-              // Skip version number (v123456), get the rest as public_id
-              const publicIdParts = pathParts.slice(uploadIndex + 2);
-              const publicIdWithExt = publicIdParts.join('/');
-              // Remove file extension from public_id
-              const publicId = publicIdWithExt.replace(/\.[^.]+$/, '');
-
-              if (publicId) {
-                try {
-                  const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType as any });
-                  console.log('[Verification Documents] Deleted file from Cloudinary:', publicId, 'Result:', result);
-                } catch (cloudinaryError) {
-                  console.error('[Verification Documents] Error deleting from Cloudinary:', cloudinaryError);
-                }
-              }
-            }
-          }
-          // Handle GCS URLs
-          else if (document.documentUrl.includes('storage.googleapis.com')) {
-            const objectStorageService = new ObjectStorageService();
-            const pathParts = url.pathname.split('/');
-            // Remove empty string and bucket name, keep the rest as file path
-            const filePath = pathParts.slice(2).join('/');
-
-            if (filePath) {
-              await objectStorageService.deleteResource(filePath, 'raw');
-              console.log('[Verification Documents] Deleted file from GCS:', filePath);
-            }
+          if (filePath) {
+            const result = await objectStorageService.deleteResource(filePath, 'raw');
+            console.log('[Verification Documents] Deleted file from GCS:', filePath, 'Result:', result);
           }
         } catch (storageError) {
-          console.error('[Verification Documents] Error deleting from cloud storage:', storageError);
+          console.error('[Verification Documents] Error deleting from GCS:', storageError);
           // Continue with database deletion even if storage deletion fails
         }
       }
@@ -960,50 +923,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('[Verification Document] Original URL:', documentUrl);
 
-      // For Cloudinary URLs, fetch and stream the document
-      // Since documents are uploaded as public resources (type: 'upload'),
-      // we can fetch them directly without authentication APIs
+      // Fetch the document from GCS and stream it to the client
       try {
-        // Determine the correct fetch URL
-        let fetchUrl: string;
-
-        if (documentUrl.includes('cloudinary.com')) {
-          // Extract public_id from Cloudinary URL
-          // URL format: https://res.cloudinary.com/{cloud}/image/upload/v{version}/{public_id}.{extension}
-          const url = new URL(documentUrl);
-          const pathParts = url.pathname.split('/');
-
-          // Find the index of 'upload' or 'authenticated'
-          const uploadIndex = pathParts.findIndex(part => part === 'upload' || part === 'authenticated');
-          if (uploadIndex === -1) {
-            console.error('[Verification Document] Invalid URL format - no upload/authenticated path:', documentUrl);
-            // Fallback to direct URL
-            fetchUrl = documentUrl;
-          } else {
-            // Get resource type (image, raw, video, etc.)
-            const resourceType = pathParts[uploadIndex - 1] || 'image';
-
-            // Skip upload type and version number (v123456), get the rest as public_id
-            const publicIdParts = pathParts.slice(uploadIndex + 2);
-            let publicIdWithExt = publicIdParts.join('/');
-
-            // Remove file extension from public_id (Cloudinary doesn't include it in public_id)
-            const publicId = publicIdWithExt.replace(/\.[^.]+$/, '');
-
-            console.log('[Verification Document] Extracted public_id:', publicId);
-            console.log('[Verification Document] Resource type:', resourceType);
-
-            // Use the original Cloudinary URL directly since it's already a valid public URL
-            fetchUrl = documentUrl;
-            console.log('[Verification Document] Using original Cloudinary URL');
-          }
-        } else {
-          // Non-Cloudinary URL, use as-is
-          fetchUrl = documentUrl;
-        }
-
-        // Fetch the document
-        const fetchRes = await fetch(fetchUrl, {
+        // Fetch the document from storage URL
+        const fetchRes = await fetch(documentUrl, {
           method: "GET",
           headers: {
             'User-Agent': 'AffiliateXchange-Server/1.0',
@@ -1012,8 +935,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!fetchRes.ok) {
           console.error('[Verification Document Proxy] Failed to fetch:', fetchRes.status, fetchRes.statusText);
-          console.error('[Verification Document Proxy] Tried URL:', fetchUrl);
-          return res.status(fetchRes.status).send("Failed to fetch document from Cloudinary");
+          console.error('[Verification Document Proxy] Tried URL:', documentUrl);
+          return res.status(fetchRes.status).send("Failed to fetch document from storage");
         }
 
         console.log('[Verification Document] Successfully fetched document');
