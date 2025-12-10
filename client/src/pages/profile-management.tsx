@@ -1571,15 +1571,6 @@ export default function Settings() {
     updateProfileMutation.mutate();
   };
 
-  const handleProfileActionClick = () => {
-    if (!isProfileEditMode) {
-      setIsProfileEditMode(true);
-      return;
-    }
-
-    handleSaveProfile();
-  };
-
   // Define navigation sections based on user role
   const settingsSections: SettingsSection[] = useMemo(() => {
     const sections: SettingsSection[] = [
@@ -1613,16 +1604,12 @@ export default function Settings() {
                 <CardTitle>Profile Information</CardTitle>
                 <Button
                   size="sm"
-                  onClick={handleProfileActionClick}
+                  onClick={() => setIsProfileEditMode(!isProfileEditMode)}
                   disabled={updateProfileMutation.isPending}
                   variant={isProfileEditMode ? "default" : "outline"}
-                  data-testid="button-save-profile"
+                  data-testid="button-edit-profile"
                 >
-                  {updateProfileMutation.isPending
-                    ? "Saving..."
-                    : isProfileEditMode
-                    ? "Save"
-                    : "Edit Profile"}
+                  {isProfileEditMode ? "Cancel" : "Edit Profile"}
                 </Button>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -2322,6 +2309,17 @@ export default function Settings() {
               </div>
             </>
           )}
+
+          {/* Save Changes Button - disabled when not in edit mode */}
+          <div className="pt-4 border-t">
+            <Button
+              onClick={handleSaveProfile}
+              disabled={!isProfileEditMode || updateProfileMutation.isPending}
+              data-testid="button-save-profile"
+            >
+              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
