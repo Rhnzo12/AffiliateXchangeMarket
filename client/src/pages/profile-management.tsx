@@ -140,6 +140,7 @@ export default function Settings() {
   const [isPdfViewerOpen, setIsPdfViewerOpen] = useState(false);
   const [currentDocumentUrl, setCurrentDocumentUrl] = useState("");
   const [currentDocumentName, setCurrentDocumentName] = useState("");
+  const [currentDocumentId, setCurrentDocumentId] = useState("");
 
   // Account info states
   const [username, setUsername] = useState("");
@@ -704,13 +705,14 @@ export default function Settings() {
     const viewerUrl = `/api/company/verification-documents/${documentId}/file`;
 
     // Open the document in a dialog viewer
+    setCurrentDocumentId(documentId);
     setCurrentDocumentUrl(viewerUrl);
     setCurrentDocumentName(documentName);
     setIsPdfViewerOpen(true);
   };
 
-  // Opens document in new browser tab for download
-  const handleDownloadDocument = (documentId: string, documentName: string) => {
+  // Downloads document via backend endpoint
+  const handleDownloadDocument = async (documentId: string, documentName: string) => {
     if (!documentId) {
       toast({
         title: "Error",
@@ -719,9 +721,30 @@ export default function Settings() {
       });
       return;
     }
-    // Use the authenticated backend endpoint to download the document
-    const downloadUrl = `/api/company/verification-documents/${documentId}/file`;
-    window.open(downloadUrl, '_blank');
+    try {
+      // Use the authenticated backend endpoint with download parameter
+      const downloadUrl = `/api/company/verification-documents/${documentId}/file?download=true`;
+      const response = await fetch(downloadUrl, { credentials: "include" });
+      if (!response.ok) {
+        throw new Error("Failed to download document");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = documentName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to download document",
+        variant: "destructive",
+      });
+    }
   };
 
   const formatFileSize = (bytes: number | null): string => {
@@ -2754,22 +2777,39 @@ export default function Settings() {
           </DialogHeader>
           <div className="flex-1 min-h-0 border rounded-lg overflow-hidden bg-muted/10">
             {currentDocumentUrl && (
-              <iframe
-                src={currentDocumentUrl}
+              <object
+                data={currentDocumentUrl}
+                type="application/pdf"
                 className="w-full h-full"
                 title={currentDocumentName}
-              />
+              >
+                <iframe
+                  src={currentDocumentUrl}
+                  className="w-full h-full"
+                  title={currentDocumentName}
+                />
+              </object>
             )}
           </div>
-          <DialogFooter className="flex-row justify-between items-center">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(currentDocumentUrl, '_blank')}
-            >
-              <ExternalLink className="h-4 w-4 mr-2" />
-              Open in New Tab
-            </Button>
+          <DialogFooter className="flex-row justify-between items-center gap-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownloadDocument(currentDocumentId, currentDocumentName)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(currentDocumentUrl, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in New Tab
+              </Button>
+            </div>
             <Button
               variant="outline"
               size="sm"
