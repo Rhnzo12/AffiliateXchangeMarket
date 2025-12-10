@@ -2309,17 +2309,6 @@ export default function Settings() {
               </div>
             </>
           )}
-
-          {/* Save Changes Button - disabled when not in edit mode */}
-          <div className="pt-4 border-t">
-            <Button
-              onClick={handleSaveProfile}
-              disabled={!isProfileEditMode || updateProfileMutation.isPending}
-              data-testid="button-save-profile"
-            >
-              {updateProfileMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -2380,14 +2369,21 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Save Button */}
+          {/* Save Button - saves both profile and account info */}
           <div className="pt-2">
             <Button
-              onClick={() => updateAccountMutation.mutate()}
-              disabled={updateAccountMutation.isPending}
+              onClick={() => {
+                // Save profile info if in edit mode
+                if (isProfileEditMode) {
+                  handleSaveProfile();
+                }
+                // Also save account info
+                updateAccountMutation.mutate();
+              }}
+              disabled={!isProfileEditMode || updateAccountMutation.isPending || updateProfileMutation.isPending}
               data-testid="button-save-account"
             >
-              {updateAccountMutation.isPending ? "Saving..." : "Save Changes"}
+              {(updateAccountMutation.isPending || updateProfileMutation.isPending) ? "Saving..." : "Save Changes"}
             </Button>
           </div>
         </CardContent>
