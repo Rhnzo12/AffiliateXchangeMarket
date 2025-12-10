@@ -2514,10 +2514,16 @@ export default function PaymentSettings() {
         const result = await res.json();
 
         // Step 3: Redirect to Stripe onboarding
+        // Use the correct route based on user role
+        const paymentSettingsPath = user?.role === 'creator'
+          ? '/creator/payment-settings'
+          : user?.role === 'company'
+            ? '/company/payment-settings'
+            : '/payment-settings';
         const onboardingRes = await apiRequest("POST", "/api/stripe-connect/onboarding-link", {
           accountId: accountData.accountId,
-          returnUrl: `${window.location.origin}/settings/payment?stripe_onboarding=success`,
-          refreshUrl: `${window.location.origin}/settings/payment?stripe_onboarding=refresh`,
+          returnUrl: `${window.location.origin}${paymentSettingsPath}?stripe_onboarding=success`,
+          refreshUrl: `${window.location.origin}${paymentSettingsPath}?stripe_onboarding=refresh`,
         });
         const onboardingData = await onboardingRes.json();
 
