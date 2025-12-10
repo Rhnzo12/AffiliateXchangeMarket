@@ -12,7 +12,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Separator } from "../components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
-import { Upload, Building2, X, ChevronsUpDown, Download, Trash2, Shield, AlertTriangle, Video, Globe, FileText, Plus, Eye, ShieldCheck, User, Mail, Key, KeyRound, LogOut, ExternalLink } from "lucide-react";
+import { Upload, Building2, X, ChevronsUpDown, Download, Trash2, Shield, AlertTriangle, Video, Globe, FileText, Plus, Eye, ShieldCheck, User, Mail, Key, KeyRound, LogOut, ExternalLink, Loader2, Image, Maximize2, RefreshCw } from "lucide-react";
 import { TwoFactorSetup } from "../components/TwoFactorSetup";
 import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
 import {
@@ -99,6 +99,9 @@ export default function Settings() {
   const [currentDocumentUrl, setCurrentDocumentUrl] = useState("");
   const [currentDocumentName, setCurrentDocumentName] = useState("");
   const [currentDocumentId, setCurrentDocumentId] = useState("");
+  const [currentDocumentType, setCurrentDocumentType] = useState("");
+  const [isDocumentLoading, setIsDocumentLoading] = useState(true);
+  const [documentError, setDocumentError] = useState(false);
 
   // Account info states
   const [username, setUsername] = useState("");
@@ -641,10 +644,13 @@ export default function Settings() {
     }
     // Use the authenticated backend endpoint to serve the document
     const viewerUrl = `/api/company/verification-documents/${documentId}/file`;
-    // Open the document in a dialog viewer
+    // Reset states and open the document in a dialog viewer
+    setIsDocumentLoading(true);
+    setDocumentError(false);
     setCurrentDocumentId(documentId);
     setCurrentDocumentUrl(viewerUrl);
     setCurrentDocumentName(documentName);
+    setCurrentDocumentType(documentType);
     setIsPdfViewerOpen(true);
   };
 
@@ -1614,61 +1620,129 @@ export default function Settings() {
         description={errorDialog?.message || "An error occurred"}
       />
 
-      {/* PDF Viewer Dialog */}
+      {/* Document Viewer Dialog */}
       <Dialog open={isPdfViewerOpen} onOpenChange={setIsPdfViewerOpen}>
-        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {currentDocumentName || "Document Viewer"}
-            </DialogTitle>
-            <DialogDescription>
-              Verification document preview
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 min-h-0 border rounded-lg overflow-hidden bg-muted/10">
+        <DialogContent className="max-w-5xl w-[95vw] h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-muted/30">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                {currentDocumentType === 'image' ? (
+                  <Image className="h-5 w-5 text-primary" />
+                ) : (
+                  <FileText className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="font-semibold text-lg truncate" title={currentDocumentName}>
+                  {currentDocumentName || "Document"}
+                </h2>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <Badge variant="secondary" className="text-xs">
+                    {currentDocumentType === 'image' ? 'Image' : 'PDF'}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">Verification Document</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Document Content */}
+          <div className="flex-1 min-h-0 relative bg-muted/20">
+            {/* Loading State */}
+            {isDocumentLoading && !documentError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+                <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">Loading document...</p>
+              </div>
+            )}
+
+            {/* Error State */}
+            {documentError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10">
+                <div className="text-center p-6">
+                  <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle className="h-8 w-8 text-destructive" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Failed to load document</h3>
+                  <p className="text-muted-foreground mb-4">The document could not be displayed in the preview.</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setDocumentError(false);
+                        setIsDocumentLoading(true);
+                        setCurrentDocumentUrl(`${currentDocumentUrl}?retry=${Date.now()}`);
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
+                    <Button onClick={() => window.open(currentDocumentUrl, '_blank')}>
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Document Display */}
             {currentDocumentUrl && (
-              <object
-                data={currentDocumentUrl}
-                type="application/pdf"
-                className="w-full h-full"
-                title={currentDocumentName}
-              >
+              currentDocumentType === 'image' ? (
+                <div className="w-full h-full flex items-center justify-center p-4 overflow-auto">
+                  <img
+                    src={currentDocumentUrl}
+                    alt={currentDocumentName}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+                    onLoad={() => setIsDocumentLoading(false)}
+                    onError={() => {
+                      setIsDocumentLoading(false);
+                      setDocumentError(true);
+                    }}
+                  />
+                </div>
+              ) : (
                 <iframe
                   src={currentDocumentUrl}
-                  className="w-full h-full"
+                  className="w-full h-full border-0"
                   title={currentDocumentName}
+                  onLoad={() => setIsDocumentLoading(false)}
+                  onError={() => {
+                    setIsDocumentLoading(false);
+                    setDocumentError(true);
+                  }}
                 />
-              </object>
+              )
             )}
           </div>
-          <DialogFooter className="flex-row justify-between items-center gap-2">
+
+          {/* Footer */}
+          <div className="flex items-center justify-between px-6 py-4 border-t bg-muted/30">
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => handleDownloadDocument(currentDocumentId, currentDocumentName)}
+                className="gap-2"
               >
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="h-4 w-4" />
                 Download
               </Button>
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => window.open(currentDocumentUrl, '_blank')}
+                className="gap-2"
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
+                <Maximize2 className="h-4 w-4" />
                 Open in New Tab
               </Button>
             </div>
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => setIsPdfViewerOpen(false)}
             >
               Close
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
           </div>
