@@ -118,22 +118,8 @@ export default function CreatorDashboard() {
     [activityChartData]
   );
 
-  const snapshotChartData = useMemo(() => {
-    if (hasActivity) {
-      return activityChartData;
-    }
-
-    // Light snapshot data to keep the chart populated when there's no live activity yet
-    return [
-      { date: "Mon", earnings: 24 },
-      { date: "Tue", earnings: 32 },
-      { date: "Wed", earnings: 28 },
-      { date: "Thu", earnings: 40 },
-      { date: "Fri", earnings: 36 },
-      { date: "Sat", earnings: 44 },
-      { date: "Sun", earnings: 38 },
-    ];
-  }, [activityChartData, hasActivity]);
+  // Always use real data from the API - it now includes all days with 0s for missing data
+  const chartDataToDisplay = activityChartData;
 
   // Handle the recommended offers response
   const recommendedOffers = Array.isArray(recommendedOffersData) ? recommendedOffersData : [];
@@ -225,14 +211,14 @@ export default function CreatorDashboard() {
               </div>
             ) : (
               <>
-                {!hasActivity && (
-                  <div className="absolute right-3 top-3 z-10 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-primary shadow-sm">
-                    Snapshot preview
+                {!hasActivity && chartDataToDisplay.length > 0 && (
+                  <div className="absolute right-3 top-3 z-10 rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
+                    No activity yet
                   </div>
                 )}
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
-                    data={snapshotChartData}
+                    data={chartDataToDisplay}
                     margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                   >
                     <defs>
