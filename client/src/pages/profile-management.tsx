@@ -1308,6 +1308,30 @@ export default function Settings() {
     },
   });
 
+  // Delete company logo mutation
+  const deleteLogoMutation = useMutation({
+    mutationFn: async () => {
+      const result = await apiRequest("DELETE", "/api/company-logos");
+      return result;
+    },
+    onSuccess: () => {
+      setLogoUrl("");
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      toast({
+        title: "Success",
+        description: "Logo deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to delete logo",
+      });
+    },
+  });
+
   // OAuth popup message handler
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
@@ -1618,10 +1642,10 @@ export default function Settings() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={isProfileEditingDisabled}
-                      onClick={() => setLogoUrl("")}
+                      disabled={isProfileEditingDisabled || deleteLogoMutation.isPending}
+                      onClick={() => deleteLogoMutation.mutate()}
                     >
-                      Delete Logo
+                      {deleteLogoMutation.isPending ? 'Deleting...' : 'Delete Logo'}
                     </Button>
                   )}
                 </div>
