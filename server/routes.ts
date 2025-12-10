@@ -8392,6 +8392,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete company logo - removes from storage and database
+  app.delete("/api/company-logos", requireAuth, requireRole('company'), async (req, res) => {
+    const userId = (req.user as any).id;
+    try {
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile) {
+        return res.status(404).json({ error: "Company profile not found" });
+      }
+
+      const currentLogoUrl = companyProfile.logoUrl;
+
+      // Delete from Google Cloud Storage if logo exists
+      if (currentLogoUrl) {
+        try {
+          const logoPublicId = sharedObjectStorageService.extractPublicIdFromUrl(currentLogoUrl);
+          if (logoPublicId) {
+            await sharedObjectStorageService.deleteResource(logoPublicId, 'image');
+            console.log(`[Company Logo Delete] Deleted logo from storage: ${logoPublicId}`);
+          }
+        } catch (storageError: any) {
+          // Log but don't fail if storage deletion fails - still update database
+          console.error(`[Company Logo Delete] Storage deletion error: ${storageError.message}`);
+        }
+      }
+
+      // Update database to remove logo URL
+      await storage.updateCompanyProfile(userId, { logoUrl: null });
+
+      res.status(200).json({ success: true, message: "Logo deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting company logo:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Offer Videos endpoints
   app.get("/api/offers/:offerId/videos", requireAuth, async (req, res) => {
     try {
