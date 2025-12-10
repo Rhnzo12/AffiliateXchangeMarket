@@ -3133,7 +3133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             userName: companyProfile.legalName || companyProfile.tradeName || 'Company',
             reviewRating: review.overallRating,
-            reviewText: review.reviewText,
+            reviewText: review.reviewText ?? undefined,
             linkUrl: '/company-reviews',
           }
         );
@@ -8755,8 +8755,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
             contractTitle: contract.title,
-            monthNumber: deliverable.monthNumber.toString(),
-            videoNumber: deliverable.videoNumber.toString(),
+            monthNumber: deliverable.monthNumber,
+            videoNumber: deliverable.videoNumber,
             linkUrl: `/company/retainers/${contract.id}`,
           }
         );
@@ -8823,8 +8823,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             {
               userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
               contractTitle: contract.title,
-              monthNumber: deliverable.monthNumber.toString(),
-              videoNumber: deliverable.videoNumber.toString(),
+              monthNumber: deliverable.monthNumber,
+              videoNumber: deliverable.videoNumber,
               linkUrl: `/company/retainers/${contract.id}`,
             }
           );
