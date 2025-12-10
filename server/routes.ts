@@ -923,10 +923,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('[Verification Document] Original URL:', documentUrl);
 
-      // Fetch the document from GCS and stream it to the client
+      // Fetch the document from GCS using a signed URL
       try {
-        // Fetch the document from storage URL
-        const fetchRes = await fetch(documentUrl, {
+        // Generate a signed URL to access the document from GCS
+        const objectStorageService = new ObjectStorageService();
+        const signedUrl = await objectStorageService.getSignedViewUrl(documentUrl, {
+          expiresIn: 300, // 5 minutes, just enough to fetch the document
+        });
+
+        console.log('[Verification Document] Generated signed URL for fetch');
+
+        // Fetch the document using the signed URL
+        const fetchRes = await fetch(signedUrl, {
           method: "GET",
           headers: {
             'User-Agent': 'AffiliateXchange-Server/1.0',
@@ -935,7 +943,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         if (!fetchRes.ok) {
           console.error('[Verification Document Proxy] Failed to fetch:', fetchRes.status, fetchRes.statusText);
-          console.error('[Verification Document Proxy] Tried URL:', documentUrl);
+          console.error('[Verification Document Proxy] Original URL:', documentUrl);
           return res.status(fetchRes.status).send("Failed to fetch document from storage");
         }
 
