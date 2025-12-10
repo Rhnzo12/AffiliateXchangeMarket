@@ -2329,6 +2329,7 @@ export default function Settings() {
                 placeholder="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                disabled={!isProfileEditMode}
                 data-testid="input-username"
               />
             </div>
@@ -2352,6 +2353,7 @@ export default function Settings() {
                 placeholder="John"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
+                disabled={!isProfileEditMode}
                 data-testid="input-first-name"
               />
             </div>
@@ -2364,6 +2366,7 @@ export default function Settings() {
                 placeholder="Doe"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
+                disabled={!isProfileEditMode}
                 data-testid="input-last-name"
               />
             </div>
