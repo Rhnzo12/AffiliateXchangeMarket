@@ -7,7 +7,14 @@ import passport from "passport";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-// Note: Cloudinary import removed - now using GCS via ObjectStorageService
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dilp6tuin",
+  api_key: process.env.CLOUDINARY_API_KEY || "167124276676481",
+  api_secret: process.env.CLOUDINARY_API_SECRET || "BWaaOtS7sZ_ellwAV-zE-eyxanU",
+});
 import { db } from "./db";
 import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -866,17 +873,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete from cloud storage first
       if (document.documentUrl) {
         try {
-          const objectStorageService = new ObjectStorageService();
-          // Extract file path from GCS URL
-          // URL format: https://storage.googleapis.com/bucket-name/path/to/file
           const url = new URL(document.documentUrl);
-          const pathParts = url.pathname.split('/');
-          // Remove empty string and bucket name, keep the rest as file path
-          const filePath = pathParts.slice(2).join('/');
 
-          if (filePath) {
-            await objectStorageService.deleteResource(filePath, 'raw');
-            console.log('[Verification Documents] Deleted file from GCS:', filePath);
+          // Handle Cloudinary URLs
+          if (document.documentUrl.includes('cloudinary.com')) {
+            // Extract public_id from Cloudinary URL
+            // URL format: https://res.cloudinary.com/{cloud}/{resource_type}/upload/v{version}/{public_id}.{extension}
+            const pathParts = url.pathname.split('/');
+            const uploadIndex = pathParts.findIndex(part => part === 'upload' || part === 'authenticated');
+
+            if (uploadIndex !== -1) {
+              // Get resource type (image, raw, video)
+              const resourceType = pathParts[uploadIndex - 1] || 'image';
+              // Skip version number (v123456), get the rest as public_id
+              const publicIdParts = pathParts.slice(uploadIndex + 2);
+              const publicIdWithExt = publicIdParts.join('/');
+              // Remove file extension from public_id
+              const publicId = publicIdWithExt.replace(/\.[^.]+$/, '');
+
+              if (publicId) {
+                try {
+                  const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType as any });
+                  console.log('[Verification Documents] Deleted file from Cloudinary:', publicId, 'Result:', result);
+                } catch (cloudinaryError) {
+                  console.error('[Verification Documents] Error deleting from Cloudinary:', cloudinaryError);
+                }
+              }
+            }
+          }
+          // Handle GCS URLs
+          else if (document.documentUrl.includes('storage.googleapis.com')) {
+            const objectStorageService = new ObjectStorageService();
+            const pathParts = url.pathname.split('/');
+            // Remove empty string and bucket name, keep the rest as file path
+            const filePath = pathParts.slice(2).join('/');
+
+            if (filePath) {
+              await objectStorageService.deleteResource(filePath, 'raw');
+              console.log('[Verification Documents] Deleted file from GCS:', filePath);
+            }
           }
         } catch (storageError) {
           console.error('[Verification Documents] Error deleting from cloud storage:', storageError);
@@ -902,6 +937,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = (req.user as any).id;
       const userRole = (req.user as any).role;
       const documentId = req.params.id;
+      const isDownload = req.query.download === 'true';
 
       // Get the document
       const document = await storage.getVerificationDocumentById(documentId);
@@ -1000,8 +1036,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const contentLength = fetchRes.headers.get("content-length");
         if (contentLength) res.setHeader("Content-Length", contentLength);
 
-        // Set content disposition for PDFs to display inline
-        if (document.documentType === 'pdf' || documentUrl.toLowerCase().endsWith('.pdf')) {
+        // Set content disposition based on download mode
+        if (isDownload) {
+          // Force download with attachment disposition
+          res.setHeader("Content-Disposition", `attachment; filename="${document.documentName}"`);
+        } else if (document.documentType === 'pdf' || documentUrl.toLowerCase().endsWith('.pdf')) {
+          // Display inline for PDFs when viewing
+          res.setHeader("Content-Disposition", `inline; filename="${document.documentName}"`);
+        } else {
+          // Display inline for images when viewing
           res.setHeader("Content-Disposition", `inline; filename="${document.documentName}"`);
         }
 
