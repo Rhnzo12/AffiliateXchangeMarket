@@ -15,7 +15,7 @@ const { Pool } = pg;
 
 async function runMigration() {
   if (!process.env.DATABASE_URL) {
-    console.error('❌ ERROR: DATABASE_URL environment variable not set');
+    console.error('\u274C ERROR: DATABASE_URL environment variable not set');
     process.exit(1);
   }
 
@@ -27,7 +27,7 @@ async function runMigration() {
     console.log('🔄 Connecting to database...');
     const client = await pool.connect();
 
-    console.log('✅ Connected successfully\n');
+    console.log('\u2705 Connected successfully\n');
 
     // Read the migration SQL file
     const sqlPath = join(__dirname, '..', 'db', 'migrations', '018_create_content_moderation_tables.sql');
@@ -38,12 +38,12 @@ async function runMigration() {
     // Execute the migration
     await client.query(sql);
 
-    console.log('\n✅ Migration completed successfully!');
+    console.log('\n\u2705 Migration completed successfully!');
     console.log('\n📊 Created:');
-    console.log('  ✓ banned_keywords table');
-    console.log('  ✓ content_flags table');
-    console.log('  ✓ Indexes for performance');
-    console.log('  ✓ Default banned keywords');
+    console.log('  \u2713 banned_keywords table');
+    console.log('  \u2713 content_flags table');
+    console.log('  \u2713 Indexes for performance');
+    console.log('  \u2713 Default banned keywords');
 
     // Verify tables were created
     const checkTables = await client.query(`
@@ -53,7 +53,7 @@ async function runMigration() {
 
     console.log('\n🔍 Verification:');
     checkTables.rows.forEach(row => {
-      console.log(`  ✓ ${row.tablename} exists`);
+      console.log(`  \u2713 ${row.tablename} exists`);
     });
 
     // Check row counts
@@ -67,11 +67,11 @@ async function runMigration() {
     client.release();
 
   } catch (error: any) {
-    console.error('\n❌ Migration failed:');
+    console.error('\n\u274C Migration failed:');
     console.error(error.message);
 
     if (error.message.includes('already exists')) {
-      console.log('\n💡 Tables may already exist. This is OK if you ran this migration before.');
+      console.log('\n\u1F4A1 Tables may already exist. This is OK if you ran this migration before.');
     }
 
     process.exit(1);

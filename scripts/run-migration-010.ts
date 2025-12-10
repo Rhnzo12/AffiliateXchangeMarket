@@ -25,20 +25,20 @@ async function runMigration() {
     console.log("[Migration] Executing migration SQL...");
     await db.execute(sql.raw(migrationSQL));
 
-    console.log("[Migration] ✅ Migration completed successfully!");
+    console.log("[Migration] \u2705 Migration completed successfully!");
     console.log("[Migration] Niches table has been created and data migrated.");
 
     // Verify the table was created
     const result = await db.execute(sql`SELECT COUNT(*) as count FROM niches`);
-    console.log(`[Migration] ℹ️  Niches table now contains ${(result.rows[0] as any).count} records.`);
+    console.log(`[Migration] \u2139\uFE0F  Niches table now contains ${(result.rows[0] as any).count} records.`);
 
     process.exit(0);
   } catch (error: any) {
-    console.error("[Migration] ❌ Migration failed:", error);
+    console.error("[Migration] \u274C Migration failed:", error);
 
     // Check if the table already exists
     if (error.message?.includes("already exists")) {
-      console.log("[Migration] ℹ️  The niches table already exists.");
+      console.log("[Migration] \u2139\uFE0F  The niches table already exists.");
       process.exit(0);
     }
 

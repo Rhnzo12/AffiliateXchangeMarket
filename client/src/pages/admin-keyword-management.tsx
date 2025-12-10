@@ -562,6 +562,7 @@ export default function AdminKeywordManagement() {
                 value={severity}
                 onChange={(e) => setSeverity(parseInt(e.target.value))}
                 className="w-full"
+                aria-label="Severity level"
               />
               <p className="text-xs text-muted-foreground">
                 1 = Low severity, 5 = Critical severity

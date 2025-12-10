@@ -22,20 +22,20 @@ async function configureCORS() {
         projectId: credentials.project_id || process.env.GOOGLE_CLOUD_PROJECT_ID,
         credentials: credentials,
       });
-      console.log('✓ Using credentials from environment variable');
+      console.log('\u2713 Using credentials from environment variable');
     } else if (process.env.GOOGLE_CLOUD_KEYFILE) {
       // Use keyfile path (for local development)
       storage = new Storage({
         projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
         keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
       });
-      console.log('✓ Using credentials from keyfile:', process.env.GOOGLE_CLOUD_KEYFILE);
+      console.log('\u2713 Using credentials from keyfile:', process.env.GOOGLE_CLOUD_KEYFILE);
     } else {
       // Use Application Default Credentials
       storage = new Storage({
         projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
       });
-      console.log('✓ Using Application Default Credentials');
+      console.log('\u2713 Using Application Default Credentials');
     }
 
     const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
@@ -70,12 +70,12 @@ async function configureCORS() {
 
     await bucket.setCorsConfiguration(corsConfiguration);
 
-    console.log('\n✅ CORS configuration applied successfully!');
+    console.log('\n\u2705 CORS configuration applied successfully!');
     console.log('\nYou can now upload files from:');
     corsConfiguration[0].origin.forEach(origin => {
       console.log(`  - ${origin}`);
     });
-    console.log('\n⚠️  Note: GCS does not support wildcard origins.');
+    console.log('\n\u26A0\uFE0F  Note: GCS does not support wildcard origins.');
     console.log('    Add each specific Vercel URL to the origin array.');
 
     // Verify the configuration
@@ -84,7 +84,7 @@ async function configureCORS() {
     console.log(JSON.stringify(metadata.cors, null, 2));
 
   } catch (error) {
-    console.error('❌ Error configuring CORS:', error.message);
+    console.error('\u274C Error configuring CORS:', error.message);
     if (error.code) {
       console.error('Error code:', error.code);
     }

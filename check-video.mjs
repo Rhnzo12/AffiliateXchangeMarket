@@ -8,9 +8,9 @@ cloudinary.config({
 
 cloudinary.api.resource('atpvv1z6vyft1guhekdj', { resource_type: 'video' })
 .then(result => {
-  console.log('✅ Video found in Cloudinary!');
+  console.log('\u2705 Video found in Cloudinary!');
   console.log('URL:', result.secure_url);
 })
 .catch(error => {
-  console.error('❌ Cannot find video:', error);
+  console.error('\u274C Cannot find video:', error);
 });

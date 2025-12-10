@@ -18,7 +18,7 @@ export async function addConversationOfferCompanyFields() {
       ADD COLUMN IF NOT EXISTS resolved_at timestamp,
       ADD COLUMN IF NOT EXISTS resolved_by varchar
     `);
-    console.log("✅ Added resolution fields to conversations table");
+    console.log("\u2705 Added resolution fields to conversations table");
 
     // Add fields to offers table
     await db.execute(sql`
@@ -26,7 +26,7 @@ export async function addConversationOfferCompanyFields() {
       ADD COLUMN IF NOT EXISTS exclusivity_required boolean DEFAULT false,
       ADD COLUMN IF NOT EXISTS content_approval_required boolean DEFAULT false
     `);
-    console.log("✅ Added contract fields to offers table");
+    console.log("\u2705 Added contract fields to offers table");
 
     // Add fields to company_profiles table
     await db.execute(sql`
@@ -36,11 +36,11 @@ export async function addConversationOfferCompanyFields() {
       ADD COLUMN IF NOT EXISTS facebook_url varchar,
       ADD COLUMN IF NOT EXISTS instagram_url varchar
     `);
-    console.log("✅ Added social media fields to company_profiles table");
+    console.log("\u2705 Added social media fields to company_profiles table");
 
-    console.log("✅ Successfully completed all schema updates");
+    console.log("\u2705 Successfully completed all schema updates");
   } catch (error) {
-    console.error("❌ Error adding fields:", error);
+    console.error("\u274C Error adding fields:", error);
     throw error;
   }
 }

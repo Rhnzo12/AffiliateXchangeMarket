@@ -23,7 +23,7 @@ async function testScheduler() {
     console.log(`   Found ${priorityOffers.length} priority listings`);
 
     if (priorityOffers.length === 0) {
-      console.log('\n⚠️  No priority listings found.');
+      console.log('\n\u26A0\uFE0F  No priority listings found.');
       console.log('   Create a test priority listing in the UI first.');
       return;
     }
@@ -48,12 +48,12 @@ async function testScheduler() {
 
       console.log(`   📦 ${offer.title}`);
       console.log(`      ID: ${offer.id}`);
-      console.log(`      Status: ${isExpired ? '❌ EXPIRED' : '✅ ACTIVE'}`);
+      console.log(`      Status: ${isExpired ? '\u274C EXPIRED' : '\u2705 ACTIVE'}`);
       console.log(`      Expires: ${expiresAt?.toLocaleDateString() || 'N/A'}`);
       if (!isExpired && daysUntilExpiry !== null) {
         console.log(`      Days remaining: ${daysUntilExpiry}`);
         if (daysUntilExpiry <= 7) {
-          console.log(`      ⚠️  Reminder email should be sent`);
+          console.log(`      \u26A0\uFE0F  Reminder email should be sent`);
         }
       }
       console.log();
@@ -68,12 +68,12 @@ async function testScheduler() {
         console.log(`   - ${offer.title} (ID: ${offer.id})`);
       });
 
-      console.log('\n   💡 To actually expire these listings, the scheduler will:');
+      console.log('\n   \u1F4A1 To actually expire these listings, the scheduler will:');
       console.log('      1. Set isPriorityListing = false');
       console.log('      2. Send expiration notification email');
       console.log('      3. Remove PRIORITY badge from browse page');
     } else {
-      console.log('   ✅ No listings to expire');
+      console.log('   \u2705 No listings to expire');
     }
 
     // 5. Check for reminder candidates (7 days before)
@@ -94,13 +94,13 @@ async function testScheduler() {
     }
 
     console.log('\n' + '='.repeat(60));
-    console.log('\n✅ Scheduler test complete!');
-    console.log('\n💡 To run the actual scheduler:');
+    console.log('\n\u2705 Scheduler test complete!');
+    console.log('\n\u1F4A1 To run the actual scheduler:');
     console.log('   - It runs automatically daily at 2:00 AM');
     console.log('   - Or restart the server to trigger initialization');
 
   } catch (error) {
-    console.error('\n❌ Error testing scheduler:', error);
+    console.error('\n\u274C Error testing scheduler:', error);
     throw error;
   }
 }

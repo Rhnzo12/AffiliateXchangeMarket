@@ -30,7 +30,7 @@ async function main() {
         ALTER COLUMN exclusivity_required SET NOT NULL;
     `);
 
-    console.log("✓ Monthly retainer columns added (content approval, exclusivity, minimum length, posting schedule, tiers).");
+    console.log("\u2713 Monthly retainer columns added (content approval, exclusivity, minimum length, posting schedule, tiers).");
   } catch (error) {
     console.error("✗ Migration failed", error);
     process.exit(1);

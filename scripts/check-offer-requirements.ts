@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 const offerId = process.argv[2];
 
 if (!offerId) {
-  console.error("❌ Please provide an offer ID");
+  console.error("\u274C Please provide an offer ID");
   console.error("Usage: tsx scripts/check-offer-requirements.ts <offer-id>");
   process.exit(1);
 }
@@ -35,12 +35,12 @@ async function checkOfferRequirements() {
       .where(eq(offers.id, offerId));
 
     if (result.length === 0) {
-      console.error(`❌ Offer ${offerId} not found`);
+      console.error(`\u274C Offer ${offerId} not found`);
       process.exit(1);
     }
 
     const offer = result[0];
-    console.log(`✅ Offer found: "${offer.title}"\n`);
+    console.log(`\u2705 Offer found: "${offer.title}"\n`);
     console.log("📋 Creator Requirements Data:");
     console.log("─".repeat(60));
     console.log(`Minimum Followers: ${offer.minimumFollowers || "NULL (not set)"}`);
@@ -60,18 +60,18 @@ async function checkOfferRequirements() {
       offer.brandSafetyRequirements;
 
     if (hasAnyRequirements) {
-      console.log("\n✅ This offer HAS creator requirements set");
+      console.log("\n\u2705 This offer HAS creator requirements set");
       console.log("   They should be visible on the offer detail page");
     } else {
-      console.log("\n⚠️  This offer has NO creator requirements set");
+      console.log("\n\u26A0\uFE0F  This offer has NO creator requirements set");
       console.log("   The page will show 'No specific requirements - All creators welcome'");
-      console.log("\n💡 To add requirements, run:");
+      console.log("\n\u1F4A1 To add requirements, run:");
       console.log(`   npm run update:offer-requirements ${offerId}`);
     }
 
     process.exit(0);
   } catch (error: any) {
-    console.error("❌ Check failed:", error.message);
+    console.error("\u274C Check failed:", error.message);
     process.exit(1);
   }
 }

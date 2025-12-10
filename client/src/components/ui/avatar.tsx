@@ -4,6 +4,7 @@ import * as React from "react"
 import * as AvatarPrimitive from "@radix-ui/react-avatar"
 
 import { cn } from "../../lib/utils"
+import proxiedSrc from "../../lib/image"
 
 const Avatar = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Root>,
@@ -20,28 +21,6 @@ const Avatar = React.forwardRef<
   />
 ))
 Avatar.displayName = AvatarPrimitive.Root.displayName
-
-const isCloudinaryHost = (url?: string) => {
-  if (!url) return false;
-  try {
-    const u = new URL(url);
-    return u.hostname.endsWith("cloudinary.com") || u.hostname.endsWith("res.cloudinary.com");
-  } catch (e) {
-    return false;
-  }
-};
-
-const proxiedSrc = (src?: string) => {
-  if (!src) return src;
-  try {
-    if (isCloudinaryHost(src)) {
-      return `/proxy/image?url=${encodeURIComponent(src)}`;
-    }
-  } catch (e) {
-    // ignore and return original
-  }
-  return src;
-};
 
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,

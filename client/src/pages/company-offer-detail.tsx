@@ -28,7 +28,6 @@ import {
   Users,
   Edit,
   Video,
-  Sparkles,
   Shield,
   Hash,
   Upload,
@@ -38,6 +37,7 @@ import {
   MousePointer,
   Wallet,
   TrendingUp,
+  Info
 } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
 import { apiRequest, queryClient } from "../lib/queryClient";
@@ -45,6 +45,7 @@ import { TopNavBar } from "../components/TopNavBar";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { DetailPageSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { uploadToCloudinary } from "../lib/cloudinary-upload";
 
 // Helper function to format commission display
 const formatCommission = (offer: any) => {
@@ -382,22 +383,21 @@ export default function CompanyOfferDetail() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder, resourceType: "video" }),
+        body: JSON.stringify({
+          folder,
+          resourceType: "video",
+          contentType: file.type,
+          fileName: file.name,
+        }),
       });
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "video/mp4",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (uploadResult.ok) {
-        // Construct the public URL from the upload response
-        const uploadedVideoUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      if (uploadResult?.secure_url) {
+        // Save full Cloudinary URL like creator profile does
+        const uploadedVideoUrl = uploadResult.secure_url;
+        const storedVideoUrl = uploadedVideoUrl;
 
         toast({
           title: "Video Uploaded",
@@ -414,25 +414,24 @@ export default function CompanyOfferDetail() {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ folder: thumbnailFolder, resourceType: "image" }),
+            body: JSON.stringify({
+              folder: thumbnailFolder,
+              resourceType: "image",
+              contentType: 'image/jpeg',
+              fileName: 'thumbnail.jpg',
+            }),
           });
           const thumbUploadData = await thumbUploadResponse.json();
 
-          // Upload thumbnail to Google Cloud Storage using signed URL
-          const thumbnailUploadResult = await fetch(thumbUploadData.uploadUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": thumbUploadData.contentType || "image/jpeg",
-            },
-            body: thumbnailBlob,
-          });
+          const thumbnailUploadResult = await uploadToCloudinary(thumbUploadData, new File([thumbnailBlob], 'thumbnail.jpg'));
 
-          if (thumbnailUploadResult.ok) {
-            // Construct the public URL from the upload response
-            const uploadedThumbnailUrl = `https://storage.googleapis.com/${thumbUploadData.fields.bucket}/${thumbUploadData.fields.key}`;
+          if (thumbnailUploadResult?.secure_url) {
+            // Save full Cloudinary URL like creator profile does
+            const uploadedThumbnailUrl = thumbnailUploadResult.secure_url;
+            const storedThumbnailUrl = uploadedThumbnailUrl;
 
-            setVideoUrl(uploadedVideoUrl);
-            setThumbnailUrl(uploadedThumbnailUrl);
+            setVideoUrl(storedVideoUrl);
+            setThumbnailUrl(storedThumbnailUrl);
             setIsUploading(false);
 
             toast({
@@ -440,7 +439,7 @@ export default function CompanyOfferDetail() {
               description: "Video and thumbnail uploaded successfully. Fill in the details below.",
             });
           } else {
-            setVideoUrl(uploadedVideoUrl);
+            setVideoUrl(storedVideoUrl);
             setIsUploading(false);
             toast({
               title: "Video Uploaded",
@@ -448,7 +447,7 @@ export default function CompanyOfferDetail() {
             });
           }
         } catch (thumbnailError) {
-          setVideoUrl(uploadedVideoUrl);
+          setVideoUrl(storedVideoUrl);
           setIsUploading(false);
           toast({
             title: "Video Uploaded",
@@ -536,7 +535,7 @@ export default function CompanyOfferDetail() {
                 <Video className="h-6 w-6 text-green-600" />
               </div>
               <div className="text-sm font-medium text-green-600">
-                Video Ready ✓
+                Video Ready \u2713
               </div>
             </>
           ) : (
@@ -825,7 +824,7 @@ export default function CompanyOfferDetail() {
           <Card className="rounded-2xl shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl sm:text-2xl lg:text-3xl flex items-center gap-3">
-                <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <Info className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
                 About This Offer
               </CardTitle>
             </CardHeader>
@@ -942,6 +941,7 @@ export default function CompanyOfferDetail() {
                         e.stopPropagation();
                         deleteVideoMutation.mutate(video.id);
                       }}
+                      aria-label="Delete video"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

@@ -14,6 +14,8 @@ import bcrypt from "bcrypt";
 
 import { setupGoogleAuth } from "./googleAuth";
 
+import { setupSocialOAuth } from "./socialOAuth";
+
 import crypto from "crypto";
 
 import { NotificationService } from "./notifications/notificationService";
@@ -230,6 +232,9 @@ export async function setupAuth(app: Express) {
 
   await setupGoogleAuth(app);
 
+  // Setup Social Media OAuth (YouTube, TikTok, Instagram)
+  setupSocialOAuth(app);
+
   // Authentication routes
 
   app.post("/api/auth/register", async (req, res) => {
@@ -302,9 +307,9 @@ export async function setupAuth(app: Express) {
 
         role,
 
-        accountStatus: 'active', // ✅ Required field
+        accountStatus: 'active', // \u2705 Required field
 
-        profileImageUrl: null,   // ✅ Required field
+        profileImageUrl: null,   // \u2705 Required field
 
         emailVerified: false,    // Email not verified yet
 
@@ -2021,7 +2026,7 @@ app.post("/api/user/delete-account", isAuthenticated, async (req, res) => {
             cloudinaryErrors.push(errorMsg);
           }
 
-          // ✅ DELETE CREATOR-SPECIFIC FOLDERS BY ID
+          // \u2705 DELETE CREATOR-SPECIFIC FOLDERS BY ID
 
           // 1. Delete creatorprofile/{creator_id} folder
           await deleteFolderWithTracking(
@@ -2096,7 +2101,7 @@ app.post("/api/user/delete-account", isAuthenticated, async (req, res) => {
       if (user.role === 'company') {
         const companyProfile = await storage.getCompanyProfile(userId);
         if (companyProfile) {
-          // ✅ DELETE COMPANY-SPECIFIC FOLDERS BY ID
+          // \u2705 DELETE COMPANY-SPECIFIC FOLDERS BY ID
 
           // 1. Delete company-logos/{company_id|user_id} folder(s)
           const companyFolderIds = Array.from(new Set([

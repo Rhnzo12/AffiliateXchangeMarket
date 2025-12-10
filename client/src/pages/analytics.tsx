@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
+import { useTutorial } from "../hooks/useTutorial";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
+import { FirstTimeTutorial } from "../components/FirstTimeTutorial";
+import { TUTORIAL_IDS, analyticsTutorialConfig } from "../lib/tutorialConfig";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, analyticsTourSteps as creatorAnalyticsTourSteps } from "../lib/creatorTourConfig";
+import { useCompanyPageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, analyticsTourSteps as companyAnalyticsTourSteps } from "../lib/companyTourConfig";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import {
@@ -22,6 +29,7 @@ import {
   FileText,
   Share2,
   Users,
+  Calendar,
 } from "lucide-react";
 import { exportAnalyticsPDF, downloadCSV, type AnalyticsData } from "../lib/export-utils";
 import {
@@ -41,11 +49,18 @@ import {
   FunnelChart,
   Funnel,
   LabelList,
+  BarChart,
+  Bar,
 } from 'recharts';
-import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton, ChartSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { GeographicHeatmap } from "../components/GeographicHeatmap";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 const DATE_RANGES = [
   { value: "7d", label: "Last 7 Days" },
@@ -83,13 +98,17 @@ type ApplicationTimelinePoint = {
   completed: number;
 };
 
+type MonthlyEarningsPoint = {
+  month: string;
+  earnings: number;
+  affiliate: number;
+  retainer: number;
+};
+
+// Wrapper component that routes to the appropriate analytics view
 export default function Analytics() {
-  const { toast } = useToast();
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [dateRange, setDateRange] = useState("30d");
-  const [, params] = useRoute("/analytics/:id");
-  const applicationId = params?.id;
-  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+  const isCompany = user?.role === 'company';
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -97,7 +116,33 @@ export default function Analytics() {
     }
   }, [isAuthenticated, isLoading]);
 
-  const isCompany = user?.role === 'company';
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-pulse text-lg">Loading...</div>
+    </div>;
+  }
+
+  // Route to appropriate analytics component based on user role
+  if (isCompany) {
+    return <CompanyAnalytics />;
+  }
+
+  return <CreatorAnalytics />;
+}
+
+// Creator Analytics Component (with tour hook)
+function CreatorAnalytics() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [dateRange, setDateRange] = useState("30d");
+  const [, params] = useRoute("/analytics/:id");
+  const applicationId = params?.id;
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+  const { showTutorial, completeTutorial } = useTutorial(TUTORIAL_IDS.ANALYTICS);
+
+  // Quick Guide Tour - for creator users, after initial tutorial is dismissed
+  const isCreator = user?.role === 'creator';
+  useCreatorPageTour(CREATOR_TOUR_IDS.ANALYTICS, creatorAnalyticsTourSteps, isCreator && !showTutorial);
 
   const { data: analytics, isLoading: analyticsLoading } = useQuery<any>({
     queryKey: ["/api/analytics", { range: dateRange, applicationId }],
@@ -115,7 +160,10 @@ export default function Analytics() {
       }
       return res.json();
     },
-    enabled: isAuthenticated,
+    enabled: true,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const chartData: TimelinePoint[] = (analytics?.chartData || []).map((item: any) => ({
@@ -125,6 +173,54 @@ export default function Analytics() {
     conversions: Number(item.conversions || 0),
     earnings: Number(item.earnings || 0),
   }));
+
+  // Generate Monthly Earnings Data from chartData
+  const monthlyEarningsData: MonthlyEarningsPoint[] = useMemo(() => {
+    if (!chartData || chartData.length === 0) return [];
+    
+    // If API provides monthly data, use it
+    if (analytics?.monthlyEarnings && Array.isArray(analytics.monthlyEarnings)) {
+      return analytics.monthlyEarnings.map((item: any) => ({
+        month: item.month,
+        earnings: Number(item.earnings || 0),
+        affiliate: Number(item.affiliate || 0),
+        retainer: Number(item.retainer || 0),
+      }));
+    }
+    
+    // Otherwise, aggregate from chartData by month
+    const monthlyMap = new Map<string, { earnings: number; affiliate: number; retainer: number }>();
+    
+    chartData.forEach((item) => {
+      const dateStr = item.isoDate || item.date;
+      let monthKey: string;
+      
+      try {
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+          monthKey = date.toLocaleDateString('en-US', { month: 'short' });
+        } else {
+          monthKey = 'Unknown';
+        }
+      } catch {
+        monthKey = 'Unknown';
+      }
+      
+      const existing = monthlyMap.get(monthKey) || { earnings: 0, affiliate: 0, retainer: 0 };
+      monthlyMap.set(monthKey, {
+        earnings: existing.earnings + item.earnings,
+        affiliate: existing.affiliate + item.earnings * 0.6, // Estimate split if not provided
+        retainer: existing.retainer + item.earnings * 0.4,
+      });
+    });
+    
+    return Array.from(monthlyMap.entries()).map(([month, data]) => ({
+      month,
+      earnings: data.earnings,
+      affiliate: data.affiliate,
+      retainer: data.retainer,
+    }));
+  }, [chartData, analytics?.monthlyEarnings]);
 
   const applicationsTimeline: ApplicationTimelinePoint[] = (analytics?.applicationsTimeline || []).map((item: any) => ({
     date: item.date,
@@ -137,53 +233,25 @@ export default function Analytics() {
     completed: Number(item.completed || 0),
   }));
 
-  const conversionFunnel = (isCompany ? analytics?.conversionFunnel : undefined) as
-    | { applied: number; approved: number; active: number; paused: number; completed: number; conversions: number }
-    | undefined;
-
-  const funnelChartData: { name: string; value: number }[] = conversionFunnel
-    ? [
-        { name: "Applied", value: conversionFunnel.applied },
-        { name: "Approved", value: conversionFunnel.approved },
-        { name: "Active", value: conversionFunnel.active },
-        { name: "Paused", value: conversionFunnel.paused },
-        { name: "Completed", value: conversionFunnel.completed },
-        { name: "Converted", value: conversionFunnel.conversions },
-      ]
-    : [];
-
-  const acquisitionSources: { source: string; creators: number }[] = isCompany
-    ? (analytics?.acquisitionSources || []).map((item: any) => ({
-        source: item.source || "Direct/Other",
-        creators: Number(item.creators || 0),
-      }))
-    : [];
-
-  const geography: { country: string; count: number }[] = isCompany
-    ? (analytics?.geography || []).map((item: any) => ({
-        country: item.country || "Unknown",
-        count: Number(item.count || 0),
-      }))
-    : [];
+  // Creators don't have these company-specific metrics
+  const conversionFunnel = undefined;
+  const funnelChartData: { name: string; value: number }[] = [];
+  const acquisitionSources: { source: string; creators: number }[] = [];
+  const geography: { country: string; count: number }[] = [];
 
   const conversionRate = Number(analytics?.conversionRate ?? 0);
 
-  const totalSpend = Number(analytics?.totalSpent ?? 0);
   const totalEarnings = Number(analytics?.totalEarnings ?? 0);
-  const primaryTotal = isCompany ? (totalSpend || totalEarnings) : totalEarnings;
+  const primaryTotal = totalEarnings;
 
-  const affiliateBreakdown = isCompany
-    ? Number(analytics?.affiliateSpent || 0)
-    : Number(analytics?.affiliateEarnings || 0);
-  const retainerBreakdown = isCompany
-    ? Number(analytics?.retainerSpent || 0)
-    : Number(analytics?.retainerEarnings || 0);
+  const affiliateBreakdown = Number(analytics?.affiliateEarnings || 0);
+  const retainerBreakdown = Number(analytics?.retainerEarnings || 0);
 
   const totalClicks = Number(analytics?.totalClicks || 0);
   const uniqueClicks = Number(analytics?.uniqueClicks || 0);
   const conversions = Number(analytics?.conversions || 0);
   const activeOffers = Number(analytics?.activeOffers || 0);
-  const activeCreators = isCompany ? Number(analytics?.activeCreators || 0) : undefined;
+  const activeCreators = undefined;
 
   const exportData = () => {
     if (!analytics) {
@@ -242,7 +310,7 @@ export default function Analytics() {
       };
 
       exportAnalyticsPDF(analyticsExport, {
-        isCompany,
+        isCompany: false,
         dateRange,
         applicationId,
         offerTitle: analytics?.offerTitle,
@@ -315,16 +383,9 @@ export default function Analytics() {
     }
   };
 
-  if (isLoading) {
-    return <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-pulse text-lg">Loading...</div>
-    </div>;
-  }
-
   if (analyticsLoading) {
     return (
       <div className="space-y-8">
-        <TopNavBar />
         <div className="flex flex-col sm:flex-row justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
@@ -337,9 +398,41 @@ export default function Analytics() {
     );
   }
 
-  const renderCreatorAnalytics = () => (
+  // Custom tooltip for Monthly Earnings chart
+  const MonthlyEarningsTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-popover border border-border rounded-lg shadow-lg p-3">
+          <p className="font-semibold mb-2">{label}</p>
+          <div className="space-y-1 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">Total:</span>
+              <span className="font-mono font-semibold">${payload[0]?.payload?.earnings?.toFixed(2) || '0.00'}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-primary" />
+                <span className="text-muted-foreground">Affiliate:</span>
+              </div>
+              <span className="font-mono">${payload[0]?.value?.toFixed(2) || '0.00'}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                <span className="text-muted-foreground">Retainer:</span>
+              </div>
+              <span className="font-mono">${payload[1]?.value?.toFixed(2) || '0.00'}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Render creator analytics view
+  return (
     <div className="space-y-8">
-      <TopNavBar />
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
           {applicationId && (
@@ -377,29 +470,41 @@ export default function Analytics() {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            data-testid="button-export"
-            className="gap-2"
-            onClick={exportData}
-            disabled={!analytics || chartData.length === 0}
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={exportPdf}
-            disabled={!analytics}
-          >
-            <FileText className="h-4 w-4" />
-            PDF Report
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                data-testid="button-export"
+                className="gap-2"
+                disabled={!analytics}
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={exportData}
+                disabled={!analytics || chartData.length === 0}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={exportPdf}
+                disabled={!analytics}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                PDF Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid - ALL KPIs consolidated here */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-card-border shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -458,7 +563,156 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Enhanced Performance Graph with Wave-like Lines */}
+      {/* NEW: Monthly Earnings Chart */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="border-card-border shadow-sm">
+          <CardHeader className="border-b bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Monthly Earnings</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your earnings breakdown by month
+                </p>
+              </div>
+              <Calendar className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {monthlyEarningsData.length > 0 ? (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyEarningsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" vertical={false} />
+                    <XAxis 
+                      dataKey="month" 
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `$${value}`}
+                    />
+                    <Tooltip content={<MonthlyEarningsTooltip />} />
+                    <Bar 
+                      dataKey="affiliate" 
+                      stackId="earnings"
+                      fill="hsl(var(--primary))" 
+                      radius={[0, 0, 0, 0]}
+                      name="Affiliate"
+                    />
+                    <Bar 
+                      dataKey="retainer" 
+                      stackId="earnings"
+                      fill="#a855f7" 
+                      radius={[4, 4, 0, 0]}
+                      name="Retainer"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted/50 mb-4">
+                  <Calendar className="h-7 w-7 text-muted-foreground/50" />
+                </div>
+                <p className="text-base font-medium text-muted-foreground">No monthly data yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Earnings will appear once you start generating revenue
+                </p>
+              </div>
+            )}
+            {/* Legend */}
+            {monthlyEarningsData.length > 0 && (
+              <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-primary" />
+                  <span className="text-sm text-muted-foreground">Affiliate</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded bg-purple-500" />
+                  <span className="text-sm text-muted-foreground">Retainer</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Click Timeline Chart */}
+        <Card className="border-card-border shadow-sm">
+          <CardHeader className="border-b bg-muted/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Click Timeline</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Daily click activity over time
+                </p>
+              </div>
+              <MousePointerClick className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="pt-6">
+            {chartData.length > 0 ? (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="clickGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis 
+                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--popover))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                      }}
+                      formatter={(value: any) => [value.toLocaleString(), 'Clicks']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="clicks"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      fill="url(#clickGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-muted/50 mb-4">
+                  <MousePointerClick className="h-7 w-7 text-muted-foreground/50" />
+                </div>
+                <p className="text-base font-medium text-muted-foreground">No click data yet</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Clicks will appear once traffic flows to your links
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Performance Overview - Clicks & Conversions */}
       <Card className="border-card-border shadow-sm">
         <CardHeader className="border-b bg-muted/30">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -489,12 +743,10 @@ export default function Analytics() {
                   margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
                 >
                   <defs>
-                    {/* Gradient for clicks line */}
                     <linearGradient id="colorClicks" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15}/>
                       <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
                     </linearGradient>
-                    {/* Gradient for conversions line */}
                     <linearGradient id="colorConversions" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f97316" stopOpacity={0.15}/>
                       <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
@@ -541,7 +793,6 @@ export default function Analytics() {
                       return [value.toLocaleString(), label];
                     }}
                   />
-                  {/* Average Click Reference Line */}
                   <ReferenceLine 
                     y={chartData.reduce((sum, d) => sum + d.clicks, 0) / chartData.length} 
                     stroke="hsl(var(--primary))" 
@@ -555,7 +806,6 @@ export default function Analytics() {
                       fontWeight: 500
                     }}
                   />
-                  {/* Average Conversion Reference Line */}
                   <ReferenceLine 
                     y={chartData.reduce((sum, d) => sum + d.conversions, 0) / chartData.length} 
                     stroke="#f97316" 
@@ -569,82 +819,52 @@ export default function Analytics() {
                       fontWeight: 500
                     }}
                   />
-                  {/* Wave-like Line for Clicks */}
                   <Line 
-                    type="natural"
+                    type="monotone"
                     dataKey="clicks" 
                     stroke="hsl(var(--primary))" 
                     strokeWidth={3}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     dot={{ 
-                      r: 6,
-                      strokeWidth: 3, 
+                      r: 4,
+                      strokeWidth: 2, 
                       fill: 'hsl(var(--background))',
                       stroke: 'hsl(var(--primary))',
                     }}
                     activeDot={{ 
-                      r: 8,
-                      strokeWidth: 3,
+                      r: 6,
+                      strokeWidth: 2,
                       fill: 'hsl(var(--primary))',
                       stroke: 'hsl(var(--background))',
                     }}
                     name="clicks"
-                    fill="url(#colorClicks)"
                     animationDuration={1000}
                     animationEasing="ease-in-out"
                   />
-                  {/* Wave-like Line for Conversions */}
-                 <Line 
-                    type="monotone" 
-                    dataKey="clicks" 
-                    stroke="hsl(var(--primary))" 
+                  <Line 
+                    type="monotone"  
+                    dataKey="conversions" 
+                    stroke="#f97316" 
                     strokeWidth={3}
                     strokeLinecap="round"  
                     strokeLinejoin="round"  
                     dot={{ 
-                      r: 6,  
-                      strokeWidth: 3, 
+                      r: 4,  
+                      strokeWidth: 2, 
                       fill: 'hsl(var(--background))',
-                      stroke: 'hsl(var(--primary))',
+                      stroke: '#f97316',
                     }}
                     activeDot={{ 
-                      r: 8,  
-                      strokeWidth: 3,
-                      fill: 'hsl(var(--primary))',
+                      r: 6,  
+                      strokeWidth: 2,
+                      fill: '#f97316',
                       stroke: 'hsl(var(--background))',
-                      filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'  
                     }}
-                    name="Clicks"
-                    fill="url(#colorClicks)"
+                    name="conversions"
                     animationDuration={1000}  
                     animationEasing="ease-in-out"
                   />
-                    <Line 
-                      type="natural"  
-                      dataKey="conversions" 
-                      stroke="#f97316" 
-                      strokeWidth={3}
-                      strokeLinecap="round"  
-                      strokeLinejoin="round"  
-                      dot={{ 
-                        r: 6,  
-                        strokeWidth: 3, 
-                        fill: 'hsl(var(--background))',
-                        stroke: '#f97316',
-                      }}
-                      activeDot={{ 
-                        r: 8,  
-                        strokeWidth: 3,
-                        fill: '#f97316',
-                        stroke: 'hsl(var(--background))',
-                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' 
-                      }}
-                      name="Conversions"
-                      fill="url(#colorConversions)"
-                      animationDuration={1000}  
-                      animationEasing="ease-in-out"
-                    />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -662,7 +882,7 @@ export default function Analytics() {
         </CardContent>
       </Card>
 
-      {/* Offer breakdown section */}
+      {/* Offer Performance Table */}
       {!applicationId && (
         <Card className="border-card-border shadow-sm">
           <CardHeader className="border-b bg-muted/30">
@@ -675,8 +895,8 @@ export default function Analytics() {
             {analytics?.offerBreakdown && analytics.offerBreakdown.length > 0 ? (
               <div className="space-y-3">
                 {analytics.offerBreakdown.map((offer: any) => (
-                  <div 
-                    key={offer.offerId} 
+                  <div
+                    key={offer.offerId}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 hover:border-primary/50 transition-all duration-200 cursor-pointer"
                   >
                     <div className="flex-1 min-w-0 pr-4">
@@ -716,18 +936,262 @@ export default function Analytics() {
           </CardContent>
         </Card>
       )}
+
+      <FirstTimeTutorial
+        open={showTutorial}
+        onComplete={completeTutorial}
+        config={analyticsTutorialConfig}
+      />
+
+      <GenericErrorDialog
+        open={!!errorDialog}
+        onOpenChange={(open) => !open && setErrorDialog(null)}
+        title={errorDialog?.title || "Error"}
+        description={errorDialog?.message || "An error occurred"}
+      />
     </div>
   );
+}
 
-  if (!isCompany) {
-    return renderCreatorAnalytics();
+// Company Analytics Component (with tour hook)
+function CompanyAnalytics() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [dateRange, setDateRange] = useState("30d");
+  const [, params] = useRoute("/analytics/:id");
+  const applicationId = params?.id;
+  const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+
+  // Quick Guide Tour - for company users
+  const isCompany = user?.role === 'company';
+  useCompanyPageTour(COMPANY_TOUR_IDS.ANALYTICS, companyAnalyticsTourSteps, isCompany);
+
+  const { data: analytics, isLoading: analyticsLoading } = useQuery<any>({
+    queryKey: ["/api/analytics", { range: dateRange, applicationId }],
+    queryFn: async () => {
+      const url = applicationId
+        ? `/api/analytics?range=${dateRange}&applicationId=${applicationId}`
+        : `/api/analytics?range=${dateRange}`;
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = "/login";
+          throw new Error('Unauthorized');
+        }
+        throw new Error('Failed to fetch analytics');
+      }
+      return res.json();
+    },
+    enabled: true,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
+
+  const chartData: TimelinePoint[] = (analytics?.chartData || []).map((item: any) => ({
+    date: item.date,
+    isoDate: item.isoDate,
+    clicks: Number(item.clicks || 0),
+    conversions: Number(item.conversions || 0),
+    earnings: Number(item.earnings || 0),
+  }));
+
+  const applicationsTimeline: ApplicationTimelinePoint[] = (analytics?.applicationsTimeline || []).map((item: any) => ({
+    date: item.date,
+    isoDate: item.isoDate,
+    total: Number(item.total || 0),
+    pending: Number(item.pending || 0),
+    approved: Number(item.approved || 0),
+    active: Number(item.active || 0),
+    paused: Number(item.paused || 0),
+    completed: Number(item.completed || 0),
+  }));
+
+  const conversionFunnel = analytics?.conversionFunnel as
+    | { applied: number; approved: number; active: number; paused: number; completed: number; conversions: number }
+    | undefined;
+
+  const funnelChartData: { name: string; value: number }[] = conversionFunnel
+    ? [
+        { name: "Applied", value: conversionFunnel.applied },
+        { name: "Approved", value: conversionFunnel.approved },
+        { name: "Active", value: conversionFunnel.active },
+        { name: "Paused", value: conversionFunnel.paused },
+        { name: "Completed", value: conversionFunnel.completed },
+        { name: "Converted", value: conversionFunnel.conversions },
+      ]
+    : [];
+
+  const acquisitionSources: { source: string; creators: number }[] = (analytics?.acquisitionSources || []).map((item: any) => ({
+    source: item.source || "Direct/Other",
+    creators: Number(item.creators || 0),
+  }));
+
+  const geography: { country: string; count: number }[] = (analytics?.geography || []).map((item: any) => ({
+    country: item.country || "Unknown",
+    count: Number(item.count || 0),
+  }));
+
+  const conversionRate = Number(analytics?.conversionRate ?? 0);
+  const totalSpend = Number(analytics?.totalSpent ?? 0);
+  const totalEarnings = Number(analytics?.totalEarnings ?? 0);
+  const primaryTotal = totalSpend || totalEarnings;
+  const affiliateBreakdown = Number(analytics?.affiliateSpent || 0);
+  const retainerBreakdown = Number(analytics?.retainerSpent || 0);
+  const totalClicks = Number(analytics?.totalClicks || 0);
+  const uniqueClicks = Number(analytics?.uniqueClicks || 0);
+  const conversions = Number(analytics?.conversions || 0);
+  const activeOffers = Number(analytics?.activeOffers || 0);
+  const activeCreators = Number(analytics?.activeCreators || 0);
+
+  const exportData = () => {
+    if (!analytics) {
+      setErrorDialog({
+        title: "No data to export",
+        message: "There is no analytics data available",
+      });
+      return;
+    }
+
+    const headers = ['Date', 'Clicks', 'Conversions', 'Earnings'];
+    const data = chartData.map((item: TimelinePoint) => [
+      item.date,
+      item.clicks.toString(),
+      item.conversions.toString(),
+      `$${item.earnings.toFixed(2)}`,
+    ]);
+
+    downloadCSV(data, `analytics-${dateRange}`, headers);
+
+    toast({
+      title: "Data exported",
+      description: "Your analytics data has been downloaded as CSV",
+    });
+  };
+
+  const exportPdf = () => {
+    if (!analytics) {
+      setErrorDialog({
+        title: "No data to export",
+        message: "There is no analytics data available",
+      });
+      return;
+    }
+
+    try {
+      const analyticsExport: AnalyticsData = {
+        totalEarnings: Number(analytics.totalEarnings || 0),
+        totalSpent: Number(analytics.totalSpent || 0),
+        affiliateEarnings: Number(analytics.affiliateEarnings || 0),
+        affiliateSpent: Number(analytics.affiliateSpent || 0),
+        retainerEarnings: Number(analytics.retainerEarnings || 0),
+        retainerSpent: Number(analytics.retainerSpent || 0),
+        totalClicks,
+        uniqueClicks,
+        conversions,
+        conversionRate,
+        activeOffers,
+        activeCreators,
+        chartData,
+        offerBreakdown: analytics.offerBreakdown,
+        conversionFunnel,
+        acquisitionSources,
+        geography,
+        applicationsTimeline,
+      };
+
+      exportAnalyticsPDF(analyticsExport, {
+        isCompany: true,
+        dateRange,
+        applicationId,
+        offerTitle: analytics?.offerTitle,
+      });
+
+      toast({
+        title: "PDF exported",
+        description: "Your analytics report has been downloaded.",
+      });
+    } catch (error) {
+      setErrorDialog({
+        title: "Export failed",
+        message: "Unable to generate PDF report. Please try again.",
+      });
+    }
+  };
+
+  const sendToZapier = async () => {
+    if (!analytics) {
+      setErrorDialog({
+        title: "No data to export",
+        message: "There is no analytics data available",
+      });
+      return;
+    }
+
+    const webhookUrl = window.prompt("Enter the Zapier webhook URL");
+    if (!webhookUrl) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/analytics/export/zapier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          webhookUrl,
+          payload: {
+            range: dateRange,
+            totals: {
+              totalSpent: Number(analytics.totalSpent || 0),
+              totalClicks: Number(analytics.totalClicks || 0),
+              conversions: Number(analytics.conversions || 0),
+              conversionRate,
+            },
+            timeline: chartData,
+            applicationsTimeline,
+            funnel: conversionFunnel,
+            acquisition: acquisitionSources,
+            geography,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const message = await res.text();
+        throw new Error(message || "Failed to send webhook");
+      }
+
+      toast({
+        title: "Zapier webhook sent",
+        description: "Analytics data delivered to the configured URL.",
+      });
+    } catch (err: any) {
+      setErrorDialog({
+        title: "Zapier export failed",
+        message: err.message || "Unable to send data to Zapier.",
+      });
+    }
+  };
+
+  if (analyticsLoading) {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
+            <p className="text-muted-foreground mt-1">Track your performance across all offers</p>
+          </div>
+        </div>
+        <StatsGridSkeleton count={4} />
+        <ChartSkeleton />
+      </div>
+    );
   }
 
+  // Render company analytics view
   return (
     <div className="space-y-8">
-      <TopNavBar />
-      
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
           {applicationId && (
@@ -765,25 +1229,37 @@ export default function Analytics() {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            data-testid="button-export"
-            className="gap-2"
-            onClick={exportData}
-            disabled={!analytics || chartData.length === 0}
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={exportPdf}
-            disabled={!analytics}
-          >
-            <FileText className="h-4 w-4" />
-            PDF Report
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                data-testid="button-export"
+                className="gap-2"
+                disabled={!analytics}
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={exportData}
+                disabled={!analytics || chartData.length === 0}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={exportPdf}
+                disabled={!analytics}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                PDF Report
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {!applicationId && (
             <Button
               variant="outline"
@@ -798,7 +1274,6 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-card-border">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -857,7 +1332,6 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Trend Charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="border-card-border">
           <CardHeader>
@@ -938,7 +1412,6 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Conversion & Acquisition */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card className="border-card-border">
           <CardHeader>
@@ -1005,7 +1478,6 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Geography & Offer Breakdown */}
       <div className={`grid gap-6 ${!applicationId ? "lg:grid-cols-2" : ""}`}>
         <Card className="border-card-border">
           <CardHeader>

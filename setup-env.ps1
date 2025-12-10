@@ -8,7 +8,7 @@ Write-Host ""
 
 # Check if .env already exists
 if (Test-Path ".env") {
-    Write-Host "⚠️  .env file already exists!" -ForegroundColor Yellow
+    Write-Host "\u26A0\uFE0F  .env file already exists!" -ForegroundColor Yellow
     $overwrite = Read-Host "Do you want to overwrite it? (y/n)"
     if ($overwrite -ne "y") {
         Write-Host "Setup cancelled." -ForegroundColor Red
@@ -100,7 +100,7 @@ NODE_ENV=development
 $envContent | Out-File -FilePath ".env" -Encoding UTF8
 
 Write-Host ""
-Write-Host "✅ .env file created successfully!" -ForegroundColor Green
+Write-Host "\u2705 .env file created successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "1. Push database schema:    npm run db:push" -ForegroundColor Yellow

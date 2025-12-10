@@ -11,7 +11,7 @@ async function applyMigration() {
   console.log('🔄 Applying migration 007_add_payment_processing.sql...');
 
   if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL is not set. Please ensure the database is provisioned.');
+    console.error('\u274C DATABASE_URL is not set. Please ensure the database is provisioned.');
     process.exit(1);
   }
 
@@ -56,7 +56,7 @@ async function applyMigration() {
 
     const result = await response.json();
 
-    console.log('✅ Migration 007 applied successfully!');
+    console.log('\u2705 Migration 007 applied successfully!');
     console.log('');
     console.log('Created:');
     console.log('  - platform_funding_accounts table');
@@ -70,7 +70,7 @@ async function applyMigration() {
     console.log('  - Indexes for performance');
 
   } catch (error: any) {
-    console.error('❌ Migration failed:', error.message);
+    console.error('\u274C Migration failed:', error.message);
     console.error(error);
     process.exit(1);
   }

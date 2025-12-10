@@ -7,6 +7,7 @@ import { queryClient, apiRequest } from "../lib/queryClient";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { uploadToCloudinary } from "../lib/cloudinary-upload";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Badge } from "../components/ui/badge";
@@ -46,13 +47,13 @@ import {
   ZoomOut,
   MoreVertical,
   Trash2,
-  Shield
+  Shield,
+  FileText
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
-import { TopNavBar } from "../components/TopNavBar";
 import { MessageTemplates } from "../components/MessageTemplates";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
-import { proxiedSrc } from "../lib/image";
+import { isImageUrl, isVideoUrl, proxiedSrc } from "../lib/image";
 import { MessageItemSkeleton } from "../components/skeletons";
 
 type MessageStatus = "sending" | "sent" | "failed";
@@ -72,7 +73,7 @@ interface EnhancedMessage {
 export default function Messages() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   
   const urlParams = new URLSearchParams(location.split('?')[1] || '');
   const conversationFromUrl = urlParams.get('conversation');
@@ -131,6 +132,23 @@ export default function Messages() {
     setCurrentImages([]);
     setCurrentImageIndex(0);
     setImageZoom(1);
+  };
+
+  const getAttachmentType = (url: string) => {
+    if (isVideoUrl(url)) return 'video' as const;
+    if (isImageUrl(url)) return 'image' as const;
+    return 'file' as const;
+  };
+
+  const getAttachmentName = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      const pathname = parsed.pathname;
+      const lastSegment = pathname.split('/').filter(Boolean).pop();
+      return decodeURIComponent(lastSegment || 'Attachment');
+    } catch (error) {
+      return url.split('/').filter(Boolean).pop() || 'Attachment';
+    }
   };
 
   const nextImage = () => {
@@ -648,13 +666,21 @@ export default function Messages() {
     const folderPath = `creatorlink/attachments/${selectedConversation}/${userType}`;
 
     for (const file of files) {
+      const resourceType = file.type.startsWith('video')
+        ? 'video'
+        : file.type.startsWith('image')
+        ? 'image'
+        : 'raw';
+
       const uploadResponse = await fetch("/api/objects/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           folder: folderPath,
-          resourceType: "image"
+          resourceType,
+          contentType: file.type,
+          fileName: file.name,
         }),
       });
 
@@ -664,24 +690,16 @@ export default function Messages() {
 
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "application/octet-stream",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (!uploadResult.ok) {
-        const errorText = await uploadResult.text();
-        console.error("GCS upload error:", errorText);
+      if (!uploadResult?.secure_url) {
         throw new Error("Failed to upload file to storage");
       }
 
-      // Construct the public URL from the upload response
-      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
-      uploadedUrls.push(uploadedUrl);
+      // Prefer storing the internal object path in the database so fetches work even if the
+      // full Cloudinary URL changes. Fall back to the secure URL if we can't build a path.
+      const objectPath = uploadData.publicId ? `/objects/${uploadData.publicId}` : undefined;
+      uploadedUrls.push(objectPath || uploadResult.secure_url);
     }
 
     return uploadedUrls;
@@ -802,6 +820,19 @@ export default function Messages() {
   const trackingLink = currentConversation?.application?.trackingLink;
   const creatorName = otherUser?.firstName || otherUser?.name || otherUser?.username || 'there';
 
+  const handleBackNavigation = useCallback(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    if (user?.role === 'company') {
+      navigate('/company/dashboard');
+    } else {
+      navigate('/creator/dashboard');
+    }
+  }, [navigate, user?.role]);
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">
       <div className="animate-pulse text-lg">Loading...</div>
@@ -810,8 +841,6 @@ export default function Messages() {
 
   return (
     <div className="space-y-6">
-      <TopNavBar />
-      
       {/* Image Viewer Modal */}
       {viewerOpen && (
         <div 
@@ -919,8 +948,19 @@ export default function Messages() {
         <div className="grid md:grid-cols-[320px_1fr] gap-4 h-full">
           <Card className={`border-card-border flex flex-col overflow-hidden ${selectedConversation ? 'hidden md:flex' : 'flex'}`}>
           <CardContent className="p-0 flex flex-col h-full">
-            <div className="p-4 border-b flex items-center justify-between shrink-0">
-              <h2 className="font-semibold text-lg">Messages</h2>
+            <div className="p-4 border-b flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleBackNavigation}
+                  className="h-10 w-10"
+                  title="Go back"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h2 className="font-semibold text-lg">Messages</h2>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1181,21 +1221,57 @@ export default function Messages() {
                               }`}
                             >
                             {message.attachments && message.attachments.length > 0 && (
-                              <div className="mb-2 space-y-2">
-                                {message.attachments.map((url, idx) => (
-                                  <button
-                                    key={idx}
-                                    onClick={() => openImageViewer(message.attachments || [], idx)}
-                                    className="block w-full text-left"
-                                  >
-                                    <img
-                                      src={proxiedSrc(url)}
-                                      alt={`Attachment ${idx + 1}`}
-                                      className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                                      style={{ maxHeight: '300px' }}
-                                    />
-                                  </button>
-                                ))}
+                              <div className="mb-2 space-y-3">
+                                {(() => {
+                                  const imageAttachments = (message.attachments || []).filter(isImageUrl);
+                                  return message.attachments.map((url, idx) => {
+                                    const type = getAttachmentType(url);
+                                    const imageIndex = imageAttachments.indexOf(url);
+
+                                  if (type === 'image') {
+                                    return (
+                                      <button
+                                        key={idx}
+                                        onClick={() => openImageViewer(imageAttachments, Math.max(0, imageIndex))}
+                                        className="block w-full text-left"
+                                      >
+                                        <img
+                                          src={proxiedSrc(url)}
+                                          alt={`Attachment ${idx + 1}`}
+                                          className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                          style={{ maxHeight: '300px' }}
+                                        />
+                                      </button>
+                                    );
+                                  }
+
+                                  if (type === 'video') {
+                                    return (
+                                      <div key={idx} className="rounded-lg overflow-hidden bg-black/60">
+                                        <video
+                                          src={proxiedSrc(url)}
+                                          controls
+                                          className="w-full max-h-[320px]"
+                                        />
+                                      </div>
+                                    );
+                                  }
+
+                                    return (
+                                      <a
+                                        key={idx}
+                                        href={proxiedSrc(url) || url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 p-3 rounded-lg border bg-background/80 hover:bg-muted transition"
+                                      >
+                                        <FileText className="h-4 w-4" />
+                                        <span className="text-sm truncate flex-1">{getAttachmentName(url)}</span>
+                                        <Download className="h-4 w-4" />
+                                      </a>
+                                    );
+                                  });
+                                })()}
                               </div>
                             )}
 
@@ -1286,6 +1362,7 @@ export default function Messages() {
                           onClick={() => removeFile(idx)}
                           className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                           disabled={uploadingFiles}
+                          aria-label={`Remove preview ${idx + 1}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -1297,11 +1374,13 @@ export default function Messages() {
                 <div className="flex gap-2">
                   <input
                     ref={fileInputRef}
+                    id="message-file-upload"
                     type="file"
                     accept="image/*"
                     multiple
                     onChange={handleFileSelect}
                     className="hidden"
+                    aria-label="Upload image attachments"
                   />
 
                   {/* Image attach button - available for both creators and companies */}

@@ -2,7 +2,7 @@ import { neon } from '@neondatabase/serverless';
 
 async function verifyColumns() {
   if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL environment variable is not set');
+    console.error('\u274C DATABASE_URL environment variable is not set');
     process.exit(1);
   }
 
@@ -21,19 +21,19 @@ async function verifyColumns() {
     `;
 
     if (result.length === 2) {
-      console.log('✅ Both OTP columns exist:');
+      console.log('\u2705 Both OTP columns exist:');
       result.forEach((col: any) => {
         console.log(`   • ${col.column_name} (${col.data_type})`);
       });
-      console.log('\n✨ Database is properly configured!');
+      console.log('\n\u2728 Database is properly configured!');
     } else if (result.length === 1) {
-      console.log('⚠️  Only one column exists:');
+      console.log('\u26A0\uFE0F  Only one column exists:');
       result.forEach((col: any) => {
         console.log(`   • ${col.column_name} (${col.data_type})`);
       });
-      console.log('\n❌ Missing column - run: npm run migrate:otp');
+      console.log('\n\u274C Missing column - run: npm run migrate:otp');
     } else {
-      console.log('❌ OTP columns are missing!');
+      console.log('\u274C OTP columns are missing!');
       console.log('\n📝 Please run: npm run migrate:otp');
     }
 
@@ -46,13 +46,13 @@ async function verifyColumns() {
     `;
 
     if (indexResult.length > 0) {
-      console.log('✅ OTP index exists');
+      console.log('\u2705 OTP index exists');
     } else {
-      console.log('⚠️  OTP index is missing');
+      console.log('\u26A0\uFE0F  OTP index is missing');
     }
 
   } catch (error: any) {
-    console.error('❌ Error checking columns:', error.message);
+    console.error('\u274C Error checking columns:', error.message);
     process.exit(1);
   }
 }

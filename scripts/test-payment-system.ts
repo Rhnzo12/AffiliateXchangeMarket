@@ -38,9 +38,9 @@ async function testPaymentCalculations() {
       Math.abs(netAmount - testCase.expected.net) < 0.01;
 
     console.log(`Test: Gross $${testCase.gross}`);
-    console.log(`  Platform Fee (4%): $${platformFee.toFixed(2)} ${passed ? '✓' : '✗'}`);
-    console.log(`  Stripe Fee (3%): $${stripeFee.toFixed(2)} ${passed ? '✓' : '✗'}`);
-    console.log(`  Net Amount (93%): $${netAmount.toFixed(2)} ${passed ? '✓' : '✗'}`);
+    console.log(`  Platform Fee (4%): $${platformFee.toFixed(2)} ${passed ? '\u2713' : '✗'}`);
+    console.log(`  Stripe Fee (3%): $${stripeFee.toFixed(2)} ${passed ? '\u2713' : '✗'}`);
+    console.log(`  Net Amount (93%): $${netAmount.toFixed(2)} ${passed ? '\u2713' : '✗'}`);
     console.log(`  Total Fees (7%): $${(platformFee + stripeFee).toFixed(2)}`);
     console.log();
   }
@@ -60,7 +60,7 @@ async function checkDatabasePayments() {
     console.log(`Total payments found: ${allPayments.length}\n`);
 
     if (allPayments.length === 0) {
-      console.log("⚠️  No payments found in database. This could mean:");
+      console.log("\u26A0\uFE0F  No payments found in database. This could mean:");
       console.log("   1. No conversions have been recorded yet");
       console.log("   2. No test data has been seeded");
       console.log("   3. Database needs to be initialized\n");
@@ -92,13 +92,13 @@ async function checkDatabasePayments() {
         Math.abs(actualStripe - expectedStripe) < 0.01 &&
         Math.abs(actualNet - expectedNet) < 0.01;
 
-      console.log(`  Calculation: ${calculationCorrect ? '✓ Correct' : '✗ INCORRECT'}`);
+      console.log(`  Calculation: ${calculationCorrect ? '\u2713 Correct' : '✗ INCORRECT'}`);
       console.log();
     }
 
     return allPayments;
   } catch (error: any) {
-    console.error("❌ Error checking payments:", error.message);
+    console.error("\u274C Error checking payments:", error.message);
     return [];
   }
 }
@@ -111,7 +111,7 @@ async function verifyPaymentByRole() {
     const allUsers = await db.select().from(users).limit(5);
 
     if (allUsers.length === 0) {
-      console.log("⚠️  No users found in database");
+      console.log("\u26A0\uFE0F  No users found in database");
       return;
     }
 
@@ -146,7 +146,7 @@ async function verifyPaymentByRole() {
       console.log();
     }
   } catch (error: any) {
-    console.error("❌ Error verifying role access:", error.message);
+    console.error("\u274C Error verifying role access:", error.message);
   }
 }
 
@@ -157,7 +157,7 @@ async function displaySystemStats() {
     const allPayments = await db.select().from(payments);
 
     if (allPayments.length === 0) {
-      console.log("⚠️  No payment data available for statistics\n");
+      console.log("\u26A0\uFE0F  No payment data available for statistics\n");
       return;
     }
 
@@ -207,10 +207,10 @@ async function displaySystemStats() {
                         Math.abs(totalStripeFees - expectedStripeFees) < 0.5 &&
                         Math.abs(totalNet - expectedNet) < 0.5;
 
-    console.log(`\nCalculation Accuracy: ${feeAccurate ? '✓ All fees calculated correctly' : '✗ Fee discrepancies detected'}`);
+    console.log(`\nCalculation Accuracy: ${feeAccurate ? '\u2713 All fees calculated correctly' : '✗ Fee discrepancies detected'}`);
     console.log();
   } catch (error: any) {
-    console.error("❌ Error displaying statistics:", error.message);
+    console.error("\u274C Error displaying statistics:", error.message);
   }
 }
 
@@ -225,11 +225,11 @@ async function checkOfferAndApplicationData() {
     console.log(`Total Applications: ${allApplications.length}\n`);
 
     if (allOffers.length === 0) {
-      console.log("⚠️  No offers found. Offers are required to create payments.");
+      console.log("\u26A0\uFE0F  No offers found. Offers are required to create payments.");
     }
 
     if (allApplications.length === 0) {
-      console.log("⚠️  No applications found. Applications link creators to offers.");
+      console.log("\u26A0\uFE0F  No applications found. Applications link creators to offers.");
     }
 
     if (allOffers.length > 0) {
@@ -245,7 +245,7 @@ async function checkOfferAndApplicationData() {
     }
     console.log();
   } catch (error: any) {
-    console.error("❌ Error checking offers/applications:", error.message);
+    console.error("\u274C Error checking offers/applications:", error.message);
   }
 }
 
@@ -271,9 +271,9 @@ async function main() {
     await displaySystemStats();
 
     console.log("\n=== Test Summary ===\n");
-    console.log("✓ Payment calculation logic verified (4% platform + 3% Stripe = 7% total)");
-    console.log("✓ Database schema is correct");
-    console.log("✓ Payment retrieval functions are working");
+    console.log("\u2713 Payment calculation logic verified (4% platform + 3% Stripe = 7% total)");
+    console.log("\u2713 Database schema is correct");
+    console.log("\u2713 Payment retrieval functions are working");
     console.log("\nNext Steps:");
     console.log("1. Ensure there are active offers in the system");
     console.log("2. Ensure creators have approved applications");
@@ -281,7 +281,7 @@ async function main() {
     console.log("4. Payment data will automatically display in the UI\n");
 
   } catch (error: any) {
-    console.error("\n❌ Fatal error:", error.message);
+    console.error("\n\u274C Fatal error:", error.message);
     console.error(error.stack);
     process.exit(1);
   } finally {

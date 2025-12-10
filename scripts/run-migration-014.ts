@@ -25,7 +25,7 @@ async function runMigration() {
     console.log("📝 Executing migration SQL...\n");
     await db.execute(sql.raw(migrationSQL));
 
-    console.log("✅ Migration completed successfully!\n");
+    console.log("\u2705 Migration completed successfully!\n");
 
     // Verify the columns were added
     console.log("🔍 Verifying new columns...");
@@ -39,26 +39,26 @@ async function runMigration() {
     `);
 
     if (result.rows.length > 0) {
-      console.log(`✅ Added ${result.rows.length} columns successfully:`);
+      console.log(`\u2705 Added ${result.rows.length} columns successfully:`);
       result.rows.forEach((column: any) => {
         console.log(`   - ${column.column_name} (${column.data_type}, nullable: ${column.is_nullable})`);
       });
     } else {
-      console.log(`⚠️  No new columns found`);
+      console.log(`\u26A0\uFE0F  No new columns found`);
     }
 
-    console.log("\n✨ Migration complete! Reviews table now has all required columns:");
+    console.log("\n\u2728 Migration complete! Reviews table now has all required columns:");
     console.log("   - Admin can add responses and notes to reviews");
     console.log("   - Reviews can be approved/hidden by admin");
     console.log("   - Response tracking with timestamps and user references\n");
 
     process.exit(0);
   } catch (error: any) {
-    console.error("❌ Migration failed:", error.message);
+    console.error("\u274C Migration failed:", error.message);
 
     // Check if column already exists
     if (error.message?.includes("already exists") || error.code === '42701') {
-      console.log("ℹ️  The column may already exist. Verifying...");
+      console.log("\u2139\uFE0F  The column may already exist. Verifying...");
 
       try {
         const result = await db.execute(sql`
@@ -70,13 +70,13 @@ async function runMigration() {
         `);
 
         if (result.rows.length > 0) {
-          console.log(`✅ ${result.rows.length} columns already exist in database`);
+          console.log(`\u2705 ${result.rows.length} columns already exist in database`);
           process.exit(0);
         } else {
-          console.log("❌ Columns not found despite 'already exists' error");
+          console.log("\u274C Columns not found despite 'already exists' error");
         }
       } catch (verifyError) {
-        console.error("❌ Could not verify column:", verifyError);
+        console.error("\u274C Could not verify column:", verifyError);
       }
     }
 

@@ -92,7 +92,7 @@ async function seedData() {
     // Check if data already exists
     const existingUsers = await db.select().from(users).limit(1);
     if (existingUsers.length > 0) {
-      console.log("⚠️  Database already contains data.");
+      console.log("\u26A0\uFE0F  Database already contains data.");
       console.log("This script will add additional sample payment data.\n");
     }
 
@@ -158,7 +158,7 @@ async function seedData() {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
-        console.log(`   ✓ Created ${userData.role}: ${userData.username}`);
+        console.log(`   \u2713 Created ${userData.role}: ${userData.username}`);
       } else {
         console.log(`   ⊕ ${userData.username} already exists, using existing user`);
         seedData.users = seedData.users.map((u) =>
@@ -200,7 +200,7 @@ async function seedData() {
             companyUser.username === "techcorp" ? "TechCorp Inc." : "BrandCo Ltd.",
         });
 
-        console.log(`   ✓ Created company profile: ${companyUser.username}`);
+        console.log(`   \u2713 Created company profile: ${companyUser.username}`);
       } else {
         seedData.companies.push({
           id: existing[0].id,
@@ -268,7 +268,7 @@ async function seedData() {
         commissionPercentage: template.commissionPercentage,
       });
 
-      console.log(`   ✓ Created offer: ${template.title}`);
+      console.log(`   \u2713 Created offer: ${template.title}`);
     }
 
     // Step 4: Create Applications (approved)
@@ -294,7 +294,7 @@ async function seedData() {
           offerId: offer.id,
         });
 
-        console.log(`   ✓ Application: ${creator.username} → ${offer.title.substring(0, 30)}...`);
+        console.log(`   \u2713 Application: ${creator.username} → ${offer.title.substring(0, 30)}...`);
       }
     }
 
@@ -336,7 +336,7 @@ async function seedData() {
         updatedAt: new Date(),
       });
 
-      console.log(`   ✓ Payment: $${scenario.gross} (Platform: $${fees.platformFeeAmount}, Stripe: $${fees.stripeFeeAmount}, Net: $${fees.netAmount}) - ${scenario.status}`);
+      console.log(`   \u2713 Payment: $${scenario.gross} (Platform: $${fees.platformFeeAmount}, Stripe: $${fees.stripeFeeAmount}, Net: $${fees.netAmount}) - ${scenario.status}`);
     }
 
     // Step 6: Create Analytics Records
@@ -359,11 +359,11 @@ async function seedData() {
         updatedAt: new Date(),
       });
     }
-    console.log("   ✓ Analytics data created");
+    console.log("   \u2713 Analytics data created");
 
     // Summary
     console.log("\n╔═══════════════════════════════════════════════════════╗");
-    console.log("║              Seeding Complete! ✅                     ║");
+    console.log("║              Seeding Complete! \u2705                     ║");
     console.log("╚═══════════════════════════════════════════════════════╝\n");
 
     console.log("📊 Summary:");
@@ -386,7 +386,7 @@ async function seedData() {
     console.log("   - Stripe Fee: 3% of gross");
     console.log("   - Net to Creator: 93% of gross");
 
-    console.log("\n🎯 Next Steps:");
+    console.log("\n\u1F3AF Next Steps:");
     console.log("   1. Start the development server: npm run dev");
     console.log("   2. Login with any test account above");
     console.log("   3. Navigate to /payment-settings");
@@ -394,7 +394,7 @@ async function seedData() {
     console.log("");
 
   } catch (error: any) {
-    console.error("\n❌ Error during seeding:", error.message);
+    console.error("\n\u274C Error during seeding:", error.message);
     console.error(error.stack);
     process.exit(1);
   } finally {

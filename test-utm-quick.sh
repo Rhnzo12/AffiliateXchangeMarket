@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Check if server is running
 echo "1️⃣  Checking if server is running..."
 if curl -s http://localhost:5000/api/health > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Server is running${NC}"
+    echo -e "${GREEN}\u2713 Server is running${NC}"
 else
     echo -e "${RED}✗ Server is not running${NC}"
     echo "   Please start the server with: npm run dev"
@@ -50,7 +50,7 @@ else
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/go/${TRACKING_CODE}?utm_source=facebook&utm_medium=cpc&utm_campaign=summer_sale&utm_term=deals&utm_content=video")
 
     if [ "$RESPONSE" -eq 302 ] || [ "$RESPONSE" -eq 200 ]; then
-        echo -e "${GREEN}✓ Redirect successful (HTTP $RESPONSE)${NC}"
+        echo -e "${GREEN}\u2713 Redirect successful (HTTP $RESPONSE)${NC}"
     else
         echo -e "${RED}✗ Failed (HTTP $RESPONSE)${NC}"
     fi
@@ -64,7 +64,7 @@ else
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/go/${TRACKING_CODE}?utm_source=google&utm_medium=email")
 
     if [ "$RESPONSE" -eq 302 ] || [ "$RESPONSE" -eq 200 ]; then
-        echo -e "${GREEN}✓ Redirect successful (HTTP $RESPONSE)${NC}"
+        echo -e "${GREEN}\u2713 Redirect successful (HTTP $RESPONSE)${NC}"
     else
         echo -e "${RED}✗ Failed (HTTP $RESPONSE)${NC}"
     fi
@@ -78,7 +78,7 @@ else
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/go/${TRACKING_CODE}")
 
     if [ "$RESPONSE" -eq 302 ] || [ "$RESPONSE" -eq 200 ]; then
-        echo -e "${GREEN}✓ Redirect successful (HTTP $RESPONSE)${NC}"
+        echo -e "${GREEN}\u2713 Redirect successful (HTTP $RESPONSE)${NC}"
     else
         echo -e "${RED}✗ Failed (HTTP $RESPONSE)${NC}"
     fi
@@ -92,7 +92,7 @@ else
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/go/${TRACKING_CODE}?utm_campaign=2024%20Summer%20Sale&utm_content=50%25%20OFF")
 
     if [ "$RESPONSE" -eq 302 ] || [ "$RESPONSE" -eq 200 ]; then
-        echo -e "${GREEN}✓ Redirect successful (HTTP $RESPONSE)${NC}"
+        echo -e "${GREEN}\u2713 Redirect successful (HTTP $RESPONSE)${NC}"
     else
         echo -e "${RED}✗ Failed (HTTP $RESPONSE)${NC}"
     fi

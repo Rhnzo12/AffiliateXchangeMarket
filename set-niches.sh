@@ -38,12 +38,12 @@ LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/auth/login" \
 HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -n1)
 
 if [ "$HTTP_CODE" != "200" ]; then
-  echo "❌ Login failed (HTTP $HTTP_CODE)"
+  echo "\u274C Login failed (HTTP $HTTP_CODE)"
   rm -f temp_cookies.txt
   exit 1
 fi
 
-echo "✅ Login successful"
+echo "\u2705 Login successful"
 echo ""
 
 # Update profile with niches
@@ -57,12 +57,12 @@ RESPONSE=$(curl -s -X PUT "$BASE_URL/api/profile" \
 UPDATED_NICHES=$(echo "$RESPONSE" | jq -r '.creatorProfile.niches // .niches // empty' 2>/dev/null)
 
 if [ -n "$UPDATED_NICHES" ]; then
-  echo "✅ Niches updated successfully!"
+  echo "\u2705 Niches updated successfully!"
   echo ""
   echo "Current niches:"
   echo "$UPDATED_NICHES"
 else
-  echo "❌ Failed to update niches"
+  echo "\u274C Failed to update niches"
   echo "$RESPONSE" | jq '.' 2>/dev/null || echo "$RESPONSE"
 fi
 

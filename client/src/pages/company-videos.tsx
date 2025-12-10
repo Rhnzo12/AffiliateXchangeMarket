@@ -7,12 +7,15 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,18 +37,25 @@ import {
 } from "../components/ui/dialog";
 import { Play, Trash2, ExternalLink, Video, Filter, X } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { VideoPlayer } from "../components/VideoPlayer";
 
-export default function CompanyVideos() {
+type CompanyVideosProps = {
+  hideTopNav?: boolean;
+};
+
+export default function CompanyVideos({ hideTopNav = false }: CompanyVideosProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [selectedVideo, setSelectedVideo] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [offerFilter, setOfferFilter] = useState("all");
   const [creditFilter, setCreditFilter] = useState("all");
+  const [pendingOfferFilter, setPendingOfferFilter] = useState("all");
+  const [pendingCreditFilter, setPendingCreditFilter] = useState("all");
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   // Fetch all offers for the company
@@ -118,7 +128,22 @@ export default function CompanyVideos() {
     setSearchTerm("");
     setOfferFilter("all");
     setCreditFilter("all");
+    setPendingOfferFilter("all");
+    setPendingCreditFilter("all");
   };
+
+  const applyFilters = () => {
+    setOfferFilter(pendingOfferFilter);
+    setCreditFilter(pendingCreditFilter);
+    setFilterMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (filterMenuOpen) {
+      setPendingOfferFilter(offerFilter);
+      setPendingCreditFilter(creditFilter);
+    }
+  }, [creditFilter, filterMenuOpen, offerFilter]);
 
   if (isLoading) {
     return (
@@ -133,7 +158,7 @@ export default function CompanyVideos() {
 
   return (
     <div className="space-y-6">
-      <TopNavBar />
+      {!hideTopNav && <TopNavBar />}
       <div>
         <h1 className="text-3xl font-bold" data-testid="heading-company-videos">Promotional Videos</h1>
         <p className="text-muted-foreground">
@@ -143,55 +168,92 @@ export default function CompanyVideos() {
 
       <Card className="border-card-border">
         <CardContent className="pt-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-              Search & Filter
-            </h3>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={clearFilters}>
-                <X className="h-3 w-3 mr-1" />
-                Clear
-              </Button>
-            )}
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
+            <div className="flex w-full items-center gap-2 xl:max-w-md">
               <Input
                 placeholder="Search by title, offer, or creator credit"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full"
               />
+              <DropdownMenu open={filterMenuOpen} onOpenChange={setFilterMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Filter" className="shrink-0">
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="filter-menu-scroll w-72 space-y-2">
+                  <DropdownMenuLabel>Filter videos</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Accordion type="multiple" className="space-y-1">
+                    <AccordionItem value="offer" className="border-none">
+                      <AccordionTrigger className="px-2 py-1 text-sm font-medium hover:no-underline">
+                        Offer
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        <DropdownMenuRadioGroup
+                          value={pendingOfferFilter}
+                          onValueChange={setPendingOfferFilter}
+                        >
+                          <DropdownMenuRadioItem value="all">All Offers</DropdownMenuRadioItem>
+                          {uniqueOffers.map(([id, title]) => (
+                            <DropdownMenuRadioItem key={id} value={id}>
+                              {title}
+                            </DropdownMenuRadioItem>
+                          ))}
+                        </DropdownMenuRadioGroup>
+                      </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="credit" className="border-none">
+                      <AccordionTrigger className="px-2 py-1 text-sm font-medium hover:no-underline">
+                        Creator Credit
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        <DropdownMenuRadioGroup
+                          value={pendingCreditFilter}
+                          onValueChange={setPendingCreditFilter}
+                        >
+                          <DropdownMenuRadioItem value="all">All Videos</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="with">With Creator Credit</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="without">Without Creator Credit</DropdownMenuRadioItem>
+                        </DropdownMenuRadioGroup>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-muted-foreground"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        clearFilters();
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                      Clear filters
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gap-2 border-0 bg-gray-200 text-black shadow-none hover:bg-gray-300"
+                      onClick={applyFilters}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Offer</label>
-              <Select value={offerFilter} onValueChange={setOfferFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All offers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Offers</SelectItem>
-                  {uniqueOffers.map(([id, title]) => (
-                    <SelectItem key={id} value={id}>
-                      {title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Creator Credit</label>
-              <Select value={creditFilter} onValueChange={setCreditFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All videos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Videos</SelectItem>
-                  <SelectItem value="with">With Creator Credit</SelectItem>
-                  <SelectItem value="without">Without Creator Credit</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground xl:ml-auto">
+              Showing <span className="font-semibold text-foreground">{filteredVideos.length}</span> of {allVideos.length}
+              {` video${allVideos.length === 1 ? "" : "s"}`}
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={clearFilters}>
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>
@@ -226,7 +288,7 @@ export default function CompanyVideos() {
               data-testid={`video-card-${video.id}`}
             >
               <div
-                className="aspect-video relative bg-muted cursor-pointer"
+                className="relative bg-muted cursor-pointer h-40 sm:h-44 lg:h-48 overflow-hidden"
                 onClick={() => setSelectedVideo(video)}
               >
                 {video.thumbnailUrl ? (

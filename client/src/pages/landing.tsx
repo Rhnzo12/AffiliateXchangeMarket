@@ -2,7 +2,8 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { TrendingUp, Users, DollarSign, Shield, Zap, Target, Star, CheckCircle2 } from "lucide-react";
 import { useLocation, Link } from "wouter";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import useEmblaCarousel from "embla-carousel-react";
 
 function useScrollAnimation(threshold = 0.1) {
   const ref = useRef<HTMLDivElement>(null);
@@ -30,6 +31,13 @@ function useScrollAnimation(threshold = 0.1) {
 
 function FeaturesSection() {
   const { ref: headerRef, isVisible: headerVisible } = useScrollAnimation();
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    loop: true,
+    align: "start",
+    slidesToScroll: 1,
+  });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   const features = [
     { icon: Zap, title: "Instant Approvals", description: "Get approved in minutes, not days. Start promoting offers within 7 minutes of applying." },
     { icon: DollarSign, title: "High Commissions", description: "Earn competitive rates with multiple commission structures: per-sale, retainers, and hybrid models." },
@@ -39,10 +47,38 @@ function FeaturesSection() {
     { icon: Shield, title: "Verified Brands", description: "Work with confidence. All companies are manually verified to ensure legitimacy." },
   ];
 
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    onSelect();
+    emblaApi.on("select", onSelect);
+    emblaApi.on("reInit", onSelect);
+  }, [emblaApi, onSelect]);
+
+  // Auto-slide functionality
+  useEffect(() => {
+    if (!emblaApi) return;
+
+    const autoplay = setInterval(() => {
+      emblaApi.scrollNext();
+    }, 3000); // Slide every 3 seconds
+
+    return () => clearInterval(autoplay);
+  }, [emblaApi]);
+
+  const scrollTo = useCallback(
+    (index: number) => emblaApi && emblaApi.scrollTo(index),
+    [emblaApi]
+  );
+
   return (
     <section className="py-20 bg-card/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div 
+        <div
           ref={headerRef}
           className={`text-center space-y-4 mb-16 transition-all duration-700 ${
             headerVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -54,10 +90,35 @@ function FeaturesSection() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
-            <FeatureCard key={feature.title} feature={feature} index={index} />
-          ))}
+        <div className="relative">
+          <div className="overflow-hidden" ref={emblaRef}>
+            <div className="flex">
+              {features.map((feature, index) => (
+                <div
+                  key={feature.title}
+                  className="flex-[0_0_100%] min-w-0 sm:flex-[0_0_50%] lg:flex-[0_0_33.333%] px-4"
+                >
+                  <FeatureCard feature={feature} index={index} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Carousel dots */}
+          <div className="flex justify-center gap-2 mt-8">
+            {features.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => scrollTo(index)}
+                className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                  index === selectedIndex
+                    ? 'bg-primary w-8'
+                    : 'bg-muted-foreground/30 hover:bg-muted-foreground/50'
+                }`}
+                aria-label={`Go to slide ${index + 1}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -65,17 +126,10 @@ function FeaturesSection() {
 }
 
 function FeatureCard({ feature, index }: { feature: { icon: any; title: string; description: string }; index: number }) {
-  const { ref, isVisible } = useScrollAnimation(0.1);
   const Icon = feature.icon;
 
   return (
-    <div
-      ref={ref}
-      className={`transition-all duration-700 ${
-        isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
-      }`}
-      style={{ transitionDelay: `${index * 100}ms` }}
-    >
+    <div className="h-full">
       <Card className="border-card-border h-full">
         <CardContent className="p-6 space-y-4">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-primary/10 text-primary">
@@ -85,6 +139,91 @@ function FeatureCard({ feature, index }: { feature: { icon: any; title: string; 
           <p className="text-muted-foreground">{feature.description}</p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function HowItWorksSection() {
+  const { ref: headerRef, isVisible: headerVisible } = useScrollAnimation();
+
+  const steps = [
+    {
+      number: 1,
+      title: "Browse Offers",
+      description: "Explore thousands of affiliate opportunities from verified brands in your niche."
+    },
+    {
+      number: 2,
+      title: "Apply & Get Approved",
+      description: "Submit a quick application and get approved automatically within 7 minutes."
+    },
+    {
+      number: 3,
+      title: "Promote & Earn",
+      description: "Share your unique tracking link and earn commissions on every conversion."
+    }
+  ];
+
+  return (
+    <section className="py-20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div
+          ref={headerRef}
+          className={`text-center space-y-4 mb-16 transition-all duration-700 ${
+            headerVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+          }`}
+        >
+          <h2 className="text-3xl sm:text-4xl font-bold">How It Works</h2>
+          <p className="text-xl text-muted-foreground">Get started in three simple steps</p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-12">
+          {steps.map((step, index) => (
+            <HowItWorksStep key={step.number} step={step} index={index} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorksStep({ step, index }: { step: { number: number; title: string; description: string }; index: number }) {
+  const { ref, isVisible } = useScrollAnimation(0.1);
+
+  return (
+    <div
+      ref={ref}
+      className="text-center space-y-4"
+    >
+      <div
+        className={`inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground text-2xl font-bold transition-all duration-600 ${
+          isVisible ? 'scale-100 opacity-100 rotate-0' : 'scale-0 opacity-0 rotate-180'
+        }`}
+        style={{
+          transitionDelay: `${index * 300}ms`,
+          transitionTimingFunction: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)' // Bounce effect
+        }}
+      >
+        {step.number}
+      </div>
+      <div
+        className={`transition-all duration-500 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+        style={{ transitionDelay: `${index * 300 + 200}ms` }}
+      >
+        <h3 className="text-xl font-semibold">{step.title}</h3>
+      </div>
+      <div
+        className={`transition-all duration-500 ${
+          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
+        }`}
+        style={{ transitionDelay: `${index * 300 + 300}ms` }}
+      >
+        <p className="text-muted-foreground">
+          {step.description}
+        </p>
+      </div>
     </div>
   );
 }
@@ -168,46 +307,7 @@ export default function Landing() {
       <FeaturesSection />
 
       {/* How It Works */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold">How It Works</h2>
-            <p className="text-xl text-muted-foreground">Get started in three simple steps</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-12">
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground text-2xl font-bold">
-                1
-              </div>
-              <h3 className="text-xl font-semibold">Browse Offers</h3>
-              <p className="text-muted-foreground">
-                Explore thousands of affiliate opportunities from verified brands in your niche.
-              </p>
-            </div>
-
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground text-2xl font-bold">
-                2
-              </div>
-              <h3 className="text-xl font-semibold">Apply & Get Approved</h3>
-              <p className="text-muted-foreground">
-                Submit a quick application and get approved automatically within 7 minutes.
-              </p>
-            </div>
-
-            <div className="text-center space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground text-2xl font-bold">
-                3
-              </div>
-              <h3 className="text-xl font-semibold">Promote & Earn</h3>
-              <p className="text-muted-foreground">
-                Share your unique tracking link and earn commissions on every conversion.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <HowItWorksSection />
 
       {/* Testimonials */}
       <section className="py-20 bg-card/50">
@@ -218,7 +318,26 @@ export default function Landing() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {[1, 2, 3].map((i) => (
+            {[
+              {
+                name: "Kyla Martinez",
+                role: "Lifestyle & Fashion Creator",
+                image: "/kyla.png",
+                testimonial: "AffiliateXchange has completely transformed how I monetize my content. The approval process is instant and the commissions are fantastic!"
+              },
+              {
+                name: "Ryan Thompson",
+                role: "Tech Reviewer",
+                image: "/ryan.png",
+                testimonial: "The platform makes it incredibly easy to find brands that align with my audience. I've tripled my affiliate income in just 3 months!"
+              },
+              {
+                name: "Diane Chen",
+                role: "Beauty & Wellness Influencer",
+                image: "/diane.png",
+                testimonial: "Finally, a platform that values creators! The direct communication with brands and real-time analytics have been game-changers for my business."
+              }
+            ].map((creator, i) => (
               <Card key={i} className="border-card-border">
                 <CardContent className="p-6 space-y-4">
                   <div className="flex gap-1">
@@ -227,13 +346,23 @@ export default function Landing() {
                     ))}
                   </div>
                   <p className="text-muted-foreground">
-                    "AffiliateXchange has completely transformed how I monetize my content. The approval process is instant and the commissions are fantastic!"
+                    "{creator.testimonial}"
                   </p>
                   <div className="flex items-center gap-3 pt-4 border-t">
-                    <div className="h-10 w-10 rounded-full bg-primary/10" />
+                    {creator.image ? (
+                      <img
+                        src={creator.image}
+                        alt={creator.name}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary">
+                        {creator.name.charAt(0)}
+                      </div>
+                    )}
                     <div>
-                      <div className="font-semibold">Creator Name</div>
-                      <div className="text-sm text-muted-foreground">Content Creator</div>
+                      <div className="font-semibold">{creator.name}</div>
+                      <div className="text-sm text-muted-foreground">{creator.role}</div>
                     </div>
                   </div>
                 </CardContent>

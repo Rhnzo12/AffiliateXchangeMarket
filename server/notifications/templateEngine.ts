@@ -164,6 +164,8 @@ export function getTemplateSlugForNotificationType(type: string): string | null 
 
     // Retainer/Deliverable templates
     'deliverable_rejected': 'deliverable-rejected',
+    'deliverable_submitted': 'deliverable-submitted',
+    'deliverable_resubmitted': 'deliverable-resubmitted',
     'revision_requested': 'revision-requested',
 
     // Moderation templates

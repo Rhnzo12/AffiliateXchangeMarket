@@ -133,6 +133,45 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   favorites: many(favorites),
 }));
 
+// Social Account Connection Status Enum
+export const socialConnectionStatusEnum = pgEnum('social_connection_status', ['connected', 'disconnected', 'expired', 'error']);
+
+// Social Account Platform Enum
+export const socialPlatformEnum = pgEnum('social_platform', ['youtube', 'tiktok', 'instagram']);
+
+// Social Account Connections (OAuth-connected accounts)
+export const socialAccountConnections = pgTable("social_account_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  platform: socialPlatformEnum("platform").notNull(),
+  platformUserId: varchar("platform_user_id"), // User ID on the platform
+  platformUsername: varchar("platform_username"), // Username/handle on the platform
+  accessToken: text("access_token"), // Encrypted OAuth access token
+  refreshToken: text("refresh_token"), // Encrypted OAuth refresh token
+  tokenExpiresAt: timestamp("token_expires_at"),
+  profileUrl: varchar("profile_url"), // Full profile URL
+  profileImageUrl: varchar("profile_image_url"), // Avatar from the platform
+  followerCount: integer("follower_count"),
+  subscriberCount: integer("subscriber_count"), // For YouTube
+  followingCount: integer("following_count"),
+  videoCount: integer("video_count"),
+  totalViews: integer("total_views"),
+  avgEngagementRate: decimal("avg_engagement_rate", { precision: 5, scale: 2 }),
+  lastSyncedAt: timestamp("last_synced_at"),
+  connectionStatus: socialConnectionStatusEnum("connection_status").notNull().default('disconnected'),
+  errorMessage: text("error_message"),
+  metadata: jsonb("metadata"), // Additional platform-specific data
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const socialAccountConnectionsRelations = relations(socialAccountConnections, ({ one }) => ({
+  user: one(users, {
+    fields: [socialAccountConnections.userId],
+    references: [users.id],
+  }),
+}));
+
 // Creator profiles
 export const creatorProfiles = pgTable("creator_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -149,11 +188,12 @@ export const creatorProfiles = pgTable("creator_profiles", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const creatorProfilesRelations = relations(creatorProfiles, ({ one }) => ({
+export const creatorProfilesRelations = relations(creatorProfiles, ({ one, many }) => ({
   user: one(users, {
     fields: [creatorProfiles.userId],
     references: [users.id],
   }),
+  socialConnections: many(socialAccountConnections),
 }));
 
 // Website verification method enum
@@ -450,6 +490,36 @@ export const favoritesRelations = relations(favorites, ({ one }) => ({
   offer: one(offers, {
     fields: [favorites.offerId],
     references: [offers.id],
+  }),
+}));
+
+// Saved Searches
+export type SavedSearchFilters = {
+  searchTerm?: string;
+  selectedNiches?: string[];
+  selectedCategories?: string[];
+  commissionType?: string;
+  commissionRange?: number[];
+  minimumPayout?: number[];
+  minRating?: number;
+  showTrending?: boolean;
+  showPriority?: boolean;
+  sortBy?: string;
+};
+
+export const savedSearches = pgTable("saved_searches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  creatorId: varchar("creator_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar("name").notNull(),
+  filters: jsonb("filters").$type<SavedSearchFilters>().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const savedSearchesRelations = relations(savedSearches, ({ one }) => ({
+  creator: one(users, {
+    fields: [savedSearches.creatorId],
+    references: [users.id],
   }),
 }));
 
@@ -1061,6 +1131,22 @@ export const adminReviewUpdateSchema = createInsertSchema(reviews).pick({ review
 export const adminNoteSchema = z.object({ note: z.string() });
 export const adminResponseSchema = z.object({ response: z.string().min(1, "Response text is required") });
 export const insertFavoriteSchema = createInsertSchema(favorites).omit({ id: true, createdAt: true });
+export const savedSearchFiltersSchema = z.object({
+  searchTerm: z.string().trim().max(200).optional(),
+  selectedNiches: z.array(z.string()).default([]),
+  selectedCategories: z.array(z.string()).default([]),
+  commissionType: z.string().optional(),
+  commissionRange: z.array(z.number()).length(2).default([0, 10000]),
+  minimumPayout: z.array(z.number()).min(1).default([0]),
+  minRating: z.number().default(0),
+  showTrending: z.boolean().default(false),
+  showPriority: z.boolean().default(false),
+  sortBy: z.string().optional(),
+});
+
+export const insertSavedSearchSchema = createInsertSchema(savedSearches)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({ filters: savedSearchFiltersSchema });
 export const insertPaymentSettingSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true, updatedAt: true, initiatedAt: true, completedAt: true, failedAt: true, refundedAt: true });
 export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1136,6 +1222,7 @@ export const insertBannedKeywordSchema = createInsertSchema(bannedKeywords).omit
 export const insertContentFlagSchema = createInsertSchema(contentFlags).omit({ id: true, createdAt: true });
 export const insertCompanyVerificationDocumentSchema = createInsertSchema(companyVerificationDocuments).omit({ id: true, createdAt: true, uploadedAt: true });
 export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSocialAccountConnectionSchema = createInsertSchema(socialAccountConnections).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Platform Health Monitoring insert schemas
 export const insertApiMetricsSchema = createInsertSchema(apiMetrics).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1163,6 +1250,8 @@ export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
 export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
+export type SavedSearch = typeof savedSearches.$inferSelect;
+export type InsertSavedSearch = z.infer<typeof insertSavedSearchSchema>;
 export type Analytics = typeof analytics.$inferSelect;
 export type PaymentSetting = typeof paymentSettings.$inferSelect;
 export type InsertPaymentSetting = z.infer<typeof insertPaymentSettingSchema>;
@@ -1198,6 +1287,8 @@ export type CompanyVerificationDocument = typeof companyVerificationDocuments.$i
 export type InsertCompanyVerificationDocument = z.infer<typeof insertCompanyVerificationDocumentSchema>;
 export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+export type SocialAccountConnection = typeof socialAccountConnections.$inferSelect;
+export type InsertSocialAccountConnection = z.infer<typeof insertSocialAccountConnectionSchema>;
 export type ApiMetrics = typeof apiMetrics.$inferSelect;
 export type InsertApiMetrics = z.infer<typeof insertApiMetricsSchema>;
 export type ApiErrorLog = typeof apiErrorLogs.$inferSelect;

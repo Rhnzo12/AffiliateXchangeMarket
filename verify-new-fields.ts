@@ -14,13 +14,13 @@ async function verifyNewFields() {
       ORDER BY column_name
     `);
 
-    console.log("✓ Conversations table fields:");
+    console.log("\u2713 Conversations table fields:");
     if (conversationsCheck.rows.length > 0) {
       conversationsCheck.rows.forEach((row: any) => {
         console.log(`  - ${row.column_name}: ${row.data_type} (default: ${row.column_default || 'none'})`);
       });
     } else {
-      console.log("  ❌ No resolution fields found");
+      console.log("  \u274C No resolution fields found");
     }
     console.log();
 
@@ -33,13 +33,13 @@ async function verifyNewFields() {
       ORDER BY column_name
     `);
 
-    console.log("✓ Offers table fields:");
+    console.log("\u2713 Offers table fields:");
     if (offersCheck.rows.length > 0) {
       offersCheck.rows.forEach((row: any) => {
         console.log(`  - ${row.column_name}: ${row.data_type} (default: ${row.column_default || 'none'})`);
       });
     } else {
-      console.log("  ❌ No contract fields found");
+      console.log("  \u274C No contract fields found");
     }
     console.log();
 
@@ -52,13 +52,13 @@ async function verifyNewFields() {
       ORDER BY column_name
     `);
 
-    console.log("✓ Company Profiles table fields:");
+    console.log("\u2713 Company Profiles table fields:");
     if (companyCheck.rows.length > 0) {
       companyCheck.rows.forEach((row: any) => {
         console.log(`  - ${row.column_name}: ${row.data_type}`);
       });
     } else {
-      console.log("  ❌ No social media fields found");
+      console.log("  \u274C No social media fields found");
     }
     console.log();
 
@@ -66,18 +66,18 @@ async function verifyNewFields() {
     const expectedFields = 3 + 2 + 4; // 3 + 2 + 4 = 9 total fields
 
     if (totalFields === expectedFields) {
-      console.log("✅ SUCCESS! All 9 new fields have been added to the database.");
+      console.log("\u2705 SUCCESS! All 9 new fields have been added to the database.");
       console.log("\nSummary:");
       console.log(`  - Conversations: ${conversationsCheck.rows.length}/3 fields`);
       console.log(`  - Offers: ${offersCheck.rows.length}/2 fields`);
       console.log(`  - Company Profiles: ${companyCheck.rows.length}/4 fields`);
     } else {
-      console.log(`⚠️  WARNING: Found ${totalFields}/${expectedFields} fields. Some may be missing.`);
+      console.log(`\u26A0\uFE0F  WARNING: Found ${totalFields}/${expectedFields} fields. Some may be missing.`);
     }
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error verifying fields:", error);
+    console.error("\u274C Error verifying fields:", error);
     process.exit(1);
   }
 }

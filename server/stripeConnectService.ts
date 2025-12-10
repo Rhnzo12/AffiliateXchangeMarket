@@ -73,7 +73,9 @@ export class StripeConnectService {
         country: country,
         email: email,
         capabilities: {
-          card_payments: { requested: false }, // We only need payouts
+          // In CA, requesting transfers alone triggers a service agreement error;
+          // request card_payments alongside transfers to satisfy Stripe's requirements.
+          card_payments: { requested: true },
           transfers: { requested: true },
         },
         business_type: 'individual', // Most creators are individuals
@@ -94,9 +96,16 @@ export class StripeConnectService {
       };
     } catch (error: any) {
       console.error('[Stripe Connect] Error creating connected account:', error.message);
+
+      let errorMessage = error.message;
+      if (errorMessage?.includes("You can only create new accounts if you've signed up for Connect")) {
+        errorMessage = 'Stripe secret key is not for a Connect-enabled platform. Enable Stripe Connect on your account and update STRIPE_SECRET_KEY, then restart the server.';
+      } else if (errorMessage?.includes('When requesting the `transfers` capability')) {
+        errorMessage = 'Stripe rejected transfers-only capabilities for CA accounts. Request both card_payments and transfers (or set the recipient service agreement) in createConnectedAccount, then retry onboarding.';
+      }
       return {
         success: false,
-        error: error.message,
+        error: errorMessage,
       };
     }
   }

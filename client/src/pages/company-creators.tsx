@@ -6,13 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Checkbox } from "../components/ui/checkbox";
 import {
@@ -30,7 +23,6 @@ import {
   MessageSquare,
   TrendingUp,
   ExternalLink,
-  Filter,
   X,
   Download,
   PauseCircle,
@@ -41,6 +33,8 @@ import {
   PlayCircle,
   DollarSign,
   Loader2,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 import { exportCreatorListPDF, type CreatorExportData } from "../lib/export-utils";
 import { Link, useLocation } from "wouter";
@@ -48,6 +42,20 @@ import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest } from "../lib/queryClient";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
+
+type CompanyCreatorsProps = {
+  hideTopNav?: boolean;
+};
 
 type BulkActionType = "approve" | "pause" | "activate" | "complete" | "reject" | "approve_payouts" | null;
 
@@ -60,18 +68,10 @@ const STATUS_OPTIONS = [
   { value: "rejected", label: "Rejected" },
 ];
 
-const PERFORMANCE_OPTIONS = [
-  { value: "all", label: "All Performance" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Needs Attention" },
-];
-
-const JOIN_DATE_OPTIONS = [
-  { value: "all", label: "Any Join Date" },
-  { value: "7d", label: "Joined in last 7 days" },
-  { value: "30d", label: "Joined in last 30 days" },
-  { value: "90d", label: "Joined in last 90 days" },
+const PLATFORM_OPTIONS = [
+  { value: "youtube", label: "YouTube" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "instagram", label: "Instagram" },
 ];
 
 type PerformanceTier = "high" | "medium" | "low";
@@ -142,17 +142,18 @@ function formatDate(value: Date | null): string {
   return value.toLocaleDateString();
 }
 
-export default function CompanyCreators() {
+export default function CompanyCreators({ hideTopNav = false }: CompanyCreatorsProps) {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
-  const [offerFilter, setOfferFilter] = useState("all");
-  const [platformFilter, setPlatformFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [performanceFilter, setPerformanceFilter] = useState("all");
-  const [joinDateFilter, setJoinDateFilter] = useState("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [platformFilters, setPlatformFilters] = useState<string[]>([]);
+  const [pendingStatusFilters, setPendingStatusFilters] = useState<string[]>([]);
+  const [pendingPlatformFilters, setPendingPlatformFilters] = useState<string[]>([]);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
   const [payoutProcessingId, setPayoutProcessingId] = useState<string | null>(null);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
@@ -334,16 +335,6 @@ export default function CompanyCreators() {
     });
   }, [applications]);
 
-  const uniqueOfferOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    normalizedApplications.forEach((app) => {
-      if (app.offer?.id && app.offer?.title) {
-        map.set(app.offer.id, app.offer.title);
-      }
-    });
-    return Array.from(map.entries());
-  }, [normalizedApplications]);
-
   const filteredApplications = useMemo(() => {
     const searchValue = searchTerm.trim().toLowerCase();
 
@@ -359,41 +350,25 @@ export default function CompanyCreators() {
         ? haystack.some((value) => value.toLowerCase().includes(searchValue))
         : true;
 
-      const matchesOffer =
-        offerFilter === "all" || (application.offer?.id && application.offer.id === offerFilter);
+      const matchesStatus =
+        statusFilters.length === 0
+          ? true
+          : statusFilters.some((status) => application.status.toLowerCase() === status.toLowerCase());
 
-      const matchesPlatform = (() => {
-        if (platformFilter === "all") return true;
-        if (platformFilter === "youtube") return Boolean(application.creator?.youtubeUrl);
-        if (platformFilter === "tiktok") return Boolean(application.creator?.tiktokUrl);
-        if (platformFilter === "instagram") return Boolean(application.creator?.instagramUrl);
-        return true;
-      })();
+      const creatorPlatforms = [
+        application.creator?.youtubeUrl ? "youtube" : null,
+        application.creator?.tiktokUrl ? "tiktok" : null,
+        application.creator?.instagramUrl ? "instagram" : null,
+      ].filter((value): value is string => Boolean(value));
 
-      const matchesStatus = statusFilter === "all" || application.status === statusFilter;
+      const matchesPlatform =
+        platformFilters.length === 0
+          ? true
+          : creatorPlatforms.some((platform) => platformFilters.includes(platform));
 
-      const matchesPerformance =
-        performanceFilter === "all" || application.performanceTier === performanceFilter;
-
-      const matchesJoinDate = (() => {
-        if (joinDateFilter === "all" || !application.joinDate) return true;
-        const diffDays = (Date.now() - application.joinDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (joinDateFilter === "7d") return diffDays <= 7;
-        if (joinDateFilter === "30d") return diffDays <= 30;
-        if (joinDateFilter === "90d") return diffDays <= 90;
-        return true;
-      })();
-
-      return (
-        matchesSearch &&
-        matchesOffer &&
-        matchesPlatform &&
-        matchesStatus &&
-        matchesPerformance &&
-        matchesJoinDate
-      );
+      return matchesSearch && matchesStatus && matchesPlatform;
     });
-  }, [normalizedApplications, searchTerm, offerFilter, platformFilter, statusFilter, performanceFilter, joinDateFilter]);
+  }, [normalizedApplications, platformFilters, searchTerm, statusFilters]);
 
   const groupedOffers = useMemo(() => {
     const map = new Map<string, { offerTitle: string; items: NormalizedApplication[] }>();
@@ -564,21 +539,40 @@ export default function CompanyCreators() {
   const totalCreators = normalizedApplications.length;
 
   const hasActiveFilters =
-    searchTerm.trim().length > 0 ||
-    offerFilter !== "all" ||
-    platformFilter !== "all" ||
-    statusFilter !== "all" ||
-    performanceFilter !== "all" ||
-    joinDateFilter !== "all";
+    searchTerm.trim().length > 0 || statusFilters.length > 0 || platformFilters.length > 0;
+
+  const toggleStatusFilter = (value: string) => {
+    setPendingStatusFilters((prev) =>
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+    );
+  };
+
+  const togglePlatformFilter = (value: string) => {
+    setPendingPlatformFilters((prev) =>
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+    );
+  };
 
   const clearFilters = () => {
     setSearchTerm("");
-    setOfferFilter("all");
-    setPlatformFilter("all");
-    setStatusFilter("all");
-    setPerformanceFilter("all");
-    setJoinDateFilter("all");
+    setStatusFilters([]);
+    setPlatformFilters([]);
+    setPendingStatusFilters([]);
+    setPendingPlatformFilters([]);
   };
+
+  const applyFilters = () => {
+    setStatusFilters(pendingStatusFilters);
+    setPlatformFilters(pendingPlatformFilters);
+    setFilterMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (filterMenuOpen) {
+      setPendingStatusFilters(statusFilters);
+      setPendingPlatformFilters(platformFilters);
+    }
+  }, [filterMenuOpen, platformFilters, statusFilters]);
 
   const prepareCreatorExportData = (): CreatorExportData[] => {
     return filteredApplications.map((application) => ({
@@ -599,7 +593,7 @@ export default function CompanyCreators() {
     if (filteredApplications.length === 0) {
       toast({
         title: "Nothing to export",
-        description: "Adjust filters to show some creators first.",
+        description: "Adjust your search to show some creators first.",
       });
       return;
     }
@@ -652,7 +646,7 @@ export default function CompanyCreators() {
     if (filteredApplications.length === 0) {
       toast({
         title: "Nothing to export",
-        description: "Adjust filters to show some creators first.",
+        description: "Adjust your search to show some creators first.",
       });
       return;
     }
@@ -662,13 +656,19 @@ export default function CompanyCreators() {
 
       // Build filter description
       const filterParts: string[] = [];
-      if (offerFilter !== "all") {
-        const offerTitle = uniqueOfferOptions.find(([id]) => id === offerFilter)?.[1];
-        if (offerTitle) filterParts.push(`Offer: ${offerTitle}`);
-      }
-      if (statusFilter !== "all") filterParts.push(`Status: ${formatStatusLabel(statusFilter)}`);
-      if (performanceFilter !== "all") filterParts.push(`Performance: ${performanceFilter}`);
       if (searchTerm) filterParts.push(`Search: "${searchTerm}"`);
+      if (statusFilters.length > 0) {
+        const selectedStatuses = statusFilters
+          .map((status) => formatStatusLabel(status))
+          .join(", ");
+        filterParts.push(`Status: ${selectedStatuses}`);
+      }
+      if (platformFilters.length > 0) {
+        const selectedPlatforms = platformFilters
+          .map((platform) => PLATFORM_OPTIONS.find((option) => option.value === platform)?.label || platform)
+          .join(", ");
+        filterParts.push(`Platforms: ${selectedPlatforms}`);
+      }
 
       const filterInfo = filterParts.length > 0
         ? `Filters: ${filterParts.join(" | ")}`
@@ -702,7 +702,7 @@ export default function CompanyCreators() {
 
   return (
     <div className="space-y-8">
-      <TopNavBar />
+      {!hideTopNav && <TopNavBar />}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Creators by Offer</h1>
@@ -711,120 +711,142 @@ export default function CompanyCreators() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCreatorCsv} className="gap-2">
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button variant="outline" onClick={exportCreatorPdf} className="gap-2">
-            <FileText className="h-4 w-4" />
-            PDF Report
-          </Button>
+          <DropdownMenu open={exportMenuOpen} onOpenChange={setExportMenuOpen}>
+            <div
+              onMouseEnter={() => setExportMenuOpen(true)}
+              onMouseLeave={() => setExportMenuOpen(false)}
+              className="shrink-0"
+            >
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48"
+                onMouseEnter={() => setExportMenuOpen(true)}
+                onMouseLeave={() => setExportMenuOpen(false)}
+              >
+                <DropdownMenuLabel>Export creators</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="gap-2"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    exportCreatorCsv();
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  CSV file
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="gap-2"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    exportCreatorPdf();
+                  }}
+                >
+                  <FileText className="h-4 w-4" />
+                  PDF report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </div>
+          </DropdownMenu>
         </div>
       </div>
 
       <Card className="border-card-border">
         <CardContent className="pt-6 space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Filter className="h-4 w-4" />
-              <span className="text-sm font-semibold uppercase tracking-wider">Search &amp; Filter</span>
-            </div>
-            <div className="sm:ml-auto text-sm text-muted-foreground">
-              Showing <span className="font-semibold text-foreground">{totalVisibleCreators}</span> of {totalCreators}
-              {` creator${totalCreators === 1 ? "" : "s"}`}
-            </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" className="text-xs sm:ml-4" onClick={clearFilters}>
-                <X className="h-3 w-3 mr-1" />
-                Clear Filters
-              </Button>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
+            <div className="flex w-full items-center gap-2 xl:max-w-md">
               <Input
-                placeholder="Search by creator, bio, or offer"
+                placeholder="Product name, ID, or SKU"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full"
               />
+              <DropdownMenu open={filterMenuOpen} onOpenChange={setFilterMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Filter" className="shrink-0">
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="filter-menu-scroll w-72 space-y-2">
+                  <DropdownMenuLabel>Filter creators</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Accordion type="multiple" className="space-y-1">
+                    <AccordionItem value="status" className="border-none">
+                      <AccordionTrigger className="px-2 py-1 text-sm font-medium hover:no-underline">
+                        Status
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        {STATUS_OPTIONS.map((option) => (
+                          <DropdownMenuCheckboxItem
+                            key={option.value}
+                            checked={pendingStatusFilters.includes(option.value)}
+                            onCheckedChange={() => toggleStatusFilter(option.value)}
+                            onSelect={(event) => event.preventDefault()}
+                          >
+                            {option.label}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                    <AccordionItem value="platform" className="border-none">
+                      <AccordionTrigger className="px-2 py-1 text-sm font-medium hover:no-underline">
+                        Platform
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        {PLATFORM_OPTIONS.map((option) => (
+                          <DropdownMenuCheckboxItem
+                            key={option.value}
+                            checked={pendingPlatformFilters.includes(option.value)}
+                            onCheckedChange={() => togglePlatformFilter(option.value)}
+                            onSelect={(event) => event.preventDefault()}
+                          >
+                            {option.label}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-muted-foreground"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        clearFilters();
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                      Clear filters
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gap-2 border-0 bg-gray-200 text-black shadow-none hover:bg-gray-300"
+                      onClick={applyFilters}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Offer</label>
-              <Select value={offerFilter} onValueChange={setOfferFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All offers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Offers</SelectItem>
-                  {uniqueOfferOptions.map(([id, title]) => (
-                    <SelectItem key={id} value={id}>
-                      {title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Platform</label>
-              <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All platforms" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Platforms</SelectItem>
-                  <SelectItem value="youtube">YouTube</SelectItem>
-                  <SelectItem value="tiktok">TikTok</SelectItem>
-                  <SelectItem value="instagram">Instagram</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {STATUS_OPTIONS.filter((option) => option.value !== "rejected").map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Performance</label>
-              <Select value={performanceFilter} onValueChange={setPerformanceFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERFORMANCE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Join Date</label>
-              <Select value={joinDateFilter} onValueChange={setJoinDateFilter}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {JOIN_DATE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground xl:ml-auto">
+              Showing <span className="font-semibold text-foreground">{totalVisibleCreators}</span> of {totalCreators}
+              {` creator${totalCreators === 1 ? "" : "s"}`}
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={clearFilters}>
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

@@ -5,6 +5,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { isUnauthorizedError } from "../lib/authUtils";
 import { Link } from "wouter";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, paymentSettingsTourSteps as creatorPaymentTourSteps } from "../lib/creatorTourConfig";
+import { useCompanyPageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, paymentSettingsTourSteps as companyPaymentTourSteps } from "../lib/companyTourConfig";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -198,53 +202,67 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 p-6 text-white">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-green-100">Total Earnings</span>
-            <DollarSign className="h-5 w-5 text-green-100" />
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6 space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900">Payout Status Breakdown</h3>
+            <p className="text-sm text-gray-600">
+              See where every creator payout sits: awaiting admin approval, processing, or fully paid.
+            </p>
           </div>
-          <div className="text-3xl font-bold">${totalEarnings.toFixed(2)}</div>
-          <div className="mt-1 text-xs text-green-100">All-time</div>
+          <Badge variant="outline" className="self-start border-green-200 bg-green-50 text-green-700">
+            Total earnings ${totalEarnings.toFixed(2)}
+          </Badge>
         </div>
 
-        <div className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-yellow-700">Pending Admin Approval</span>
-            <Clock className="h-5 w-5 text-yellow-600" />
-          </div>
-          <div className="text-3xl font-bold text-yellow-900">${pendingEarnings.toFixed(2)}</div>
-          <div className="mt-1 text-xs text-yellow-700">Company approved, awaiting admin</div>
-        </div>
-
-        <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-blue-700">Processing Payment</span>
-            <Clock className="h-5 w-5 text-blue-600" />
-          </div>
-          <div className="text-3xl font-bold text-blue-900">${processingEarnings.toFixed(2)}</div>
-          <div className="mt-1 text-xs text-blue-700">Payment in progress</div>
-        </div>
-
-        <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-gray-600">Paid Out</span>
-            <CheckCircle className="h-5 w-5 text-green-500" />
-          </div>
-          <div className="text-3xl font-bold text-gray-900">${completedEarnings.toFixed(2)}</div>
-          <div className="mt-1 text-xs text-gray-500">Completed</div>
-        </div>
-
-        {disputedEarnings > 0 && (
-          <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="rounded-xl border-2 border-yellow-200 bg-yellow-50 p-6">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm text-orange-700">Disputed</span>
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
+              <span className="text-sm text-yellow-700">Pending Admin Approval</span>
+              <Clock className="h-5 w-5 text-yellow-600" />
             </div>
-            <div className="text-3xl font-bold text-orange-900">${disputedEarnings.toFixed(2)}</div>
-            <div className="mt-1 text-xs text-orange-700">Awaiting admin resolution</div>
+            <div className="text-3xl font-bold text-yellow-900">${pendingEarnings.toFixed(2)}</div>
+            <div className="mt-1 text-xs text-yellow-700">Company approved, awaiting admin</div>
           </div>
-        )}
+
+          <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-blue-700">Processing Payment</span>
+              <Clock className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="text-3xl font-bold text-blue-900">${processingEarnings.toFixed(2)}</div>
+            <div className="mt-1 text-xs text-blue-700">Payment in progress</div>
+          </div>
+
+          <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-gray-600">Total Paid Out</span>
+              <CheckCircle className="h-5 w-5 text-green-500" />
+            </div>
+            <div className="text-3xl font-bold text-gray-900">${completedEarnings.toFixed(2)}</div>
+            <div className="mt-1 text-xs text-gray-500">Lifetime completed payouts</div>
+          </div>
+
+          <div className="rounded-xl bg-gradient-to-br from-green-500 to-green-600 p-6 text-white">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-green-100">All Earnings</span>
+              <DollarSign className="h-5 w-5 text-green-100" />
+            </div>
+            <div className="text-3xl font-bold">${totalEarnings.toFixed(2)}</div>
+            <div className="mt-1 text-xs text-green-100">Including pending & processing</div>
+          </div>
+
+          {disputedEarnings > 0 && (
+            <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-6 md:col-span-2">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm text-orange-700">Disputed</span>
+                <AlertTriangle className="h-5 w-5 text-orange-600" />
+              </div>
+              <div className="text-3xl font-bold text-orange-900">${disputedEarnings.toFixed(2)}</div>
+              <div className="mt-1 text-xs text-orange-700">Awaiting admin resolution</div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
@@ -1681,7 +1699,7 @@ function AdminPaymentDashboard({
               </p>
 
               <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 mt-4">
-                <p className="text-sm font-semibold text-blue-900 mb-1">✅ Notification Sent Automatically</p>
+                <p className="text-sm font-semibold text-blue-900 mb-1">\u2705 Notification Sent Automatically</p>
                 <p className="text-xs text-blue-800">
                   The company has been automatically notified via email and in-app notification about this insufficient funds issue.
                 </p>
@@ -2380,6 +2398,12 @@ export default function PaymentSettings() {
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"overview" | "settings" | "approvals" | "dashboard">("overview");
+
+  // Quick Guide Tour - for both creator and company users
+  const isCreator = user?.role === 'creator';
+  const isCompany = user?.role === 'company';
+  useCreatorPageTour(CREATOR_TOUR_IDS.PAYMENT_SETTINGS, creatorPaymentTourSteps, isCreator);
+  useCompanyPageTour(COMPANY_TOUR_IDS.PAYMENT_SETTINGS, companyPaymentTourSteps, isCompany);
 
   const [payoutMethod, setPayoutMethod] = useState("etransfer");
   const [payoutEmail, setPayoutEmail] = useState("");

@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Separator } from "../components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
+import { Alert, AlertTitle, AlertDescription } from "../components/ui/alert";
 import {
   Building2,
   ArrowLeft,
@@ -144,9 +146,11 @@ export default function AdminCompanyDetail() {
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [activeTab, setActiveTab] = useState("details");
-  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [isFeeDialogOpen, setIsFeeDialogOpen] = useState(false);
   const [feeInputValue, setFeeInputValue] = useState("");
+  const [isPdfViewerOpen, setIsPdfViewerOpen] = useState(false);
+  const [currentDocumentUrl, setCurrentDocumentUrl] = useState("");
+  const [currentDocumentName, setCurrentDocumentName] = useState("");
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
     title: string;
@@ -156,6 +160,7 @@ export default function AdminCompanyDetail() {
     title: "",
     description: "",
   });
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -199,80 +204,37 @@ export default function AdminCompanyDetail() {
     }
   }, [company, error, loadingCompany, companyId]);
 
-  // Function to view verification document with signed URL
-  const handleViewDocument = async (documentUrl: string) => {
-    if (!documentUrl) return;
-
-    setIsLoadingDocument(true);
-    try {
-      // Extract the file path from the GCS URL
-      // URL format: https://storage.googleapis.com/bucket-name/path/to/file
-      const url = new URL(documentUrl);
-      const pathParts = url.pathname.split('/');
-      // Remove empty string and bucket name, keep the rest as file path
-      const filePath = pathParts.slice(2).join('/');
-
-      // Fetch signed URL from the API
-      const response = await fetch(`/api/get-signed-url/${filePath}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get document access');
-      }
-
-      const data = await response.json();
-
-      // Open the signed URL in a new tab
-      window.open(data.url, '_blank', 'noopener,noreferrer');
-    } catch (error) {
-      console.error('Error fetching document:', error);
+  // Opens document in dialog viewer
+  const handleViewDocument = (documentId: string, documentName: string = "Document", documentType: string = "") => {
+    if (!documentId) {
       toast({
         title: "Error",
-        description: "Failed to access the verification document. Please try again.",
+        description: "Missing document ID",
         variant: "destructive",
       });
-    } finally {
-      setIsLoadingDocument(false);
+      return;
     }
+    // Use the authenticated backend endpoint to serve the document
+    const viewerUrl = `/api/company/verification-documents/${documentId}/file`;
+    // Open the document in a dialog viewer
+    setCurrentDocumentUrl(viewerUrl);
+    setCurrentDocumentName(documentName);
+    setIsPdfViewerOpen(true);
   };
 
-  // Function to download verification document
-  const handleDownloadDocument = async (documentUrl: string, documentName: string) => {
-    if (!documentUrl) return;
-
-    try {
-      // Extract the file path from the GCS URL
-      const url = new URL(documentUrl);
-      const pathParts = url.pathname.split('/');
-      const filePath = pathParts.slice(2).join('/');
-
-      // Fetch signed URL with download flag from the API
-      const response = await fetch(`/api/get-signed-url/${filePath}?download=true&name=${encodeURIComponent(documentName)}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get download URL');
-      }
-
-      const data = await response.json();
-
-      // Create a temporary link and trigger download
-      const link = document.createElement('a');
-      link.href = data.url;
-      link.download = documentName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error downloading document:', error);
+  // Opens document in new browser tab for download
+  const handleDownloadDocument = (documentId: string, documentName: string) => {
+    if (!documentId) {
       toast({
         title: "Error",
-        description: "Failed to download document. Please try again.",
+        description: "Missing document ID",
         variant: "destructive",
       });
+      return;
     }
+    // Use the authenticated backend endpoint to download the document
+    const downloadUrl = `/api/company/verification-documents/${documentId}/file`;
+    window.open(downloadUrl, '_blank');
   };
 
   // Fetch company offers
@@ -432,9 +394,9 @@ export default function AdminCompanyDetail() {
     },
   });
 
-  const unsuspendMutation = useMutation({
+  const reactivateMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/admin/companies/${companyId}/unsuspend`);
+      const response = await apiRequest("POST", `/api/admin/companies/${companyId}/reactivate`);
       return response.json();
     },
     onSuccess: () => {
@@ -442,30 +404,30 @@ export default function AdminCompanyDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/companies/all"] });
       toast({
         title: "Success",
-        description: "Company unsuspended",
+        description: "Company reactivated",
       });
     },
     onError: (error: any) => {
       setErrorDialog({
         open: true,
         title: "Error",
-        description: error.message || "Failed to unsuspend company",
+        description: error.message || "Failed to reactivate company",
       });
     },
   });
 
-  // Update company fee mutation
   const updateFeeMutation = useMutation({
-    mutationFn: async (platformFeePercentage: number) => {
-      const response = await apiRequest("PUT", `/api/admin/companies/${companyId}/fee`, { platformFeePercentage });
+    mutationFn: async (feePercentage: number) => {
+      const response = await apiRequest("PATCH", `/api/admin/companies/${companyId}/fee`, {
+        platformFeePercentage: feePercentage,
+      });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}/fee`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
       toast({
         title: "Success",
-        description: data.message || "Platform fee updated successfully",
+        description: "Custom platform fee updated successfully",
       });
       setIsFeeDialogOpen(false);
       setFeeInputValue("");
@@ -474,968 +436,923 @@ export default function AdminCompanyDetail() {
       setErrorDialog({
         open: true,
         title: "Error",
-        description: error.message || "Failed to update platform fee",
+        description: error.message || "Failed to update fee",
       });
     },
   });
 
-  // Reset company fee mutation
-  const resetFeeMutation = useMutation({
+  const clearFeeMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("DELETE", `/api/admin/companies/${companyId}/fee`);
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}/fee`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
       toast({
         title: "Success",
-        description: data.message || "Custom fee removed, using default",
+        description: "Custom platform fee cleared. Using default fee.",
       });
     },
     onError: (error: any) => {
       setErrorDialog({
         open: true,
         title: "Error",
-        description: error.message || "Failed to reset platform fee",
+        description: error.message || "Failed to clear custom fee",
       });
     },
   });
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; className?: string }> = {
-      pending: { variant: "secondary" },
-      approved: { variant: "default", className: "bg-green-600 hover:bg-green-700" },
-      rejected: { variant: "destructive" },
-      suspended: { variant: "outline", className: "border-orange-500 text-orange-700 dark:text-orange-400" },
-    };
-    return variants[status] || { variant: "secondary" };
-  };
-
   if (isLoading || loadingCompany) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-pulse text-lg">Loading...</div>
+      <div className="min-h-screen bg-background">
+        <TopNavBar />
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading company details...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!company) {
     return (
-      <div className="space-y-8">
+      <div className="min-h-screen bg-background">
         <TopNavBar />
-        <Card className="border-card-border">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Company not found</h3>
-            <Button variant="outline" onClick={() => navigate("/admin/companies")}>
-              Back to Companies
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+          <div className="text-center">
+            <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">Company not found</p>
+          </div>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-8">
-      <TopNavBar />
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'rejected':
+        return 'bg-red-100 text-red-800 border-red-200';
+      case 'suspended':
+        return 'bg-orange-100 text-orange-800 border-orange-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/admin/companies")}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">{company.legalName}</h1>
-            <p className="text-muted-foreground mt-1">Company Details</p>
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <CheckCircle2 className="h-4 w-4" />;
+      case 'pending':
+        return <Clock className="h-4 w-4" />;
+      case 'rejected':
+        return <XCircle className="h-4 w-4" />;
+      case 'suspended':
+        return <Ban className="h-4 w-4" />;
+      default:
+        return null;
+    }
+  };
+
+  const getRiskColor = (level: string) => {
+    switch (level) {
+      case 'high':
+        return 'text-red-600 bg-red-50 border-red-200';
+      case 'medium':
+        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'low':
+        return 'text-green-600 bg-green-50 border-green-200';
+      default:
+        return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <TopNavBar />
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          onClick={() => navigate("/admin/companies")}
+          className="mb-6"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Companies
+        </Button>
+
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+          <div className="flex items-start gap-4">
+            {company.logoUrl && (
+              <img
+                src={company.logoUrl}
+                alt={`${company.legalName} logo`}
+                className="w-16 h-16 rounded-lg object-cover border"
+              />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold">{company.legalName}</h1>
+              {company.tradeName && company.tradeName !== company.legalName && (
+                <p className="text-lg text-muted-foreground">Trading as: {company.tradeName}</p>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                <Badge className={getStatusColor(company.status)}>
+                  {getStatusIcon(company.status)}
+                  <span className="ml-1">{company.status.charAt(0).toUpperCase() + company.status.slice(1)}</span>
+                </Badge>
+                {company.websiteVerified && (
+                  <Badge className="bg-green-100 text-green-800 border-green-200">
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    Website Verified
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
+            {company.status === 'pending' && (
+              <>
+                <Button
+                  onClick={() => approveMutation.mutate()}
+                  disabled={approveMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Approve
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setIsRejectDialogOpen(true)}
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+              </>
+            )}
+            {company.status === 'approved' && (
+              <Button
+                variant="destructive"
+                onClick={() => suspendMutation.mutate()}
+                disabled={suspendMutation.isPending}
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                Suspend
+              </Button>
+            )}
+            {company.status === 'suspended' && (
+              <Button
+                onClick={() => reactivateMutation.mutate()}
+                disabled={reactivateMutation.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <PlayCircle className="h-4 w-4 mr-2" />
+                Reactivate
+              </Button>
+            )}
           </div>
         </div>
-        <Badge {...getStatusBadge(company.status)}>
-          {company.status}
-        </Badge>
-      </div>
 
-      {/* Action Buttons */}
-      <div className="flex gap-2">
-        {company.status === 'pending' && (
-          <>
-            <Button
-              onClick={() => approveMutation.mutate()}
-              disabled={approveMutation.isPending}
-              className="gap-2"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Approve Company
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => setIsRejectDialogOpen(true)}
-              disabled={rejectMutation.isPending}
-              className="gap-2"
-            >
-              <XCircle className="h-4 w-4" />
-              Reject Company
-            </Button>
-          </>
+        {/* Rejection Reason Alert */}
+        {company.status === 'rejected' && company.rejectionReason && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <XCircle className="h-4 w-4 text-red-600" />
+            <AlertTitle className="text-red-800">Rejection Reason</AlertTitle>
+            <AlertDescription className="text-red-700">
+              {company.rejectionReason}
+            </AlertDescription>
+          </Alert>
         )}
-        {company.status === 'approved' && (
-          <Button
-            variant="outline"
-            onClick={() => suspendMutation.mutate()}
-            disabled={suspendMutation.isPending}
-            className="gap-2"
-          >
-            <Ban className="h-4 w-4" />
-            Suspend Company
-          </Button>
-        )}
-        {company.status === 'suspended' && (
-          <Button
-            variant="outline"
-            onClick={() => unsuspendMutation.mutate()}
-            disabled={unsuspendMutation.isPending}
-            className="gap-2"
-          >
-            <PlayCircle className="h-4 w-4" />
-            Unsuspend Company
-          </Button>
-        )}
-      </div>
 
-      {/* Rejection Reason Alert */}
-      {company.status === 'rejected' && company.rejectionReason && (
-        <Card className="border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive flex items-center gap-2">
-              <XCircle className="h-5 w-5" />
-              Rejection Reason
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm">{company.rejectionReason}</p>
-          </CardContent>
-        </Card>
-      )}
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="offers">Offers ({offers.length})</TabsTrigger>
+            <TabsTrigger value="payments">Payments ({payments.length})</TabsTrigger>
+            <TabsTrigger value="creators">Creators ({relationships.length})</TabsTrigger>
+          </TabsList>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="offers">Offers</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="creators">Creator Relationships</TabsTrigger>
-        </TabsList>
-
-        {/* Details Tab */}
-        <TabsContent value="details" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Company Information */}
-            <Card className="border-card-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Company Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Legal Name</div>
-                  <div className="font-medium">{company.legalName}</div>
-                </div>
-                {company.tradeName && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Trade Name</div>
-                    <div className="font-medium">{company.tradeName}</div>
-                  </div>
-                )}
-                {company.industry && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Industry</div>
-                    <div className="font-medium flex items-center gap-2">
-                      <Briefcase className="h-4 w-4" />
-                      {company.industry}
+          {/* Details Tab */}
+          <TabsContent value="details" className="space-y-6">
+            {/* Company Info Grid */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Basic Information */}
+              <Card className="border-card-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    Company Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {company.industry && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Industry</div>
+                      <div className="font-medium flex items-center gap-2">
+                        <Briefcase className="h-4 w-4" />
+                        {company.industry}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {company.websiteUrl && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Website</div>
-                    <a
-                      href={company.websiteUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline inline-flex items-center gap-2"
-                    >
-                      <Globe className="h-4 w-4" />
-                      {company.websiteUrl}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
-                {company.companySize && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Company Size</div>
-                    <div className="font-medium">{company.companySize}</div>
-                  </div>
-                )}
-                {company.yearFounded && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Year Founded</div>
-                    <div className="font-medium">{company.yearFounded}</div>
-                  </div>
-                )}
-                {company.description && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Description</div>
-                    <div className="text-sm">{company.description}</div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                  {company.companySize && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Company Size</div>
+                      <div className="font-medium flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        {company.companySize}
+                      </div>
+                    </div>
+                  )}
+                  {company.yearFounded && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Year Founded</div>
+                      <div className="font-medium flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        {company.yearFounded}
+                      </div>
+                    </div>
+                  )}
+                  {company.websiteUrl && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Website</div>
+                      <a
+                        href={company.websiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-primary hover:underline flex items-center gap-2"
+                      >
+                        <Globe className="h-4 w-4" />
+                        {company.websiteUrl}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
+                  )}
+                  {company.description && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Description</div>
+                      <p className="text-sm">{company.description}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* Contact Information */}
-            <Card className="border-card-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Mail className="h-5 w-5" />
-                  Contact Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {company.user?.email && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Email</div>
-                    <div className="font-medium flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      {company.user.email}
+              {/* Contact Information */}
+              <Card className="border-card-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    Contact Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {company.user && (
+                    <>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Account Email</div>
+                        <div className="font-medium flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          {company.user.email}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Username</div>
+                        <div className="font-medium">@{company.user.username}</div>
+                      </div>
+                      {(company.user.firstName || company.user.lastName) && (
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">Account Name</div>
+                          <div className="font-medium">
+                            {company.user.firstName} {company.user.lastName}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {company.contactName && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Contact Person</div>
+                      <div className="font-medium">{company.contactName}</div>
+                      {company.contactJobTitle && (
+                        <div className="text-sm text-muted-foreground">{company.contactJobTitle}</div>
+                      )}
                     </div>
-                  </div>
-                )}
-                {company.contactName && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Contact Person</div>
-                    <div className="font-medium">{company.contactName}</div>
-                  </div>
-                )}
-                {company.contactJobTitle && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Job Title</div>
-                    <div className="font-medium">{company.contactJobTitle}</div>
-                  </div>
-                )}
-                {company.phoneNumber && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Phone Number</div>
-                    <div className="font-medium flex items-center gap-2">
-                      <Phone className="h-4 w-4" />
-                      {company.phoneNumber}
+                  )}
+                  {company.phoneNumber && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Phone</div>
+                      <div className="font-medium flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        {company.phoneNumber}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {company.businessAddress && (
-                  <div>
-                    <div className="text-xs text-muted-foreground mb-1">Business Address</div>
-                    <div className="text-sm flex items-start gap-2">
-                      <MapPin className="h-4 w-4 mt-0.5" />
-                      {company.businessAddress}
+                  )}
+                  {company.businessAddress && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Business Address</div>
+                      <div className="font-medium flex items-start gap-2">
+                        <MapPin className="h-4 w-4 mt-1 flex-shrink-0" />
+                        <span>{company.businessAddress}</span>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
 
-            {/* Account Information */}
-            <Card className="border-card-border">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Account Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Username</div>
-                  <div className="font-medium">@{company.user?.username}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Joined</div>
-                  <div className="font-medium">
-                    {new Date(company.createdAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </div>
-                </div>
-                {company.approvedAt && (
+              {/* Platform Fee Information */}
+              {feeInfo && (
+                <Card className="border-card-border">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 justify-between">
+                      <div className="flex items-center gap-2">
+                        <Percent className="h-5 w-5" />
+                        Platform Fees
+                      </div>
+                      {feeInfo.isUsingCustomFee && (
+                        <Badge variant="outline" className="text-blue-600 border-blue-300">
+                          Custom Fee
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Platform Fee</div>
+                        <div className="text-2xl font-bold">
+                          {feeInfo.customPlatformFeeDisplay || feeInfo.defaultPlatformFeeDisplay}
+                        </div>
+                        {feeInfo.isUsingCustomFee && (
+                          <div className="text-xs text-muted-foreground">
+                            Default: {feeInfo.defaultPlatformFeeDisplay}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs text-muted-foreground mb-1">Processing Fee</div>
+                        <div className="text-2xl font-bold">{feeInfo.processingFeeDisplay}</div>
+                        <div className="text-xs text-muted-foreground">Stripe</div>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Total Fees</div>
+                      <div className="text-3xl font-bold text-primary">
+                        {(feeInfo.effectiveTotalFee * 100).toFixed(2)}%
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (feeInfo.customPlatformFeePercentage !== null) {
+                            setFeeInputValue((feeInfo.customPlatformFeePercentage * 100).toFixed(2));
+                          }
+                          setIsFeeDialogOpen(true);
+                        }}
+                      >
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        {feeInfo.isUsingCustomFee ? 'Update' : 'Set'} Custom Fee
+                      </Button>
+                      {feeInfo.isUsingCustomFee && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => clearFeeMutation.mutate()}
+                          disabled={clearFeeMutation.isPending}
+                        >
+                          Clear Custom Fee
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Risk Assessment */}
+              {riskInfo && (
+                <Card className={`border-2 ${getRiskColor(riskInfo.riskLevel)}`}>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 justify-between">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Risk Assessment
+                      </div>
+                      <Badge variant="outline" className="capitalize">
+                        {riskInfo.riskLevel} Risk
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Risk Score</div>
+                      <div className="text-3xl font-bold">{riskInfo.riskScore}/100</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Recommendation</div>
+                      <div className="font-medium flex items-center gap-2">
+                        {riskInfo.overallRecommendation === 'increase' && <TrendingUp className="h-4 w-4 text-green-600" />}
+                        {riskInfo.overallRecommendation === 'decrease' && <TrendingDown className="h-4 w-4 text-red-600" />}
+                        {riskInfo.overallRecommendation === 'maintain' && <Info className="h-4 w-4 text-blue-600" />}
+                        {riskInfo.recommendationText}
+                      </div>
+                    </div>
+
+                    {riskInfo.indicators.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">Key Indicators</div>
+                        {riskInfo.indicators.slice(0, 3).map((indicator, index) => (
+                          <div
+                            key={index}
+                            className={`p-3 rounded-lg border ${
+                              indicator.type === 'warning'
+                                ? 'bg-amber-50 border-amber-200'
+                                : indicator.type === 'success'
+                                ? 'bg-green-50 border-green-200'
+                                : 'bg-blue-50 border-blue-200'
+                            }`}
+                          >
+                            <div className="font-medium text-sm">{indicator.title}</div>
+                            <div className="text-xs text-muted-foreground mt-1">{indicator.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Total Payments:</span>
+                        <span className="font-medium ml-2">{riskInfo.stats.totalPayments}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Completed:</span>
+                        <span className="font-medium ml-2">{riskInfo.stats.completedPayments}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Failed:</span>
+                        <span className="font-medium ml-2 text-red-600">{riskInfo.stats.failedPayments}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Disputed:</span>
+                        <span className="font-medium ml-2 text-amber-600">{riskInfo.stats.disputedPayments}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Total Volume:</span>
+                        <span className="font-medium ml-2">{riskInfo.stats.totalVolume}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-muted-foreground">Account Age:</span>
+                        <span className="font-medium ml-2">{riskInfo.stats.accountAgeDays} days</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Timestamps */}
+              <Card className="border-card-border md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5" />
+                    Timeline
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Approved</div>
+                    <div className="text-xs text-muted-foreground mb-1">Joined</div>
                     <div className="font-medium">
-                      {new Date(company.approvedAt).toLocaleDateString('en-US', {
+                      {new Date(company.createdAt).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric',
                       })}
                     </div>
                   </div>
-                )}
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">Last Updated</div>
-                  <div className="font-medium">
-                    {new Date(company.updatedAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Verification Documents */}
-            {(verificationDocuments.length > 0 || company.verificationDocumentUrl) && (
-              <Card className="border-card-border">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Verification Documents
-                    <Badge variant="outline">
-                      {verificationDocuments.length > 0 ? verificationDocuments.length : 1}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {verificationDocuments.length > 0 ? (
-                    <div className="space-y-3">
-                      {verificationDocuments.map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
-                        >
-                          <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{doc.documentName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {doc.documentType.toUpperCase()} • {formatFileSize(doc.fileSize)}
-                              {doc.uploadedAt && (
-                                <> • Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</>
-                              )}
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleViewDocument(doc.documentUrl)}
-                              disabled={isLoadingDocument}
-                              title="View document"
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDownloadDocument(doc.documentUrl, doc.documentName)}
-                              title="Download document"
-                            >
-                              <Download className="h-4 w-4 mr-1" />
-                              Download
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                  {company.approvedAt && (
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">Approved</div>
+                      <div className="font-medium">
+                        {new Date(company.approvedAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </div>
                     </div>
-                  ) : company.verificationDocumentUrl ? (
-                    <button
-                      onClick={() => handleViewDocument(company.verificationDocumentUrl!)}
-                      disabled={isLoadingDocument}
-                      className="inline-flex items-center gap-2 text-primary hover:underline disabled:opacity-50 disabled:cursor-wait"
-                    >
-                      <FileText className="h-4 w-4" />
-                      {isLoadingDocument ? "Loading..." : "View Document"}
-                      <ExternalLink className="h-3 w-3" />
-                    </button>
-                  ) : null}
+                  )}
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Last Updated</div>
+                    <div className="font-medium">
+                      {new Date(company.updatedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-            )}
 
-            {/* Website Verification Card */}
-            {company.websiteUrl && (
-              <Card className="border-card-border md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5" />
-                    Website Verification
-                    {company.websiteVerified ? (
-                      <Badge className="bg-green-100 text-green-800 border-green-200 ml-2">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Verified
+              {/* Verification Documents */}
+              {(verificationDocuments.length > 0 || company.verificationDocumentUrl) && (
+                <Card className="border-card-border md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Verification Documents
+                      <Badge variant="outline">
+                        {verificationDocuments.length > 0 ? verificationDocuments.length : 1}
                       </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {verificationDocuments.length > 0 ? (
+                      <div className="space-y-3">
+                        {verificationDocuments.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
+                          >
+                            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{doc.documentName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc.documentType.toUpperCase()} • {formatFileSize(doc.fileSize)}
+                                {doc.uploadedAt && (
+                                  <> • Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDocument(doc.id, doc.documentName, doc.documentType)}
+                                title="View document"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadDocument(doc.id, doc.documentName)}
+                                title="Download document"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <Badge variant="secondary" className="ml-2">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Not Verified
-                      </Badge>
+                      <p className="text-sm text-muted-foreground">No verification documents uploaded</p>
                     )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {company.websiteVerified && company.websiteVerifiedAt && (
-                    <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
-                      <div className="flex items-start gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                        <div>
-                          <p className="font-medium text-green-800 dark:text-green-200">Website Ownership Verified</p>
-                          <p className="text-sm text-green-700 dark:text-green-300">
-                            Verified via {company.websiteVerificationMethod === 'meta_tag' ? 'Meta Tag' : 'DNS TXT Record'} on{' '}
-                            {new Date(company.websiteVerifiedAt).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                            })}
-                          </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Website Verification Card */}
+              {company.websiteUrl && (
+                <Card className="border-card-border md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5" />
+                      Website Verification
+                      {company.websiteVerified ? (
+                        <Badge className="bg-green-100 text-green-800 border-green-200 ml-2">
+                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                          Verified
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="ml-2">
+                          <Clock className="h-3 w-3 mr-1" />
+                          Not Verified
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {company.websiteVerified && company.websiteVerifiedAt && (
+                      <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-green-800 dark:text-green-200">Website Ownership Verified</p>
+                            <p className="text-sm text-green-700 dark:text-green-300">
+                              Verified via {company.websiteVerificationMethod === 'meta_tag' ? 'Meta Tag' : 'DNS TXT Record'} on{' '}
+                              {new Date(company.websiteVerifiedAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                              })}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {company.websiteVerificationToken && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">Verification Token:</p>
-                      <div className="p-3 bg-muted rounded-lg font-mono text-sm break-all">
-                        {company.websiteVerificationToken}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          const response = await apiRequest("POST", `/api/admin/companies/${companyId}/generate-verification-token`);
-                          const data = await response.json();
-                          queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
-                          toast({
-                            title: "Token Generated",
-                            description: "Verification token has been generated",
-                          });
-                        } catch (error: any) {
-                          setErrorDialog({
-                            open: true,
-                            title: "Error",
-                            description: error.message || "Failed to generate token",
-                          });
-                        }
-                      }}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      {company.websiteVerificationToken ? 'Regenerate Token' : 'Generate Token'}
-                    </Button>
-
-                    {company.websiteVerificationToken && !company.websiteVerified && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const response = await apiRequest("POST", `/api/admin/companies/${companyId}/verify-website`, { method: 'meta_tag' });
-                              const data = await response.json();
-                              if (data.success) {
-                                queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
-                                toast({
-                                  title: "Verification Successful",
-                                  description: "Website verified via Meta Tag",
-                                });
-                              } else {
-                                toast({
-                                  title: "Verification Failed",
-                                  description: data.error || "Could not verify website",
-                                  variant: "destructive",
-                                });
-                              }
-                            } catch (error: any) {
-                              toast({
-                                title: "Verification Failed",
-                                description: error.message || "Could not verify website",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                        >
-                          <Code className="h-4 w-4 mr-2" />
-                          Verify Meta Tag
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const response = await apiRequest("POST", `/api/admin/companies/${companyId}/verify-website`, { method: 'dns_txt' });
-                              const data = await response.json();
-                              if (data.success) {
-                                queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
-                                toast({
-                                  title: "Verification Successful",
-                                  description: "Website verified via DNS TXT Record",
-                                });
-                              } else {
-                                toast({
-                                  title: "Verification Failed",
-                                  description: data.error || "Could not verify website",
-                                  variant: "destructive",
-                                });
-                              }
-                            } catch (error: any) {
-                              toast({
-                                title: "Verification Failed",
-                                description: error.message || "Could not verify website",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                        >
-                          <Server className="h-4 w-4 mr-2" />
-                          Verify DNS TXT
-                        </Button>
-                      </>
                     )}
 
-                    {company.websiteVerified && (
+                    {company.websiteVerificationToken && (
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Verification Token:</p>
+                        <div className="p-3 bg-muted rounded-lg font-mono text-sm break-all">
+                          {company.websiteVerificationToken}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                          if (confirm('Are you sure you want to reset the website verification status?')) {
+                          try {
+                            const response = await apiRequest("POST", `/api/admin/companies/${companyId}/generate-verification-token`);
+                            const data = await response.json();
+                            queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
+                            toast({
+                              title: "Token Generated",
+                              description: "Verification token has been generated",
+                            });
+                          } catch (error: any) {
+                            setErrorDialog({
+                              open: true,
+                              title: "Error",
+                              description: error.message || "Failed to generate token",
+                            });
+                          }
+                        }}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        {company.websiteVerificationToken ? 'Regenerate Token' : 'Generate Token'}
+                      </Button>
+
+                      {company.websiteVerificationToken && !company.websiteVerified && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const response = await apiRequest("POST", `/api/admin/companies/${companyId}/verify-website`, { method: 'meta_tag' });
+                                const data = await response.json();
+                                if (data.success) {
+                                  queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
+                                  toast({
+                                    title: "Verification Successful",
+                                    description: "Website verified via Meta Tag",
+                                  });
+                                } else {
+                                  toast({
+                                    title: "Verification Failed",
+                                    description: data.error || "Could not verify website",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (error: any) {
+                                toast({
+                                  title: "Verification Failed",
+                                  description: error.message || "Could not verify website",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Code className="h-4 w-4 mr-2" />
+                            Verify Meta Tag
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const response = await apiRequest("POST", `/api/admin/companies/${companyId}/verify-website`, { method: 'dns_txt' });
+                                const data = await response.json();
+                                if (data.success) {
+                                  queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
+                                  toast({
+                                    title: "Verification Successful",
+                                    description: "Website verified via DNS TXT Record",
+                                  });
+                                } else {
+                                  toast({
+                                    title: "Verification Failed",
+                                    description: data.error || "Could not verify website",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (error: any) {
+                                toast({
+                                  title: "Verification Failed",
+                                  description: error.message || "Could not verify website",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                          >
+                            <Server className="h-4 w-4 mr-2" />
+                            Verify DNS TXT
+                          </Button>
+                        </>
+                      )}
+
+                      {company.websiteVerified && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
                             try {
-                              await apiRequest("POST", `/api/admin/companies/${companyId}/reset-website-verification`);
+                              const response = await apiRequest("POST", `/api/admin/companies/${companyId}/unverify-website`);
+                              const data = await response.json();
                               queryClient.invalidateQueries({ queryKey: [`/api/admin/companies/${companyId}`] });
                               toast({
-                                title: "Verification Reset",
-                                description: "Website verification status has been reset",
+                                title: "Website Unverified",
+                                description: "Website verification has been removed",
                               });
                             } catch (error: any) {
                               setErrorDialog({
                                 open: true,
                                 title: "Error",
-                                description: error.message || "Failed to reset verification",
+                                description: error.message || "Failed to unverify website",
                               });
                             }
-                          }
-                        }}
-                      >
-                        <XCircle className="h-4 w-4 mr-2" />
-                        Reset Verification
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Risk Indicators Card - Fee Adjustment Hints */}
-            <Card className="border-card-border md:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Fee Adjustment Indicators
-                  {riskInfo && (
-                    <Badge
-                      className={`ml-2 ${
-                        riskInfo.riskLevel === 'high'
-                          ? 'bg-red-100 text-red-800 border-red-200'
-                          : riskInfo.riskLevel === 'medium'
-                          ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                          : 'bg-green-100 text-green-800 border-green-200'
-                      }`}
-                    >
-                      {riskInfo.riskLevel === 'high' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                      {riskInfo.riskLevel === 'medium' && <Info className="h-3 w-3 mr-1" />}
-                      {riskInfo.riskLevel === 'low' && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                      {riskInfo.riskLevel.charAt(0).toUpperCase() + riskInfo.riskLevel.slice(1)} Risk
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {loadingRiskInfo ? (
-                  <div className="text-center py-4 text-muted-foreground">Loading risk indicators...</div>
-                ) : riskInfo ? (
-                  <>
-                    {/* Overall Recommendation */}
-                    <div className={`p-4 rounded-lg border-2 ${
-                      riskInfo.overallRecommendation === 'increase'
-                        ? 'bg-red-50 border-red-200'
-                        : riskInfo.overallRecommendation === 'decrease'
-                        ? 'bg-green-50 border-green-200'
-                        : 'bg-gray-50 border-gray-200'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {riskInfo.overallRecommendation === 'increase' && (
-                          <>
-                            <TrendingUp className="h-5 w-5 text-red-600" />
-                            <span className="font-semibold text-red-700">Consider Fee Increase</span>
-                          </>
-                        )}
-                        {riskInfo.overallRecommendation === 'decrease' && (
-                          <>
-                            <TrendingDown className="h-5 w-5 text-green-600" />
-                            <span className="font-semibold text-green-700">Eligible for Fee Reduction</span>
-                          </>
-                        )}
-                        {riskInfo.overallRecommendation === 'maintain' && (
-                          <>
-                            <CheckCircle2 className="h-5 w-5 text-gray-600" />
-                            <span className="font-semibold text-gray-700">Maintain Current Fee</span>
-                          </>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{riskInfo.recommendationText}</p>
-                    </div>
-
-                    {/* Risk Score */}
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm text-muted-foreground">Risk Score:</div>
-                      <div className="flex-1 bg-gray-200 rounded-full h-3">
-                        <div
-                          className={`h-3 rounded-full transition-all ${
-                            riskInfo.riskScore >= 70 ? 'bg-red-500' :
-                            riskInfo.riskScore >= 40 ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}
-                          style={{ width: `${riskInfo.riskScore}%` }}
-                        />
-                      </div>
-                      <div className="text-sm font-medium">{riskInfo.riskScore}/100</div>
-                    </div>
-
-                    {/* Indicators List */}
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium text-muted-foreground">Indicators:</div>
-                      {riskInfo.indicators.map((indicator, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-lg flex items-start gap-3 ${
-                            indicator.type === 'warning'
-                              ? 'bg-red-50 border border-red-100'
-                              : indicator.type === 'success'
-                              ? 'bg-green-50 border border-green-100'
-                              : 'bg-blue-50 border border-blue-100'
-                          }`}
-                        >
-                          <div className="mt-0.5">
-                            {indicator.type === 'warning' && <AlertTriangle className="h-4 w-4 text-red-500" />}
-                            {indicator.type === 'success' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                            {indicator.type === 'info' && <Info className="h-4 w-4 text-blue-500" />}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">{indicator.title}</span>
-                              <Badge variant="outline" className="text-xs">
-                                {indicator.category}
-                              </Badge>
-                              {indicator.recommendation !== 'neutral' && (
-                                <Badge
-                                  className={`text-xs ${
-                                    indicator.recommendation === 'increase'
-                                      ? 'bg-red-100 text-red-700'
-                                      : 'bg-green-100 text-green-700'
-                                  }`}
-                                >
-                                  {indicator.recommendation === 'increase' ? '↑ Fee' : '↓ Fee'}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">{indicator.description}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Stats Summary */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t">
-                      <div className="text-center p-2">
-                        <div className="text-lg font-bold">{riskInfo.stats.totalPayments}</div>
-                        <div className="text-xs text-muted-foreground">Total Payments</div>
-                      </div>
-                      <div className="text-center p-2">
-                        <div className="text-lg font-bold text-green-600">{riskInfo.stats.completedPayments}</div>
-                        <div className="text-xs text-muted-foreground">Completed</div>
-                      </div>
-                      <div className="text-center p-2">
-                        <div className="text-lg font-bold text-red-600">{riskInfo.stats.disputedPayments}</div>
-                        <div className="text-xs text-muted-foreground">Disputed</div>
-                      </div>
-                      <div className="text-center p-2">
-                        <div className="text-lg font-bold">${riskInfo.stats.totalVolume}</div>
-                        <div className="text-xs text-muted-foreground">Total Volume</div>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-4 text-muted-foreground">Failed to load risk indicators</div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Platform Fee Override Card */}
-            <Card className="border-card-border md:col-span-2">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Percent className="h-5 w-5" />
-                  Platform Fee Override
-                  {feeInfo?.isUsingCustomFee ? (
-                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 ml-2">
-                      <DollarSign className="h-3 w-3 mr-1" />
-                      Custom Fee
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="ml-2">
-                      Default Fee
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {loadingFeeInfo ? (
-                  <div className="text-center py-4 text-muted-foreground">Loading fee information...</div>
-                ) : feeInfo ? (
-                  <>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div className="p-4 bg-muted/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Platform Fee</div>
-                        <div className="text-2xl font-bold text-primary">
-                          {feeInfo.isUsingCustomFee ? feeInfo.customPlatformFeeDisplay : feeInfo.defaultPlatformFeeDisplay}
-                        </div>
-                        {feeInfo.isUsingCustomFee && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Default: {feeInfo.defaultPlatformFeeDisplay}
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4 bg-muted/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Processing Fee (Stripe)</div>
-                        <div className="text-2xl font-bold">{feeInfo.processingFeeDisplay}</div>
-                        <div className="text-xs text-muted-foreground mt-1">Fixed rate</div>
-                      </div>
-                      <div className="p-4 bg-muted/50 rounded-lg">
-                        <div className="text-xs text-muted-foreground mb-1">Total Fee</div>
-                        <div className="text-2xl font-bold text-green-600">
-                          {(feeInfo.effectiveTotalFee * 100).toFixed(2)}%
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">Creator receives {((1 - feeInfo.effectiveTotalFee) * 100).toFixed(0)}%</div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setFeeInputValue(feeInfo.isUsingCustomFee && feeInfo.customPlatformFeePercentage !== null
-                            ? (feeInfo.customPlatformFeePercentage * 100).toString()
-                            : "");
-                          setIsFeeDialogOpen(true);
-                        }}
-                      >
-                        <Percent className="h-4 w-4 mr-2" />
-                        {feeInfo.isUsingCustomFee ? 'Edit Custom Fee' : 'Set Custom Fee'}
-                      </Button>
-
-                      {feeInfo.isUsingCustomFee && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm('Are you sure you want to remove the custom fee and revert to the default platform fee?')) {
-                              resetFeeMutation.mutate();
-                            }
                           }}
-                          disabled={resetFeeMutation.isPending}
                         >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          {resetFeeMutation.isPending ? 'Resetting...' : 'Reset to Default'}
+                          Remove Verification
                         </Button>
                       )}
                     </div>
-                  </>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Offers Tab */}
+          <TabsContent value="offers">
+            <Card className="border-card-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5" />
+                  Company Offers ({offers.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingOffers ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading offers...</div>
+                ) : offers.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No offers yet</div>
                 ) : (
-                  <div className="text-center py-4 text-muted-foreground">Failed to load fee information</div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Compensation</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Created</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {offers.map((offer) => (
+                        <TableRow key={offer.id}>
+                          <TableCell className="font-medium">{offer.title}</TableCell>
+                          <TableCell>${(offer.compensation / 100).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Badge variant={offer.status === 'approved' ? 'default' : 'secondary'}>
+                              {offer.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(offer.createdAt).toLocaleDateString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </CardContent>
             </Card>
-          </div>
-        </TabsContent>
+          </TabsContent>
 
-        {/* Offers Tab */}
-        <TabsContent value="offers">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Offers ({offers.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingOffers ? (
-                <div className="text-center py-8 text-muted-foreground">Loading offers...</div>
-              ) : offers.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No offers created yet</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Commission</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {offers.map((offer) => (
-                      <TableRow key={offer.id}>
-                        <TableCell className="font-medium">{offer.title}</TableCell>
-                        <TableCell>
-                          {offer.commissionType === 'per_sale' && `$${offer.commissionAmount} per sale`}
-                          {offer.commissionType === 'per_lead' && `$${offer.commissionAmount} per lead`}
-                          {offer.commissionType === 'per_click' && `$${offer.commissionAmount} per click`}
-                          {offer.commissionType === 'monthly_retainer' && `$${offer.commissionAmount}/month`}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={offer.status === 'approved' ? 'default' : 'secondary'}>
-                            {offer.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(offer.createdAt).toLocaleDateString()}
-                        </TableCell>
+          {/* Payments Tab */}
+          <TabsContent value="payments">
+            <Card className="border-card-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Payment History ({payments.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingPayments ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading payments...</div>
+                ) : payments.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No payments yet</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Creator</TableHead>
+                        <TableHead>Offer</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Date</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            @{payment.creator?.username || 'Unknown'}
+                          </TableCell>
+                          <TableCell>{payment.offer?.title || 'Unknown Offer'}</TableCell>
+                          <TableCell className="font-medium">
+                            ${(Number(payment.netAmount || payment.amount || 0) / 100).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
+                              {payment.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(payment.createdAt).toLocaleDateString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Payments Tab */}
-        <TabsContent value="payments">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Payment History ({payments.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingPayments ? (
-                <div className="text-center py-8 text-muted-foreground">Loading payments...</div>
-              ) : payments.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No payments yet</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Creator</TableHead>
-                      <TableHead>Offer</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Date</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>
-                          @{payment.creator?.username || 'Unknown'}
-                        </TableCell>
-                        <TableCell>{payment.offer?.title || 'Unknown Offer'}</TableCell>
-                        <TableCell className="font-medium">
-                          ${(Number(payment.netAmount || payment.amount || 0) / 100).toFixed(2)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={payment.status === 'completed' ? 'default' : 'secondary'}>
-                            {payment.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(payment.createdAt).toLocaleDateString()}
-                        </TableCell>
+          {/* Creator Relationships Tab */}
+          <TabsContent value="creators">
+            <Card className="border-card-border">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Creator Relationships ({relationships.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingRelationships ? (
+                  <div className="text-center py-8 text-muted-foreground">Loading relationships...</div>
+                ) : relationships.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">No creator relationships yet</div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Creator</TableHead>
+                        <TableHead>Offer</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Applied</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Creator Relationships Tab */}
-        <TabsContent value="creators">
-          <Card className="border-card-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Creator Relationships ({relationships.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingRelationships ? (
-                <div className="text-center py-8 text-muted-foreground">Loading relationships...</div>
-              ) : relationships.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">No creator relationships yet</div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Creator</TableHead>
-                      <TableHead>Offer</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Applied</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {relationships.map((relationship) => (
-                      <TableRow key={relationship.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">
-                              @{relationship.creator?.username || 'Unknown'}
+                    </TableHeader>
+                    <TableBody>
+                      {relationships.map((relationship) => (
+                        <TableRow key={relationship.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">
+                                @{relationship.creator?.username || 'Unknown'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {relationship.creator?.email}
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {relationship.creator?.email}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>{relationship.offer?.title || 'Unknown Offer'}</TableCell>
-                        <TableCell>
-                          <Badge variant={relationship.status === 'approved' ? 'default' : 'secondary'}>
-                            {relationship.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(relationship.createdAt).toLocaleDateString()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                          </TableCell>
+                          <TableCell>{relationship.offer?.title || 'Unknown Offer'}</TableCell>
+                          <TableCell>
+                            <Badge variant={relationship.status === 'approved' ? 'default' : 'secondary'}>
+                              {relationship.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(relationship.createdAt).toLocaleDateString()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Rejection Dialog */}
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
@@ -1561,6 +1478,47 @@ export default function AdminCompanyDetail() {
         description={errorDialog.description}
         variant="error"
       />
+
+      {/* PDF Viewer Dialog */}
+      <Dialog open={isPdfViewerOpen} onOpenChange={setIsPdfViewerOpen}>
+        <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {currentDocumentName || "Document Viewer"}
+            </DialogTitle>
+            <DialogDescription>
+              Verification document preview
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 border rounded-lg overflow-hidden bg-muted/10">
+            {currentDocumentUrl && (
+              <iframe
+                src={currentDocumentUrl}
+                className="w-full h-full"
+                title={currentDocumentName}
+              />
+            )}
+          </div>
+          <DialogFooter className="flex-row justify-between items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(currentDocumentUrl, '_blank')}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open in New Tab
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsPdfViewerOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

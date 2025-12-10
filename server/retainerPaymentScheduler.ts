@@ -198,7 +198,7 @@ export class RetainerPaymentScheduler {
         await this.notificationService.sendNotification(
           contract.assignedCreatorId,
           'payment_received',
-          'Monthly Retainer Payment Received! 💰',
+          'Monthly Retainer Payment Received! \u1F4B0',
           `$${fees.netAmount.toFixed(2)} has been sent to your payment method for month ${monthNumber} of "${contract.title}". Transaction ID: ${paymentResult.transactionId}`,
           {
             userName: creator.firstName || creator.username,

@@ -21,7 +21,7 @@ async function runMigration() {
     console.log('[Migration] Executing SQL migration...');
     await client.query(sql);
 
-    console.log('[Migration] ✓ Successfully added notification enum values!');
+    console.log('[Migration] \u2713 Successfully added notification enum values!');
     console.log('[Migration] The following notification types are now available:');
 
     // Query to show all enum values

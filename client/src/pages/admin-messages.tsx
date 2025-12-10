@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
+import { useLocation } from "wouter";
 import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
@@ -34,7 +35,7 @@ import {
 } from "lucide-react";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
-import { proxiedSrc } from "../lib/image";
+import { isImageUrl, isVideoUrl, proxiedSrc } from "../lib/image";
 import {
   exportConversationPDF,
   exportConversationCSV,
@@ -53,10 +54,28 @@ interface EnhancedMessage {
   senderType?: 'user' | 'platform';
 }
 
+const getAttachmentType = (url: string) => {
+  if (isVideoUrl(url)) return 'video' as const;
+  if (isImageUrl(url)) return 'image' as const;
+  return 'file' as const;
+};
+
+const getAttachmentName = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const pathname = parsed.pathname;
+    const lastSegment = pathname.split('/').filter(Boolean).pop();
+    return decodeURIComponent(lastSegment || 'Attachment');
+  } catch (error) {
+    return url.split('/').filter(Boolean).pop() || 'Attachment';
+  }
+};
+
 export default function AdminMessages() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, navigate] = useLocation();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -151,6 +170,14 @@ export default function AdminMessages() {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  const handleBackNavigation = useCallback(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    navigate('/admin/dashboard');
+  }, [navigate]);
 
   const formatMessageDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -269,11 +296,22 @@ export default function AdminMessages() {
     <div className="space-y-6">
       <TopNavBar />
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Message Monitoring</h1>
-          <p className="text-muted-foreground mt-2">
-            View and monitor all conversations across the platform
-          </p>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBackNavigation}
+            className="h-10 w-10"
+            title="Go back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Message Monitoring</h1>
+            <p className="text-muted-foreground mt-2">
+              View and monitor all conversations across the platform
+            </p>
+          </div>
         </div>
       </div>
 
@@ -284,7 +322,18 @@ export default function AdminMessages() {
             <CardContent className="p-0 flex flex-col h-full">
               <div className="p-4 border-b shrink-0">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-semibold text-lg">All Conversations</h2>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleBackNavigation}
+                      className="h-10 w-10 md:hidden"
+                      title="Go back"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <h2 className="font-semibold text-lg">All Conversations</h2>
+                  </div>
                   <Badge variant="secondary">{conversations.length}</Badge>
                 </div>
                 <div className="relative">
@@ -526,23 +575,57 @@ export default function AdminMessages() {
                               }`}>
                                 {/* Attachments */}
                                 {message.attachments && message.attachments.length > 0 && (
-                                  <div className="mb-2 space-y-2">
-                                    {message.attachments.map((url, idx) => (
-                                      <a
-                                        key={idx}
-                                        href={url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="block"
-                                      >
-                                        <img
-                                          src={proxiedSrc(url)}
-                                          alt={`Attachment ${idx + 1}`}
-                                          className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
-                                          style={{ maxHeight: '300px' }}
-                                        />
-                                      </a>
-                                    ))}
+                                  <div className="mb-2 space-y-3">
+                                    {(() => {
+                                      return message.attachments.map((url, idx) => {
+                                        const type = getAttachmentType(url);
+
+                                        if (type === 'image') {
+                                          return (
+                                            <a
+                                              key={idx}
+                                              href={proxiedSrc(url) || url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="block"
+                                            >
+                                              <img
+                                                src={proxiedSrc(url)}
+                                                alt={`Attachment ${idx + 1}`}
+                                                className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                                style={{ maxHeight: '300px' }}
+                                              />
+                                            </a>
+                                          );
+                                        }
+
+                                        if (type === 'video') {
+                                          return (
+                                            <div key={idx} className="rounded-lg overflow-hidden bg-black/60">
+                                              <video
+                                                src={proxiedSrc(url)}
+                                                controls
+                                                className="w-full max-h-[320px]"
+                                              />
+                                            </div>
+                                          );
+                                        }
+
+                                        return (
+                                          <a
+                                            key={idx}
+                                            href={proxiedSrc(url) || url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 p-3 rounded-lg border bg-background/80 hover:bg-muted transition"
+                                          >
+                                            <FileText className="h-4 w-4" />
+                                            <span className="text-sm truncate flex-1">{getAttachmentName(url)}</span>
+                                            <Download className="h-4 w-4" />
+                                          </a>
+                                        );
+                                      });
+                                    })()}
                                   </div>
                                 )}
 

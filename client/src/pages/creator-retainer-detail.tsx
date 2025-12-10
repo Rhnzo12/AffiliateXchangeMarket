@@ -51,7 +51,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useAuth } from "../hooks/useAuth";
 import { VideoPlayer } from "../components/VideoPlayer";
-import { TopNavBar } from "../components/TopNavBar";
 import { useSidebar } from "../components/ui/sidebar";
 import {
   Tooltip,
@@ -59,6 +58,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/ui/tooltip";
+import { uploadToCloudinary } from "../lib/cloudinary-upload";
 
 const uploadDeliverableSchema = z.object({
   platformUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
@@ -159,24 +159,21 @@ export default function CreatorRetainerDetail() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ folder, resourceType: "video" }), // Save retainer videos in contract-specific folder
+        body: JSON.stringify({
+          folder,
+          resourceType: "video",
+          contentType: file.type,
+          fileName: file.name,
+        }), // Save retainer videos in contract-specific folder
       });
       const uploadData = await uploadResponse.json();
 
       console.log('[Retainer Upload] Upload parameters received:', uploadData);
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "video/mp4",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (uploadResult.ok) {
-        // Construct the public URL from the upload response
-        const uploadedVideoUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      if (uploadResult?.secure_url) {
+        const uploadedVideoUrl = uploadResult.secure_url;
         console.log('[Retainer Upload] Final video URL:', uploadedVideoUrl);
 
         setVideoUrl(uploadedVideoUrl);
@@ -500,7 +497,6 @@ export default function CreatorRetainerDetail() {
 
   return (
     <div className="space-y-6 pb-24">
-      <TopNavBar />
       <div className="flex items-center gap-4">
         <Link href="/retainers">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -620,16 +616,18 @@ export default function CreatorRetainerDetail() {
                   />
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-medium mb-2">
+                    <label htmlFor="video-upload" className="block text-sm font-medium mb-2">
                       Video File
                     </label>
                     <input
                       type="file"
+                      id="video-upload"
                       ref={videoInputRef}
                       accept="video/*"
                       onChange={handleVideoUpload}
                       disabled={isUploading}
                       className="hidden"
+                      aria-label="Upload video file"
                     />
                     <Button
                       type="button"
@@ -646,7 +644,7 @@ export default function CreatorRetainerDetail() {
                       ) : videoUrl ? (
                         <>
                           <Video className="h-4 w-4 mr-2" />
-                          Video Uploaded ✓
+                          Video Uploaded \u2713
                         </>
                       ) : (
                         <>
@@ -657,7 +655,7 @@ export default function CreatorRetainerDetail() {
                     </Button>
                     {videoUrl && (
                       <p className="text-xs text-green-600">
-                        ✓ Video uploaded successfully
+                        \u2713 Video uploaded successfully
                       </p>
                     )}
                     {!videoUrl && (
@@ -755,14 +753,16 @@ export default function CreatorRetainerDetail() {
               />
 
               <div>
-                <FormLabel>Upload New Video</FormLabel>
+                <FormLabel htmlFor="resubmit-video-upload">Upload New Video</FormLabel>
                 <div className="mt-2">
                   <input
                     type="file"
+                    id="resubmit-video-upload"
                     ref={resubmitVideoInputRef}
                     onChange={handleResubmitVideo}
                     accept="video/*"
                     className="hidden"
+                    aria-label="Upload new video for resubmission"
                   />
                   <Button
                     type="button"
@@ -789,7 +789,7 @@ export default function CreatorRetainerDetail() {
                     )}
                   </Button>
                   {resubmitVideoUrl && (
-                    <p className="text-xs text-green-600 mt-2">✓ Video ready to submit</p>
+                    <p className="text-xs text-green-600 mt-2">\u2713 Video ready to submit</p>
                   )}
                 </div>
               </div>
@@ -1392,7 +1392,7 @@ export default function CreatorRetainerDetail() {
                             )}
                             {deliverable.reviewedAt && (
                               <p className="text-xs text-muted-foreground">
-                                ✅ Reviewed {format(new Date(deliverable.reviewedAt), "MMM d, yyyy 'at' h:mm a")}
+                                \u2705 Reviewed {format(new Date(deliverable.reviewedAt), "MMM d, yyyy 'at' h:mm a")}
                               </p>
                             )}
                           </div>

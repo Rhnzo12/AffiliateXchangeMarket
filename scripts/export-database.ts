@@ -28,82 +28,82 @@ async function exportDatabase() {
       createdAt: schema.users.createdAt,
     }).from(schema.users);
     data.users = users;
-    console.log(`  ✓ Users: ${users.length} records`);
+    console.log(`  \u2713 Users: ${users.length} records`);
 
     // Creator profiles
     const creatorProfiles = await db.select().from(schema.creatorProfiles);
     data.creatorProfiles = creatorProfiles;
-    console.log(`  ✓ Creator Profiles: ${creatorProfiles.length} records`);
+    console.log(`  \u2713 Creator Profiles: ${creatorProfiles.length} records`);
 
     // Company profiles
     const companyProfiles = await db.select().from(schema.companyProfiles);
     data.companyProfiles = companyProfiles;
-    console.log(`  ✓ Company Profiles: ${companyProfiles.length} records`);
+    console.log(`  \u2713 Company Profiles: ${companyProfiles.length} records`);
 
     // Offers
     const offers = await db.select().from(schema.offers);
     data.offers = offers;
-    console.log(`  ✓ Offers: ${offers.length} records`);
+    console.log(`  \u2713 Offers: ${offers.length} records`);
 
     // Offer videos
     const offerVideos = await db.select().from(schema.offerVideos);
     data.offerVideos = offerVideos;
-    console.log(`  ✓ Offer Videos: ${offerVideos.length} records`);
+    console.log(`  \u2713 Offer Videos: ${offerVideos.length} records`);
 
     // Applications
     const applications = await db.select().from(schema.applications);
     data.applications = applications;
-    console.log(`  ✓ Applications: ${applications.length} records`);
+    console.log(`  \u2713 Applications: ${applications.length} records`);
 
     // Conversations
     const conversations = await db.select().from(schema.conversations);
     data.conversations = conversations;
-    console.log(`  ✓ Conversations: ${conversations.length} records`);
+    console.log(`  \u2713 Conversations: ${conversations.length} records`);
 
     // Messages
     const messages = await db.select().from(schema.messages);
     data.messages = messages;
-    console.log(`  ✓ Messages: ${messages.length} records`);
+    console.log(`  \u2713 Messages: ${messages.length} records`);
 
     // Reviews
     const reviews = await db.select().from(schema.reviews);
     data.reviews = reviews;
-    console.log(`  ✓ Reviews: ${reviews.length} records`);
+    console.log(`  \u2713 Reviews: ${reviews.length} records`);
 
     // Favorites
     const favorites = await db.select().from(schema.favorites);
     data.favorites = favorites;
-    console.log(`  ✓ Favorites: ${favorites.length} records`);
+    console.log(`  \u2713 Favorites: ${favorites.length} records`);
 
     // Click events
     const clickEvents = await db.select().from(schema.clickEvents);
     data.clickEvents = clickEvents;
-    console.log(`  ✓ Click Events: ${clickEvents.length} records`);
+    console.log(`  \u2713 Click Events: ${clickEvents.length} records`);
 
     // Payment settings
     const paymentSettings = await db.select().from(schema.paymentSettings);
     data.paymentSettings = paymentSettings;
-    console.log(`  ✓ Payment Settings: ${paymentSettings.length} records`);
+    console.log(`  \u2713 Payment Settings: ${paymentSettings.length} records`);
 
     // Payments
     const payments = await db.select().from(schema.payments);
     data.payments = payments;
-    console.log(`  ✓ Payments: ${payments.length} records`);
+    console.log(`  \u2713 Payments: ${payments.length} records`);
 
     // Retainer contracts
     const retainerContracts = await db.select().from(schema.retainerContracts);
     data.retainerContracts = retainerContracts;
-    console.log(`  ✓ Retainer Contracts: ${retainerContracts.length} records`);
+    console.log(`  \u2713 Retainer Contracts: ${retainerContracts.length} records`);
 
     // Retainer applications
     const retainerApplications = await db.select().from(schema.retainerApplications);
     data.retainerApplications = retainerApplications;
-    console.log(`  ✓ Retainer Applications: ${retainerApplications.length} records`);
+    console.log(`  \u2713 Retainer Applications: ${retainerApplications.length} records`);
 
     // Retainer deliverables
     const retainerDeliverables = await db.select().from(schema.retainerDeliverables);
     data.retainerDeliverables = retainerDeliverables;
-    console.log(`  ✓ Retainer Deliverables: ${retainerDeliverables.length} records`);
+    console.log(`  \u2713 Retainer Deliverables: ${retainerDeliverables.length} records`);
 
     // Write to file
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -111,7 +111,7 @@ async function exportDatabase() {
     
     writeFileSync(filename, JSON.stringify(data, null, 2));
     
-    console.log(`\n✅ Export complete!`);
+    console.log(`\n\u2705 Export complete!`);
     console.log(`📁 File saved: ${filename}`);
     console.log(`📊 Total records exported: ${Object.values(data).reduce((sum, arr) => sum + arr.length, 0)}`);
     
@@ -124,14 +124,14 @@ async function exportDatabase() {
     console.log(`psql $DATABASE_URL -c "COPY users TO STDOUT WITH CSV HEADER" > users.csv`);
 
   } catch (error) {
-    console.error("❌ Export failed:", error);
+    console.error("\u274C Export failed:", error);
     throw error;
   }
 }
 
 exportDatabase()
   .then(() => {
-    console.log("\n✨ Done!");
+    console.log("\n\u2728 Done!");
     process.exit(0);
   })
   .catch((error) => {

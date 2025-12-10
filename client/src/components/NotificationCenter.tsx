@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
   Check,
@@ -94,6 +94,7 @@ export function NotificationCenter() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const previousNotificationIds = useRef<Set<string>>(new Set());
+  const [isOpen, setIsOpen] = useState(false);
 
   const { data: notifications = [], isLoading } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
@@ -190,6 +191,9 @@ export function NotificationCenter() {
       markAsReadMutation.mutate(notification.id);
     }
 
+    // Close the dropdown
+    setIsOpen(false);
+
     // If notification has a linkUrl, navigate directly to it
     if (notification.linkUrl) {
       // If it's an absolute external URL, navigate the browser there.
@@ -258,7 +262,7 @@ export function NotificationCenter() {
   const hasUnread = unreadNotifications.length > 0;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-10 sm:w-10" data-testid="button-notifications">
           <Bell className="h-4 w-4 sm:h-5 sm:w-5" />

@@ -15,7 +15,7 @@ const { Pool } = pg;
 
 async function runMigration() {
   if (!process.env.DATABASE_URL) {
-    console.error('❌ ERROR: DATABASE_URL environment variable not set');
+    console.error('\u274C ERROR: DATABASE_URL environment variable not set');
     process.exit(1);
   }
 
@@ -27,7 +27,7 @@ async function runMigration() {
     console.log('🔄 Connecting to database...');
     const client = await pool.connect();
 
-    console.log('✅ Connected successfully\n');
+    console.log('\u2705 Connected successfully\n');
 
     // Read the migration SQL file
     const sqlPath = join(__dirname, '..', 'db', 'migrations', '015_fix_content_flags_uuid_types.sql');
@@ -38,18 +38,18 @@ async function runMigration() {
     // Execute the migration
     await client.query(sql);
 
-    console.log('\n✅ Migration completed successfully!');
+    console.log('\n\u2705 Migration completed successfully!');
     console.log('\n📊 Converted columns:');
-    console.log('  ✓ content_flags.id → UUID');
-    console.log('  ✓ content_flags.user_id → UUID');
-    console.log('  ✓ content_flags.reviewed_by → UUID');
-    console.log('  ✓ banned_keywords.id → UUID');
-    console.log('  ✓ banned_keywords.created_by → UUID');
+    console.log('  \u2713 content_flags.id → UUID');
+    console.log('  \u2713 content_flags.user_id → UUID');
+    console.log('  \u2713 content_flags.reviewed_by → UUID');
+    console.log('  \u2713 banned_keywords.id → UUID');
+    console.log('  \u2713 banned_keywords.created_by → UUID');
 
     client.release();
 
   } catch (error: any) {
-    console.error('\n❌ Migration failed:');
+    console.error('\n\u274C Migration failed:');
     console.error(error.message);
     process.exit(1);
   } finally {

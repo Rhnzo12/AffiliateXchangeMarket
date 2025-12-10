@@ -13,7 +13,7 @@ async function main() {
       ADD COLUMN IF NOT EXISTS resolved_at timestamp,
       ADD COLUMN IF NOT EXISTS resolved_by varchar
     `);
-    console.log("   ✅ Done\n");
+    console.log("   \u2705 Done\n");
 
     // Add fields to offers table
     console.log("2. Adding contract fields to offers table...");
@@ -22,7 +22,7 @@ async function main() {
       ADD COLUMN IF NOT EXISTS exclusivity_required boolean DEFAULT false,
       ADD COLUMN IF NOT EXISTS content_approval_required boolean DEFAULT false
     `);
-    console.log("   ✅ Done\n");
+    console.log("   \u2705 Done\n");
 
     // Add fields to company_profiles table
     console.log("3. Adding social media fields to company_profiles table...");
@@ -33,9 +33,9 @@ async function main() {
       ADD COLUMN IF NOT EXISTS facebook_url varchar,
       ADD COLUMN IF NOT EXISTS instagram_url varchar
     `);
-    console.log("   ✅ Done\n");
+    console.log("   \u2705 Done\n");
 
-    console.log("✅ Migration completed successfully!");
+    console.log("\u2705 Migration completed successfully!");
     console.log("\nSummary:");
     console.log("  - Conversations: resolved, resolved_at, resolved_by");
     console.log("  - Offers: exclusivity_required, content_approval_required");
@@ -43,7 +43,7 @@ async function main() {
 
     process.exit(0);
   } catch (error) {
-    console.error("\n❌ Migration failed:", error);
+    console.error("\n\u274C Migration failed:", error);
     process.exit(1);
   }
 }

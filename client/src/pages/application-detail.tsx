@@ -104,6 +104,7 @@ const StarRating = ({ rating, onRatingChange }: { rating: number; onRatingChange
           type="button"
           onClick={() => onRatingChange(star)}
           className="focus:outline-none"
+          aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
         >
           <Star
             className={`h-6 w-6 cursor-pointer transition-colors ${

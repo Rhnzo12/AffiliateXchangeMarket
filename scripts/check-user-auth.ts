@@ -19,7 +19,7 @@ async function checkUsers() {
     console.log('='.repeat(80));
 
     for (const user of allUsers) {
-      const authMethod = user.googleId ? '🔵 Google OAuth' : (user.hasPassword ? '🔑 Email/Password' : '❌ No Auth');
+      const authMethod = user.googleId ? '🔵 Google OAuth' : (user.hasPassword ? '🔑 Email/Password' : '\u274C No Auth');
       console.log(`${authMethod} | ${user.role?.padEnd(8)} | ${user.email}`);
     }
 
@@ -27,7 +27,7 @@ async function checkUsers() {
     console.log('\nLegend:');
     console.log('🔵 Google OAuth users - Password change NOT visible (correct)');
     console.log('🔑 Email/Password users - Password change SHOULD be visible');
-    console.log('❌ No Auth - Invalid state\n');
+    console.log('\u274C No Auth - Invalid state\n');
 
     process.exit(0);
   } catch (error) {

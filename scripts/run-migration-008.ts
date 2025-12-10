@@ -15,22 +15,22 @@ async function runMigration() {
 
     console.log("[Migration] Adding 'payment_failed_insufficient_funds' to enum...");
     await db.execute(sql.raw(`ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'payment_failed_insufficient_funds'`));
-    console.log("[Migration] ✅ Added 'payment_failed_insufficient_funds'");
+    console.log("[Migration] \u2705 Added 'payment_failed_insufficient_funds'");
 
     console.log("[Migration] Adding 'payment_approved' to enum...");
     await db.execute(sql.raw(`ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'payment_approved'`));
-    console.log("[Migration] ✅ Added 'payment_approved'");
+    console.log("[Migration] \u2705 Added 'payment_approved'");
 
-    console.log("[Migration] ✅ Migration completed successfully!");
+    console.log("[Migration] \u2705 Migration completed successfully!");
     console.log("[Migration] Both notification types have been added to the database.");
 
     process.exit(0);
   } catch (error: any) {
-    console.error("[Migration] ❌ Migration failed:", error);
+    console.error("[Migration] \u274C Migration failed:", error);
 
     // Check if the value already exists
     if (error.message?.includes("already exists")) {
-      console.log("[Migration] ℹ️  The values already exist in the enum.");
+      console.log("[Migration] \u2139\uFE0F  The values already exist in the enum.");
       process.exit(0);
     }
 

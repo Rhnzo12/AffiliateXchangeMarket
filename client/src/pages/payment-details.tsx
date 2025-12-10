@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Button } from "../components/ui/button";
@@ -16,7 +15,6 @@ import {
   Building,
   FileText
 } from "lucide-react";
-import { TopNavBar } from "../components/TopNavBar";
 
 interface Payment {
   id: string;
@@ -156,7 +154,6 @@ export default function PaymentDetail() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <TopNavBar />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -250,7 +247,7 @@ export default function PaymentDetail() {
             {/* Fee Calculation */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-900 font-medium mb-2">
-                💡 How fees are calculated
+                \u1F4A1 How fees are calculated
               </p>
               <div className="text-sm text-blue-800 space-y-1">
                 <div className="flex justify-between">

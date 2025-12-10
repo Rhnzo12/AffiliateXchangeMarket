@@ -65,17 +65,17 @@ async function fixDatabase() {
     try {
       console.log(`[${i + 1}/${migrations.length}] ${migration.name}...`);
       await sql(migration.sql);
-      console.log(`✅ Success\n`);
+      console.log(`\u2705 Success\n`);
     } catch (error) {
       if (error.message.includes('does not exist') || error.message.includes('already exists')) {
-        console.log(`⚠️  Skipped (already applied)\n`);
+        console.log(`\u26A0\uFE0F  Skipped (already applied)\n`);
       } else {
-        console.error(`❌ Error: ${error.message}\n`);
+        console.error(`\u274C Error: ${error.message}\n`);
       }
     }
   }
 
-  console.log('✅ Database schema fixed!');
+  console.log('\u2705 Database schema fixed!');
   console.log('\n🔄 Please restart your server');
 }
 

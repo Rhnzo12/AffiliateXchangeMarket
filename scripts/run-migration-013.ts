@@ -25,7 +25,7 @@ async function runMigration() {
     console.log("📝 Executing migration SQL...\n");
     await db.execute(sql.raw(migrationSQL));
 
-    console.log("✅ Migration completed successfully!\n");
+    console.log("\u2705 Migration completed successfully!\n");
 
     // Verify the column was added
     console.log("🔍 Verifying new column...");
@@ -38,7 +38,7 @@ async function runMigration() {
 
     if (result.rows.length === 1) {
       const column: any = result.rows[0];
-      console.log("✅ Column added successfully:");
+      console.log("\u2705 Column added successfully:");
       console.log(`   - ${column.column_name} (${column.data_type}, nullable: ${column.is_nullable})`);
 
       // Check if index was created
@@ -50,27 +50,27 @@ async function runMigration() {
       `);
 
       if (indexResult.rows.length === 1) {
-        console.log("✅ Index created successfully:");
+        console.log("\u2705 Index created successfully:");
         console.log(`   - idx_payment_settings_stripe_account_id`);
       } else {
-        console.log("⚠️  Index not found (may need manual creation)");
+        console.log("\u26A0\uFE0F  Index not found (may need manual creation)");
       }
     } else {
-      console.log(`⚠️  Expected 1 column, found ${result.rows.length}`);
+      console.log(`\u26A0\uFE0F  Expected 1 column, found ${result.rows.length}`);
     }
 
-    console.log("\n✨ Migration complete! You can now:");
+    console.log("\n\u2728 Migration complete! You can now:");
     console.log("   1. Restart your application");
     console.log("   2. Set up Stripe Connect for e-transfer payments");
     console.log("   3. Refer to STRIPE_CONNECT_SETUP.md for next steps\n");
 
     process.exit(0);
   } catch (error: any) {
-    console.error("❌ Migration failed:", error.message);
+    console.error("\u274C Migration failed:", error.message);
 
     // Check if column already exists
     if (error.message?.includes("already exists") || error.code === '42701') {
-      console.log("ℹ️  The column may already exist. Verifying...");
+      console.log("\u2139\uFE0F  The column may already exist. Verifying...");
 
       try {
         const result = await db.execute(sql`
@@ -81,13 +81,13 @@ async function runMigration() {
         `);
 
         if (result.rows.length === 1) {
-          console.log("✅ Column already exists in database");
+          console.log("\u2705 Column already exists in database");
           process.exit(0);
         } else {
-          console.log("❌ Column not found despite 'already exists' error");
+          console.log("\u274C Column not found despite 'already exists' error");
         }
       } catch (verifyError) {
-        console.error("❌ Could not verify column:", verifyError);
+        console.error("\u274C Could not verify column:", verifyError);
       }
     }
 

@@ -30,7 +30,7 @@ export default function TermsOfService() {
           <div>
             <h1 className="text-4xl font-bold mb-4">Terms of Service</h1>
             <p className="text-muted-foreground">
-              Last Updated: November 23, 2025
+              Last Updated: December 5, 2025
             </p>
           </div>
 
@@ -383,7 +383,148 @@ export default function TermsOfService() {
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">16. Modifications to Terms</h2>
+                <h2 className="text-2xl font-semibold mb-4">16. User-Generated Content and Reviews</h2>
+
+                <h3 className="text-xl font-semibold mb-3">16.1 User Content</h3>
+                <p>
+                  Users may post reviews, ratings, testimonials, and feedback about other users (Creators reviewing Brands, Brands reviewing Creators). By posting such content, you agree that:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Your reviews are based on genuine experiences and are truthful</li>
+                  <li>You will not post false, defamatory, or malicious content</li>
+                  <li>You will not attempt to manipulate ratings or reviews</li>
+                  <li>You will comply with applicable laws regarding endorsements and testimonials</li>
+                  <li>Your reviews do not contain confidential or proprietary information</li>
+                </ul>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">16.2 Content Moderation</h3>
+                <p>
+                  We reserve the right to monitor, edit, or remove user-generated content that:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Violates these Terms or our Community Guidelines</li>
+                  <li>Is abusive, threatening, obscene, or discriminatory</li>
+                  <li>Infringes on intellectual property or privacy rights</li>
+                  <li>Contains spam, advertising, or promotional material</li>
+                  <li>Is reported by other users as inappropriate</li>
+                </ul>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">16.3 Review Disputes</h3>
+                <p>
+                  If you believe a review is false or violates our policies, you may report it to support@affiliatexchange.com. We will investigate and take appropriate action, which may include removal of the review or suspension of the reviewer's account.
+                </p>
+                <p className="mt-4">
+                  We do not mediate disputes between users regarding reviews. Reviews represent the subjective opinions of individual users and do not reflect the views of AffiliateXchange.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">17. Beta Features and Services</h2>
+                <p>
+                  We may offer beta features, experimental services, or early access programs ("Beta Services") to select users. Beta Services are provided for testing and feedback purposes.
+                </p>
+
+                <h3 className="text-xl font-semibold mb-3 mt-4">Terms for Beta Services:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li><strong>No Warranty:</strong> Beta Services are provided "as is" with no guarantees of functionality, availability, or accuracy</li>
+                  <li><strong>May Change or Discontinue:</strong> We may modify, suspend, or discontinue Beta Services at any time without notice</li>
+                  <li><strong>Data Loss:</strong> Data in Beta Services may be lost, deleted, or become inaccessible</li>
+                  <li><strong>Confidentiality:</strong> You may be required to keep Beta Services confidential</li>
+                  <li><strong>Feedback:</strong> We may use your feedback about Beta Services without compensation or attribution</li>
+                  <li><strong>No SLA:</strong> Beta Services are not subject to service level agreements or uptime guarantees</li>
+                </ul>
+                <p className="mt-4">
+                  Participation in Beta Services is at your own risk. We recommend not relying on Beta Services for critical business operations.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">18. Platform Availability and Maintenance</h2>
+
+                <h3 className="text-xl font-semibold mb-3">18.1 Service Availability</h3>
+                <p>
+                  While we strive to provide reliable and uninterrupted service, we do not guarantee that our Services will be available at all times. Service may be interrupted due to:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Scheduled maintenance (announced in advance when possible)</li>
+                  <li>Emergency maintenance or security updates</li>
+                  <li>Technical difficulties or system failures</li>
+                  <li>Third-party service provider outages</li>
+                  <li>Network or internet connectivity issues</li>
+                  <li>Force majeure events (natural disasters, pandemics, etc.)</li>
+                </ul>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">18.2 Maintenance Windows</h3>
+                <p>
+                  Scheduled maintenance typically occurs during off-peak hours (12:00 AM - 4:00 AM PST). We will provide at least 48 hours notice for planned maintenance that affects core functionality.
+                </p>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">18.3 Service Level</h3>
+                <p>
+                  We target 99.5% uptime for our Services (excluding scheduled maintenance). However, this is a target, not a guarantee. We are not liable for any damages resulting from service interruptions.
+                </p>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">18.4 Status Updates</h3>
+                <p>
+                  Service status and incident updates are available at status.affiliatexchange.com (or announced via our website/social media).
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">19. API Usage and Developer Terms</h2>
+                <p>
+                  If you use our API (Application Programming Interface), you agree to comply with our API Terms and Usage Guidelines:
+                </p>
+
+                <h3 className="text-xl font-semibold mb-3 mt-4">19.1 API Access</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li><strong>Registration Required:</strong> API access requires registration and approval</li>
+                  <li><strong>API Keys:</strong> Keep your API keys confidential and secure</li>
+                  <li><strong>Rate Limits:</strong> Respect rate limits (varies by plan: 100 requests/min for free tier, 1000 requests/min for paid tier)</li>
+                  <li><strong>Authentication:</strong> Use OAuth 2.0 or API key authentication as specified</li>
+                </ul>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.2 API Usage Restrictions</h3>
+                <p>You may NOT:</p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Exceed rate limits or attempt to circumvent usage restrictions</li>
+                  <li>Use the API to scrape data or create competing services</li>
+                  <li>Share your API credentials with unauthorized parties</li>
+                  <li>Make excessive or abusive API calls that impact service performance</li>
+                  <li>Cache data beyond reasonable timeframes (max 24 hours for most data)</li>
+                  <li>Use the API to send spam or unauthorized communications</li>
+                </ul>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.3 API Changes and Deprecation</h3>
+                <p>
+                  We may modify, deprecate, or discontinue API endpoints with at least 90 days notice for breaking changes. Non-breaking changes may be implemented without notice.
+                </p>
+
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.4 API Support</h3>
+                <p>
+                  API documentation is available at api.affiliatexchange.com/docs. For API support, contact developers@affiliatexchange.com.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">20. User Feedback and Suggestions</h2>
+                <p>
+                  We welcome your feedback, suggestions, and ideas for improving our Services ("Feedback"). By submitting Feedback, you agree that:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Your Feedback is voluntary and provided without expectation of compensation</li>
+                  <li>We may use, modify, and implement your Feedback without attribution or payment</li>
+                  <li>You grant us a perpetual, worldwide, royalty-free license to use your Feedback</li>
+                  <li>Your Feedback does not contain confidential or proprietary information you wish to protect</li>
+                  <li>We have no obligation to implement or respond to Feedback</li>
+                </ul>
+                <p className="mt-4">
+                  If you wish to share confidential information or propose a business partnership, please contact partnerships@affiliatexchange.com to discuss appropriate confidentiality protections.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">21. Modifications to Terms</h2>
                 <p>
                   We may modify these Terms at any time. If we make material changes, we will notify you by:
                 </p>
@@ -398,7 +539,7 @@ export default function TermsOfService() {
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">17. Governing Law</h2>
+                <h2 className="text-2xl font-semibold mb-4">22. Governing Law</h2>
                 <p>
                   These Terms shall be governed by and construed in accordance with the laws of the State of California, United States, without regard to its conflict of law provisions.
                 </p>
@@ -411,14 +552,14 @@ export default function TermsOfService() {
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">18. Dispute Resolution</h2>
+                <h2 className="text-2xl font-semibold mb-4">23. Dispute Resolution</h2>
 
-                <h3 className="text-xl font-semibold mb-3">18.1 Informal Resolution</h3>
+                <h3 className="text-xl font-semibold mb-3">23.1 Informal Resolution</h3>
                 <p>
                   Before initiating any formal dispute resolution, you agree to contact us at legal@affiliatexchange.com to attempt to resolve the dispute informally. We will work in good faith to resolve disputes within 30 days.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">18.2 Binding Arbitration</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">23.2 Binding Arbitration</h3>
                 <p>
                   If informal resolution fails, you and AffiliateXchange agree to resolve any disputes through binding arbitration rather than in court, except for:
                 </p>
@@ -435,53 +576,53 @@ export default function TermsOfService() {
                   Each party will bear their own costs of arbitration unless the arbitrator determines otherwise. AffiliateXchange will reimburse your filing fees if your claim is for less than $10,000 and you cannot afford to pay.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">18.3 Class Action Waiver</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">23.3 Class Action Waiver</h3>
                 <p className="uppercase font-semibold">
                   YOU AND AFFILIATEXCHANGE AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER ONLY IN YOUR OR ITS INDIVIDUAL CAPACITY AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS OR REPRESENTATIVE ACTION.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">19. General Provisions</h2>
+                <h2 className="text-2xl font-semibold mb-4">24. General Provisions</h2>
 
-                <h3 className="text-xl font-semibold mb-3">19.1 Entire Agreement</h3>
+                <h3 className="text-xl font-semibold mb-3">24.1 Entire Agreement</h3>
                 <p>
                   These Terms, together with our Privacy Policy and any Offer-specific terms, constitute the entire agreement between you and AffiliateXchange.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.2 Severability</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.2 Severability</h3>
                 <p>
                   If any provision of these Terms is found to be unenforceable, the remaining provisions will continue in full force and effect.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.3 No Waiver</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.3 No Waiver</h3>
                 <p>
                   Our failure to enforce any right or provision of these Terms will not be considered a waiver of those rights.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.4 Assignment</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.4 Assignment</h3>
                 <p>
                   You may not assign or transfer these Terms without our prior written consent. We may assign these Terms without restriction.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.5 Force Majeure</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.5 Force Majeure</h3>
                 <p>
                   We are not liable for any failure or delay in performance due to circumstances beyond our reasonable control (natural disasters, war, strikes, etc.).
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.6 Relationship</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.6 Relationship</h3>
                 <p>
                   These Terms do not create a partnership, joint venture, employment, or agency relationship between you and AffiliateXchange.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">19.7 Notices</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">24.7 Notices</h3>
                 <p>
                   Notices to you may be sent to your email address on file. Notices to us should be sent to legal@affiliatexchange.com.
                 </p>
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">20. Contact Information</h2>
+                <h2 className="text-2xl font-semibold mb-4">25. Contact Information</h2>
                 <p>If you have questions about these Terms, please contact us:</p>
                 <div className="mt-4 space-y-2">
                   <p><strong>Company Name:</strong> AffiliateXchange Inc.</p>

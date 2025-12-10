@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "../hooks/use-toast";
 import { apiRequest, queryClient } from "../lib/queryClient";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, retainersTourSteps } from "../lib/creatorTourConfig";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -32,7 +34,6 @@ import {
 } from "../components/ui/form";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
-import { Slider } from "../components/ui/slider";
 import { Textarea } from "../components/ui/textarea";
 import { Progress } from "../components/ui/progress";
 import {
@@ -46,22 +47,18 @@ import {
   Eye,
   AlertTriangle,
   Search,
-  Sparkles,
   Star,
-  ShieldCheck,
   Info,
   MessageCircle,
   Upload,
   Users as UsersIcon,
-  ChevronDown,
-  ChevronUp,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link, useLocation } from "wouter";
-import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import {
   Select,
@@ -72,6 +69,8 @@ import {
 } from "../components/ui/select";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { useHeaderContent } from "../components/HeaderContentContext";
+import { Slider } from "../components/ui/slider";
 
 const applyRetainerSchema = z.object({
   message: z
@@ -92,17 +91,22 @@ type ApplyRetainerForm = z.infer<typeof applyRetainerSchema>;
 export default function CreatorRetainers() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { setHeaderContent } = useHeaderContent();
+
+  // Quick Guide Tour
+  useCreatorPageTour(CREATOR_TOUR_IDS.RETAINERS, retainersTourSteps);
+
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [showVideoPlatformDialog, setShowVideoPlatformDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
   const [budgetFilter, setBudgetFilter] = useState("all");
+  const [monthlyRange, setMonthlyRange] = useState<[number, number]>([0, 10000]);
   const [nicheFilter, setNicheFilter] = useState("all");
   const [durationFilter, setDurationFilter] = useState("all");
   const [preferenceFilter, setPreferenceFilter] = useState<string[]>([]);
-  const [amountRange, setAmountRange] = useState<number[]>([0, 10000]);
-  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
     title: string;
@@ -144,6 +148,22 @@ export default function CreatorRetainers() {
   const { data: myApplications } = useQuery<any[]>({
     queryKey: ["/api/creator/retainer-applications"],
   });
+
+  const maxMonthlyAmount = useMemo(() => {
+    if (!contracts?.length) return 10000;
+
+    const amounts = contracts.map((contract) => Number(contract.monthlyAmount) || 0);
+    return Math.max(10000, ...amounts);
+  }, [contracts]);
+
+  useEffect(() => {
+    setMonthlyRange((current) => {
+      const clampedMax = Math.max(Math.min(current[1], maxMonthlyAmount), current[0]);
+      const clampedMin = Math.min(current[0], clampedMax);
+      if (current[0] === clampedMin && current[1] === clampedMax) return current;
+      return [clampedMin, clampedMax];
+    });
+  }, [maxMonthlyAmount]);
 
   const form = useForm<ApplyRetainerForm>({
     resolver: zodResolver(applyRetainerSchema),
@@ -226,7 +246,7 @@ export default function CreatorRetainers() {
         };
       case 'approved':
         return { 
-          badge: 'Approved ✓', 
+          badge: 'Approved \u2713', 
           buttonText: 'Application Approved', 
           disabled: true,
           variant: 'default' as const,
@@ -299,7 +319,8 @@ export default function CreatorRetainers() {
       const matchesBudget =
         budgetFilter === "all" || monthlyAmount >= Number(budgetFilter);
 
-      const matchesAmountRange = monthlyAmount >= amountRange[0] && monthlyAmount <= amountRange[1];
+      const matchesMonthlyRange =
+        monthlyAmount >= monthlyRange[0] && monthlyAmount <= monthlyRange[1];
 
       const matchesNiche =
         nicheFilter === "all" || (Array.isArray(contract.niches) && contract.niches.some((n: string) => n === nicheFilter));
@@ -318,23 +339,32 @@ export default function CreatorRetainers() {
         matchesSearch &&
         matchesPlatform &&
         matchesBudget &&
-        matchesAmountRange &&
+        matchesMonthlyRange &&
         matchesNiche &&
         matchesDuration &&
         matchesPreferences
       );
     });
-  }, [contracts, searchTerm, platformFilter, budgetFilter, amountRange, nicheFilter, durationFilter, preferenceFilter]);
+  }, [
+    contracts,
+    searchTerm,
+    platformFilter,
+    budgetFilter,
+    monthlyRange,
+    nicheFilter,
+    durationFilter,
+    preferenceFilter,
+  ]);
 
   const filtersApplied =
     searchTerm.trim() !== "" ||
     platformFilter !== "all" ||
     budgetFilter !== "all" ||
+    monthlyRange[0] > 0 ||
+    monthlyRange[1] < maxMonthlyAmount ||
     nicheFilter !== "all" ||
     durationFilter !== "all" ||
-    preferenceFilter.length > 0 ||
-    amountRange[0] !== 0 ||
-    amountRange[1] !== 10000;
+    preferenceFilter.length > 0;
 
   const contractMap = useMemo(() => {
     const map = new Map();
@@ -376,17 +406,29 @@ export default function CreatorRetainers() {
     [completedApplications, contractMap]
   );
 
-  const totalMonthlyRetainer = activeContracts.reduce((sum, item) => {
-    const amount = Number(item.contract?.monthlyAmount || 0);
-    return sum + amount;
-  }, 0);
+  const totalActiveNet = useMemo(
+    () =>
+      activeContracts.reduce(
+        (sum, { contract }) => sum + Number(contract?.monthlyAmount || 0) * 0.93,
+        0
+      ),
+    [activeContracts]
+  );
 
-  const totalVideosPerMonth = activeContracts.reduce((sum, item) => {
-    const videos = Number(item.contract?.videosPerMonth || 0);
-    return sum + videos;
-  }, 0);
+  const totalActiveVideos = useMemo(
+    () => activeContracts.reduce((sum, { contract }) => sum + Number(contract?.videosPerMonth || 0), 0),
+    [activeContracts]
+  );
 
-  const estimatedNetMonthly = totalMonthlyRetainer * 0.93;
+  const totalDeliveredVideos = useMemo(
+    () => activeContracts.reduce((sum, { contract }) => sum + Number(contract?.submittedVideos || 0), 0),
+    [activeContracts]
+  );
+
+  const remainingCycleVideos = Math.max(0, totalActiveVideos - totalDeliveredVideos);
+  const portfolioCompletion = totalActiveVideos
+    ? Math.min(100, Math.round((totalDeliveredVideos / totalActiveVideos) * 100))
+    : 0;
 
   const messageValue = form.watch("message");
   const messageChars = messageValue?.length || 0;
@@ -405,10 +447,197 @@ export default function CreatorRetainers() {
     }
   }, [selectedTierOptions, form]);
 
+  useEffect(() => {
+    const headerSearchAndFilters = (
+      <div className="flex w-full max-w-3xl items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search retainers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 bg-muted/50"
+            data-testid="input-retainer-search-header"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2"
+          onClick={() => setIsFilterDialogOpen(true)}
+          data-testid="button-open-retainer-filters"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          <span>Filters</span>
+          {filtersApplied && <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />}
+        </Button>
+      </div>
+    );
+
+    setHeaderContent(headerSearchAndFilters);
+
+    return () => setHeaderContent(null);
+  }, [filtersApplied, searchTerm, setHeaderContent]);
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setPlatformFilter("all");
+    setBudgetFilter("all");
+    setMonthlyRange([0, maxMonthlyAmount]);
+    setNicheFilter("all");
+    setDurationFilter("all");
+    setPreferenceFilter([]);
+  };
+
+  const formatCurrencyValue = (value: number) =>
+    value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+  const renderFilterControls = (options?: { showClear?: boolean; hideSearch?: boolean }) => (
+    <div className="space-y-6">
+      {!options?.hideSearch && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Search retainers</p>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by title, company, or niche"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="input-retainer-search"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">Search applies instantly as you type.</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Platform</p>
+          <Select value={platformFilter} onValueChange={setPlatformFilter}>
+            <SelectTrigger data-testid="select-platform-filter">
+              <SelectValue placeholder="All platforms" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All platforms</SelectItem>
+              {uniquePlatforms.map((platform) => (
+                <SelectItem key={platform} value={platform}>
+                  {platform}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Contract length</p>
+          <Select value={durationFilter} onValueChange={setDurationFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="All lengths" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any duration</SelectItem>
+              <SelectItem value="3">3 months</SelectItem>
+              <SelectItem value="6">6 months</SelectItem>
+              <SelectItem value="12">12 months</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-muted-foreground">Preferences</p>
+          <div className="grid grid-cols-1 gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={preferenceFilter.includes("approval_required")}
+                onCheckedChange={() => handlePreferenceToggle("approval_required")}
+              />
+              <span>Approval required</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={preferenceFilter.includes("no_approval")}
+                onCheckedChange={() => handlePreferenceToggle("no_approval")}
+              />
+              <span>No approval needed</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={preferenceFilter.includes("exclusivity")}
+                onCheckedChange={() => handlePreferenceToggle("exclusivity")}
+              />
+              <span>Exclusivity allowed</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">Niche</p>
+        <Select value={nicheFilter} onValueChange={setNicheFilter}>
+          <SelectTrigger data-testid="select-niche-filter">
+            <SelectValue placeholder="All niches" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All niches</SelectItem>
+            {uniqueNiches.map((niche) => (
+              <SelectItem key={niche} value={niche}>
+                {niche}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="pt-4 space-y-3">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <p className="font-medium">Monthly amount range</p>
+            <span>
+              {formatCurrencyValue(monthlyRange[0])} – {formatCurrencyValue(monthlyRange[1])}
+            </span>
+          </div>
+          <div className="px-1">
+            <Slider
+              value={monthlyRange}
+              min={0}
+              max={maxMonthlyAmount}
+              step={100}
+              onValueChange={(value) => setMonthlyRange([value[0], value[1] ?? value[0]])}
+            />
+          </div>
+        </div>
+
+        <p className="text-sm font-medium text-muted-foreground pt-2">Quick minimum budget</p>
+        <Select value={budgetFilter} onValueChange={setBudgetFilter}>
+          <SelectTrigger data-testid="select-budget-filter">
+            <SelectValue placeholder="All budgets" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All budgets</SelectItem>
+            <SelectItem value="500">$500+</SelectItem>
+            <SelectItem value="1000">$1,000+</SelectItem>
+            <SelectItem value="2500">$2,500+</SelectItem>
+            <SelectItem value="5000">$5,000+</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {options?.showClear && filtersApplied && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            onClick={clearFilters}
+            data-testid="button-clear-retainer-filters"
+          >
+            Clear filters
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <TopNavBar />
         <div>
           <h1 className="text-3xl font-bold">Monthly Retainers</h1>
           <p className="text-muted-foreground">Browse ongoing monthly video production contracts</p>
@@ -419,8 +648,33 @@ export default function CreatorRetainers() {
   }
 
   return (
-    <div className="space-y-6">
-      <TopNavBar />
+    <>
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Search & Filter</DialogTitle>
+            <DialogDescription>
+              Find retainers that match your pricing, cadence, and preferences.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 pb-2">{renderFilterControls({ hideSearch: true })}</div>
+
+          <DialogFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              variant="ghost"
+              onClick={clearFilters}
+              disabled={!filtersApplied}
+              data-testid="button-clear-retainer-filters"
+            >
+              Clear filters
+            </Button>
+            <Button onClick={() => setIsFilterDialogOpen(false)}>Apply Filters</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold" data-testid="heading-creator-retainers">
           Monthly Retainers
@@ -430,58 +684,41 @@ export default function CreatorRetainers() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-card-border">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-muted-foreground">Total gross monthly</div>
-              <DollarSign className="h-4 w-4 text-primary" />
-            </div>
-            <p className="text-2xl font-bold">${totalMonthlyRetainer.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">Before 7% platform fee</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-card-border">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-muted-foreground">Estimated net</div>
-              <ShieldCheck className="h-4 w-4 text-primary" />
-            </div>
-            <p className="text-2xl font-bold">${estimatedNetMonthly.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-            <p className="text-xs text-muted-foreground">After 7% platform fee</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-card-border">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-muted-foreground">Active contracts</div>
-              <Sparkles className="h-4 w-4 text-primary" />
-            </div>
-            <p className="text-2xl font-bold">{activeContracts.length}</p>
-            <p className="text-xs text-muted-foreground">With predictable monthly payouts</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-card-border">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-muted-foreground">Videos due / month</div>
-              <Video className="h-4 w-4 text-primary" />
-            </div>
-            <p className="text-2xl font-bold">{totalVideosPerMonth}</p>
-            <p className="text-xs text-muted-foreground">Track your monthly commitments</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="border-card-border">
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">My Retainers Dashboard</CardTitle>
           <p className="text-sm text-muted-foreground">See your active and completed retainers at a glance</p>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Active retainers</span>
+                <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  {portfolioCompletion}% on track
+                </Badge>
+              </div>
+              <p className="text-2xl font-semibold">{activeContracts.length}</p>
+              <p className="text-xs text-muted-foreground">{remainingCycleVideos} video{remainingCycleVideos === 1 ? "" : "s"} to deliver this cycle</p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Monthly net</span>
+                <DollarSign className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <p className="text-2xl font-semibold">${totalActiveNet.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-muted-foreground">After platform fees across all active retainers</p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Throughput</span>
+                <Clock className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <p className="text-2xl font-semibold">{totalDeliveredVideos}/{totalActiveVideos || 0}</p>
+              <p className="text-xs text-muted-foreground">Videos submitted versus this month's quota</p>
+            </div>
+          </div>
+
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-green-500" />
@@ -498,21 +735,27 @@ export default function CreatorRetainers() {
                   const totalVideos = Number(contract?.videosPerMonth || 1);
                   const progressValue = Math.min(100, Math.round((delivered / totalVideos) * 100));
                   const netAmount = Number(contract?.monthlyAmount || 0) * 0.93;
+                  const remainingVideos = Math.max(0, totalVideos - delivered);
 
                   return (
                     <Card key={`active-${contract.id}`} className="border-card-border">
-                      <CardContent className="p-4 space-y-3">
+                      <CardContent className="p-4 space-y-4">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
+                          <div className="space-y-1">
                             <p className="text-sm font-semibold">{contract.title}</p>
                             <p className="text-xs text-muted-foreground">
                               {contract.videosPerMonth} videos/mo • {contract.durationMonths} month term
                             </p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Calendar className="h-3.5 w-3.5" />
+                              <span>Next payout in {Math.max(1, (contract.durationMonths || 1) * 4)} weeks</span>
+                            </div>
                           </div>
                           <Badge variant="outline" className="bg-primary/10 text-primary">
                             Net ${netAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo
                           </Badge>
                         </div>
+
                         <div className="space-y-2">
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span>Progress</span>
@@ -521,11 +764,16 @@ export default function CreatorRetainers() {
                             </span>
                           </div>
                           <Progress value={progressValue} />
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1 text-emerald-600">
+                              <CheckCircle className="h-3.5 w-3.5" /> Delivered {delivered}
+                            </span>
+                            <span className="flex items-center gap-1 text-amber-600">
+                              <AlertTriangle className="h-3.5 w-3.5" /> {remainingVideos} remaining
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Calendar className="h-3.5 w-3.5" />
-                          <span>Next payout expected in {Math.max(1, (contract.durationMonths || 1) * 4)} weeks</span>
-                        </div>
+
                         <div className="flex flex-wrap gap-2">
                           <Button variant="secondary" size="sm" onClick={() => setLocation(`/retainers/${contract.id}`)}>
                             <Upload className="h-3.5 w-3.5 mr-1" />
@@ -534,6 +782,10 @@ export default function CreatorRetainers() {
                           <Button variant="outline" size="sm" onClick={() => setLocation(`/messages`)}>
                             <MessageCircle className="h-3.5 w-3.5 mr-1" />
                             Message company
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setLocation(`/retainers/${contract.id}`)}>
+                            <Eye className="h-3.5 w-3.5 mr-1" />
+                            View brief
                           </Button>
                         </div>
                       </CardContent>
@@ -557,12 +809,25 @@ export default function CreatorRetainers() {
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {completedContracts.map(({ contract }) => (
                   <Card key={`completed-${contract.id}`} className="border-card-border">
-                    <CardContent className="p-4 space-y-2">
-                      <p className="text-sm font-semibold">{contract.title}</p>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold">{contract.title}</p>
+                        <Badge variant="secondary" className="bg-muted text-foreground">Completed</Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         Earned ${Number(contract.monthlyAmount || 0).toLocaleString()} per month over {contract.durationMonths}{" "}
                         month{contract.durationMonths === 1 ? "" : "s"}
                       </p>
+                      <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Consistently delivered {contract.videosPerMonth} videos per month</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Star className="h-3.5 w-3.5 text-amber-500" />
+                          <span>Use this as a proof point in future pitches</span>
+                        </div>
+                      </div>
                       <Button variant="ghost" size="sm" className="px-0 justify-start">
                         Leave a review
                       </Button>
@@ -587,172 +852,6 @@ export default function CreatorRetainers() {
         </Card>
       ) : (
         <div className="space-y-6">
-          <Card className="border-card-border">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-lg">Search & Filter</CardTitle>
-                  <p className="text-sm text-muted-foreground">Find retainers that match your pricing, cadence, and preferences.</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
-                  aria-label="Toggle filter visibility"
-                  data-testid="button-toggle-filter"
-                >
-                  {isFilterCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
-                </Button>
-              </div>
-            </CardHeader>
-            {!isFilterCollapsed && (
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Search</p>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={searchTerm}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Search by title, company, or niche"
-                      className="pl-9"
-                      data-testid="input-retainer-search"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Platform</p>
-                  <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                    <SelectTrigger data-testid="select-platform-filter">
-                      <SelectValue placeholder="All platforms" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All platforms</SelectItem>
-                      {uniquePlatforms.map((platform) => (
-                        <SelectItem key={platform} value={platform}>
-                          {platform}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Contract length</p>
-                  <Select value={durationFilter} onValueChange={setDurationFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All lengths" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Any duration</SelectItem>
-                      <SelectItem value="3">3 months</SelectItem>
-                      <SelectItem value="6">6 months</SelectItem>
-                      <SelectItem value="12">12 months</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Preferences</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={preferenceFilter.includes("approval_required")}
-                        onCheckedChange={() => handlePreferenceToggle("approval_required")}
-                      />
-                      <span>Approval required</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={preferenceFilter.includes("no_approval")}
-                        onCheckedChange={() => handlePreferenceToggle("no_approval")}
-                      />
-                      <span>No approval needed</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={preferenceFilter.includes("exclusivity")}
-                        onCheckedChange={() => handlePreferenceToggle("exclusivity")}
-                      />
-                      <span>Exclusivity allowed</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-muted-foreground">Monthly amount range</p>
-                    <Badge variant="outline">${amountRange[0].toLocaleString()} - ${amountRange[1].toLocaleString()}</Badge>
-                  </div>
-                  <Slider
-                    value={amountRange}
-                    min={0}
-                    max={10000}
-                    step={250}
-                    onValueChange={(value) => setAmountRange(value as number[])}
-                  />
-                  <p className="text-xs text-muted-foreground">Transparent pricing shows gross amounts before fees.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">Niche</p>
-                  <Select value={nicheFilter} onValueChange={setNicheFilter}>
-                    <SelectTrigger data-testid="select-niche-filter">
-                      <SelectValue placeholder="All niches" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All niches</SelectItem>
-                      {uniqueNiches.map((niche) => (
-                        <SelectItem key={niche} value={niche}>
-                          {niche}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <p className="text-sm font-medium text-muted-foreground pt-2">Quick minimum budget</p>
-                  <Select value={budgetFilter} onValueChange={setBudgetFilter}>
-                    <SelectTrigger data-testid="select-budget-filter">
-                      <SelectValue placeholder="All budgets" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All budgets</SelectItem>
-                      <SelectItem value="500">$500+</SelectItem>
-                      <SelectItem value="1000">$1,000+</SelectItem>
-                      <SelectItem value="2500">$2,500+</SelectItem>
-                      <SelectItem value="5000">$5,000+</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {filtersApplied && (
-                <div className="flex justify-end">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      setSearchTerm("");
-                      setPlatformFilter("all");
-                      setBudgetFilter("all");
-                      setNicheFilter("all");
-                      setDurationFilter("all");
-                      setPreferenceFilter([]);
-                      setAmountRange([0, 10000]);
-                    }}
-                    data-testid="button-clear-retainer-filters"
-                  >
-                    Clear filters
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-            )}
-          </Card>
-
           {filteredContracts.length === 0 ? (
             <Card className="border-card-border">
               <CardContent className="p-12 text-center space-y-2">
@@ -1209,7 +1308,7 @@ export default function CreatorRetainers() {
               </ul>
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>💡 Next Step:</strong> Add your video platform URL in your profile settings, then come back to apply!
+                  <strong>\u1F4A1 Next Step:</strong> Add your video platform URL in your profile settings, then come back to apply!
                 </p>
               </div>
             </AlertDialogDescription>
@@ -1236,5 +1335,6 @@ export default function CreatorRetainers() {
         variant="error"
       />
     </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import passport from "passport";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+// Note: Cloudinary import removed - now using GCS via ObjectStorageService
 import { db } from "./db";
 import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
@@ -36,6 +37,9 @@ import * as QRCode from "qrcode";
 // @ts-ignore - multer may not have types in all environments
 import multer from "multer";
 
+// Reusable object storage helper for normalizing stored paths
+const sharedObjectStorageService = new ObjectStorageService();
+
 // Define multer file interface for type safety
 interface MulterFile {
   fieldname: string;
@@ -48,6 +52,51 @@ interface MulterFile {
 
 // Extend Express Request type to include multer's file property
 type Request = ExpressRequest;
+
+// Helper function to generate simulated platform data for demo purposes
+// In production, this would be replaced with real API calls to each platform
+function generateSimulatedPlatformData(platform: string, username: string) {
+  // Generate consistent data based on username hash for demo purposes
+  const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const multiplier = (hash % 100) / 10 + 1; // 1-11 multiplier
+
+  const baseFollowers = {
+    youtube: Math.floor(10000 * multiplier),
+    tiktok: Math.floor(50000 * multiplier),
+    instagram: Math.floor(25000 * multiplier),
+  };
+
+  const baseVideos = {
+    youtube: Math.floor(50 * multiplier),
+    tiktok: Math.floor(200 * multiplier),
+    instagram: Math.floor(150 * multiplier),
+  };
+
+  const baseViews = {
+    youtube: Math.floor(500000 * multiplier),
+    tiktok: Math.floor(2000000 * multiplier),
+    instagram: Math.floor(1000000 * multiplier),
+  };
+
+  const followers = baseFollowers[platform as keyof typeof baseFollowers] || 10000;
+  const videoCount = baseVideos[platform as keyof typeof baseVideos] || 50;
+  const totalViews = baseViews[platform as keyof typeof baseViews] || 100000;
+  const engagementRate = Math.round((2 + (hash % 8)) * 10) / 10; // 2-10%
+
+  return {
+    followers,
+    videoCount,
+    totalViews,
+    engagementRate,
+    metadata: {
+      platform,
+      username,
+      lastUpdated: new Date().toISOString(),
+      verified: hash % 3 === 0, // Some accounts are "verified"
+      accountType: hash % 2 === 0 ? 'creator' : 'business',
+    },
+  };
+}
 import {
   insertCreatorProfileSchema,
   insertCompanyProfileSchema,
@@ -58,6 +107,8 @@ import {
   insertMessageSchema,
   insertReviewSchema,
   insertFavoriteSchema,
+  insertSavedSearchSchema,
+  savedSearchFiltersSchema,
   insertPaymentSettingSchema,
   adminReviewUpdateSchema,
   adminNoteSchema,
@@ -128,6 +179,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
   }, 60000); // Check every minute
+
+  app.get("/api/documents/signed-url/:publicId(*)", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const userRole = (req.user as any)?.role;
+      
+      // Get the public ID from the URL params (the (*) allows slashes in the publicId)
+      const publicId = req.params.publicId;
+      
+      // Get resource type from query params (default: 'raw' for documents)
+      const resourceType = (req.query.resourceType as string) || 'raw';
+      
+      console.log('[Signed URL] Request received');
+      console.log('[Signed URL] User ID:', userId);
+      console.log('[Signed URL] User Role:', userRole);
+      console.log('[Signed URL] Public ID:', publicId);
+      console.log('[Signed URL] Resource type:', resourceType);
+      
+      // Validate public ID
+      if (!publicId || publicId.trim() === '') {
+        console.error('[Signed URL] Empty public ID provided');
+        return res.status(400).json({ 
+          error: "Bad Request",
+          message: "Public ID is required"
+        });
+      }
+
+      // Generate signed URL valid for 1 hour using the shared object storage service
+      const signedUrl = sharedObjectStorageService.getSignedViewUrl(publicId, {
+        resourceType: resourceType as any,
+        expiresIn: 3600, // 1 hour in seconds
+      });
+      
+      // Calculate expiry date
+      const expiresAt = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
+      
+      console.log('[Signed URL] Successfully generated signed URL');
+      console.log('[Signed URL] Expires at:', expiresAt);
+      
+      // Return the signed URL to the client
+      res.json({ 
+        url: signedUrl,
+        expiresAt: expiresAt,
+        publicId: publicId
+      });
+      
+    } catch (error) {
+      console.error('[Signed URL] Error generating signed URL:', error);
+      
+      // Return error to client
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: "Failed to generate signed URL",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
 
   // Email change verification endpoint - validates password and checks email availability
   app.post("/api/auth/verify-email-change", requireAuth, async (req, res) => {
@@ -352,7 +460,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("[Profile Update] Updated profile:", profile);
         return res.json(profile);
       } else if (user.role === 'company') {
-        const validated = insertCompanyProfileSchema.partial().parse(profileData);
+        // Don't normalize URLs - save full Cloudinary URLs
+        const normalizedProfileData = {
+          ...profileData,
+        };
+
+        const validated = insertCompanyProfileSchema.partial().parse(normalizedProfileData);
         const profile = await storage.updateCompanyProfile(userId, validated);
         return res.json(profile);
       }
@@ -360,6 +473,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(400).send("Invalid role");
     } catch (error: any) {
       res.status(500).send(error.message);
+    }
+  });
+
+  // ===== Social Account Connections =====
+
+  // Get all social connections for the current user
+  app.get("/api/social-connections", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const connections = await storage.getSocialConnections(userId);
+      res.json(connections);
+    } catch (error: any) {
+      console.error("[Social Connections] Error fetching connections:", error);
+      res.status(500).json({ error: "Failed to fetch social connections" });
+    }
+  });
+
+  // Get connection for a specific platform
+  app.get("/api/social-connections/:platform", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const platform = req.params.platform as 'youtube' | 'tiktok' | 'instagram';
+
+      if (!['youtube', 'tiktok', 'instagram'].includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform" });
+      }
+
+      const connection = await storage.getSocialConnectionByPlatform(userId, platform);
+      res.json(connection || null);
+    } catch (error: any) {
+      console.error("[Social Connections] Error fetching connection:", error);
+      res.status(500).json({ error: "Failed to fetch social connection" });
+    }
+  });
+
+  // Connect a social account (simulated connection for demo - real OAuth would be platform-specific)
+  app.post("/api/social-connections/:platform/connect", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const platform = req.params.platform as 'youtube' | 'tiktok' | 'instagram';
+      const { profileUrl, username } = req.body;
+
+      if (!['youtube', 'tiktok', 'instagram'].includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform" });
+      }
+
+      if (!profileUrl) {
+        return res.status(400).json({ error: "Profile URL is required" });
+      }
+
+      // Extract username from URL if not provided
+      let extractedUsername = username;
+      if (!extractedUsername) {
+        // Basic URL parsing to extract username
+        const urlParts = profileUrl.split('/').filter(Boolean);
+        extractedUsername = urlParts[urlParts.length - 1]?.replace('@', '') || 'unknown';
+      }
+
+      // Simulate fetching real data from the platform API
+      // In production, this would use OAuth and real API calls
+      const simulatedData = generateSimulatedPlatformData(platform, extractedUsername);
+
+      const connection = await storage.upsertSocialConnection({
+        userId,
+        platform,
+        platformUsername: extractedUsername,
+        profileUrl,
+        connectionStatus: 'connected',
+        followerCount: simulatedData.followers,
+        subscriberCount: platform === 'youtube' ? simulatedData.followers : null,
+        videoCount: simulatedData.videoCount,
+        totalViews: simulatedData.totalViews,
+        avgEngagementRate: simulatedData.engagementRate.toString(),
+        lastSyncedAt: new Date(),
+        metadata: simulatedData.metadata,
+      });
+
+      // Also update the creator profile with the URL and follower count
+      const updates: any = {};
+      if (platform === 'youtube') {
+        updates.youtubeUrl = profileUrl;
+        updates.youtubeFollowers = simulatedData.followers;
+      } else if (platform === 'tiktok') {
+        updates.tiktokUrl = profileUrl;
+        updates.tiktokFollowers = simulatedData.followers;
+      } else if (platform === 'instagram') {
+        updates.instagramUrl = profileUrl;
+        updates.instagramFollowers = simulatedData.followers;
+      }
+
+      await storage.updateCreatorProfile(userId, updates);
+
+      res.json({
+        success: true,
+        connection,
+        message: `Successfully connected ${platform} account`,
+      });
+    } catch (error: any) {
+      console.error("[Social Connections] Error connecting account:", error);
+      res.status(500).json({ error: "Failed to connect social account" });
+    }
+  });
+
+  // Sync data from a connected platform
+  app.post("/api/social-connections/:platform/sync", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const platform = req.params.platform as 'youtube' | 'tiktok' | 'instagram';
+
+      if (!['youtube', 'tiktok', 'instagram'].includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform" });
+      }
+
+      const existingConnection = await storage.getSocialConnectionByPlatform(userId, platform);
+      if (!existingConnection) {
+        return res.status(404).json({ error: "No connection found for this platform" });
+      }
+
+      // Simulate refreshing data from the platform
+      const simulatedData = generateSimulatedPlatformData(
+        platform,
+        existingConnection.platformUsername || 'user'
+      );
+
+      const updatedConnection = await storage.updateSocialConnection(userId, platform, {
+        followerCount: simulatedData.followers,
+        subscriberCount: platform === 'youtube' ? simulatedData.followers : null,
+        videoCount: simulatedData.videoCount,
+        totalViews: simulatedData.totalViews,
+        avgEngagementRate: simulatedData.engagementRate.toString(),
+        lastSyncedAt: new Date(),
+        metadata: simulatedData.metadata,
+      });
+
+      // Update creator profile as well
+      const updates: any = {};
+      if (platform === 'youtube') {
+        updates.youtubeFollowers = simulatedData.followers;
+      } else if (platform === 'tiktok') {
+        updates.tiktokFollowers = simulatedData.followers;
+      } else if (platform === 'instagram') {
+        updates.instagramFollowers = simulatedData.followers;
+      }
+
+      await storage.updateCreatorProfile(userId, updates);
+
+      res.json({
+        success: true,
+        connection: updatedConnection,
+        message: `Successfully synced ${platform} data`,
+      });
+    } catch (error: any) {
+      console.error("[Social Connections] Error syncing data:", error);
+      res.status(500).json({ error: "Failed to sync social data" });
+    }
+  });
+
+  // Disconnect a social account
+  app.delete("/api/social-connections/:platform", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const platform = req.params.platform as 'youtube' | 'tiktok' | 'instagram';
+
+      if (!['youtube', 'tiktok', 'instagram'].includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform" });
+      }
+
+      const deleted = await storage.deleteSocialConnection(userId, platform);
+
+      if (!deleted) {
+        return res.status(404).json({ error: "Connection not found" });
+      }
+
+      // Clear the URL from creator profile
+      const updates: any = {};
+      if (platform === 'youtube') {
+        updates.youtubeUrl = null;
+        updates.youtubeFollowers = null;
+      } else if (platform === 'tiktok') {
+        updates.tiktokUrl = null;
+        updates.tiktokFollowers = null;
+      } else if (platform === 'instagram') {
+        updates.instagramUrl = null;
+        updates.instagramFollowers = null;
+      }
+
+      await storage.updateCreatorProfile(userId, updates);
+
+      res.json({
+        success: true,
+        message: `Successfully disconnected ${platform} account`,
+      });
+    } catch (error: any) {
+      console.error("[Social Connections] Error disconnecting account:", error);
+      res.status(500).json({ error: "Failed to disconnect social account" });
     }
   });
 
@@ -588,6 +896,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Serve/proxy a verification document with authentication
+  app.get("/api/company/verification-documents/:id/file", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const userRole = (req.user as any).role;
+      const documentId = req.params.id;
+
+      // Get the document
+      const document = await storage.getVerificationDocumentById(documentId);
+      if (!document) {
+        return res.status(404).send("Document not found");
+      }
+
+      // Verify authorization: must be the document owner or an admin
+      if (userRole !== 'admin') {
+        const companyProfile = await storage.getCompanyProfile(userId);
+        if (!companyProfile || document.companyId !== companyProfile.id) {
+          return res.status(403).send("Not authorized to access this document");
+        }
+      }
+
+      const documentUrl = document.documentUrl;
+      if (!documentUrl) {
+        return res.status(404).send("Document URL not found");
+      }
+
+      console.log('[Verification Document] Original URL:', documentUrl);
+
+      // For Cloudinary URLs, fetch and stream the document
+      // Since documents are uploaded as public resources (type: 'upload'),
+      // we can fetch them directly without authentication APIs
+      try {
+        // Determine the correct fetch URL
+        let fetchUrl: string;
+
+        if (documentUrl.includes('cloudinary.com')) {
+          // Extract public_id from Cloudinary URL
+          // URL format: https://res.cloudinary.com/{cloud}/image/upload/v{version}/{public_id}.{extension}
+          const url = new URL(documentUrl);
+          const pathParts = url.pathname.split('/');
+
+          // Find the index of 'upload' or 'authenticated'
+          const uploadIndex = pathParts.findIndex(part => part === 'upload' || part === 'authenticated');
+          if (uploadIndex === -1) {
+            console.error('[Verification Document] Invalid URL format - no upload/authenticated path:', documentUrl);
+            // Fallback to direct URL
+            fetchUrl = documentUrl;
+          } else {
+            // Get resource type (image, raw, video, etc.)
+            const resourceType = pathParts[uploadIndex - 1] || 'image';
+
+            // Skip upload type and version number (v123456), get the rest as public_id
+            const publicIdParts = pathParts.slice(uploadIndex + 2);
+            let publicIdWithExt = publicIdParts.join('/');
+
+            // Remove file extension from public_id (Cloudinary doesn't include it in public_id)
+            const publicId = publicIdWithExt.replace(/\.[^.]+$/, '');
+
+            console.log('[Verification Document] Extracted public_id:', publicId);
+            console.log('[Verification Document] Resource type:', resourceType);
+
+            // Generate a proper URL for the resource
+            // For public uploads (type: 'upload'), we can use cloudinary.url() without authentication
+            fetchUrl = cloudinary.url(publicId, {
+              resource_type: resourceType as any,
+              secure: true,
+              type: 'upload', // These are public uploads
+              sign_url: false, // No signing needed for public resources
+            });
+
+            console.log('[Verification Document] Generated fetch URL');
+          }
+        } else {
+          // Non-Cloudinary URL, use as-is
+          fetchUrl = documentUrl;
+        }
+
+        // Fetch the document
+        const fetchRes = await fetch(fetchUrl, {
+          method: "GET",
+          headers: {
+            'User-Agent': 'AffiliateXchange-Server/1.0',
+          },
+        });
+
+        if (!fetchRes.ok) {
+          console.error('[Verification Document Proxy] Failed to fetch:', fetchRes.status, fetchRes.statusText);
+          console.error('[Verification Document Proxy] Tried URL:', fetchUrl);
+          return res.status(fetchRes.status).send("Failed to fetch document from Cloudinary");
+        }
+
+        console.log('[Verification Document] Successfully fetched document');
+
+        // Set appropriate headers
+        const contentType = fetchRes.headers.get("content-type");
+        if (contentType) {
+          res.setHeader("Content-Type", contentType);
+        } else {
+          // Fallback content type based on file extension
+          if (document.documentType === 'pdf' || documentUrl.toLowerCase().endsWith('.pdf')) {
+            res.setHeader("Content-Type", "application/pdf");
+          } else if (documentUrl.toLowerCase().match(/\.(jpg|jpeg)$/i)) {
+            res.setHeader("Content-Type", "image/jpeg");
+          } else if (documentUrl.toLowerCase().endsWith('.png')) {
+            res.setHeader("Content-Type", "image/png");
+          }
+        }
+
+        const contentLength = fetchRes.headers.get("content-length");
+        if (contentLength) res.setHeader("Content-Length", contentLength);
+
+        // Set content disposition for PDFs to display inline
+        if (document.documentType === 'pdf' || documentUrl.toLowerCase().endsWith('.pdf')) {
+          res.setHeader("Content-Disposition", `inline; filename="${document.documentName}"`);
+        }
+
+        // Stream the response
+        if (fetchRes.body) {
+          const reader = fetchRes.body.getReader();
+          const pump = async () => {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(Buffer.from(value));
+              }
+              res.end();
+            } catch (error) {
+              console.error('[Verification Document Proxy] Error streaming document:', error);
+              res.end();
+            }
+          };
+          await pump();
+        } else {
+          const arrayBuffer = await fetchRes.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          res.send(buffer);
+        }
+      } catch (urlError: any) {
+        console.error('[Verification Document] URL parsing error:', urlError);
+        return res.status(500).send("Failed to parse document URL");
+      }
+    } catch (error: any) {
+      console.error("Serve verification document error:", error);
+      res.status(500).send(error?.message || "Failed to serve document");
+    }
+  });
+
   // Admin: Get verification documents for a specific company
   app.get("/api/admin/companies/:id/verification-documents", requireAuth, requireRole('admin'), async (req, res) => {
     try {
@@ -655,10 +1111,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const creatorProfile = await storage.getCreatorProfile(userId);
       if (!creatorProfile) {
         console.log('[Recommendations] Profile not found for user:', userId);
-        return res.status(404).json({
-          error: 'profile_not_found',
-          message: 'Creator profile not found. Please complete your profile first.'
-        });
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
       }
 
   const creatorNiches = (creatorProfile.niches || []).map((n: string) => (n || '').toString().trim()).filter(Boolean);
@@ -1389,7 +1843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ NEW: Get single application by ID
+  // \u2705 NEW: Get single application by ID
   app.get("/api/applications/:id", requireAuth, async (req, res) => {
     try {
       const userId = (req.user as any).id;
@@ -1574,7 +2028,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await notificationService.sendNotification(
           application.creatorId,
           'application_status_change',
-          'Your application has been approved! 🎉',
+          'Your application has been approved! \u1F389',
           `Congratulations! Your application for "${offer.title}" has been approved. You can now start promoting this offer.`,
           {
             userName: creator.firstName || creator.username,
@@ -1720,17 +2174,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send notification to creator
       const creator = await storage.getUserById(application.creatorId);
       if (creator) {
-        // ✅ FIXED: Added paymentId to notification
+        // \u2705 FIXED: Added paymentId to notification
         await notificationService.sendNotification(
           application.creatorId,
           'payment_pending',
-          'Work Completed - Payment Pending 💰',
+          'Work Completed - Payment Pending \u1F4B0',
           `Your work for "${offer.title}" has been marked as complete! Payment of $${fees.netAmount.toFixed(2)} is pending company approval.`,
           {
             userName: creator.firstName || creator.username,
             offerTitle: offer.title,
             amount: `$${fees.netAmount.toFixed(2)}`,
-            paymentId: payment.id, // ✅ ADDED
+            paymentId: payment.id, // \u2705 ADDED
           }
         );
       }
@@ -1800,9 +2254,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('[/api/company/applications] companyProfile:', companyProfile);
       if (!companyProfile) {
         console.log('[/api/company/applications] No company profile found for user:', userId);
-        return res.status(404).send("Company profile not found");
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
       }
-      
+
       // Pass company profile ID, not user ID
       const applications = await storage.getApplicationsByCompany(companyProfile.id);
       console.log('[/api/company/applications] Found', applications.length, 'applications');
@@ -1898,6 +2353,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteFavorite(userId, req.params.offerId);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Saved searches routes
+  const savedSearchUpdateSchema = z.object({
+    name: z.string().trim().min(1).max(200).optional(),
+    filters: savedSearchFiltersSchema.optional(),
+  });
+
+  app.get("/api/saved-searches", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const savedSearches = await storage.getSavedSearchesByCreator(userId);
+      res.json(savedSearches);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.post("/api/saved-searches", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const validated = insertSavedSearchSchema
+        .omit({ creatorId: true })
+        .parse({ ...req.body });
+
+      const savedSearch = await storage.createSavedSearch({ ...validated, creatorId: userId });
+      res.json(savedSearch);
+    } catch (error: any) {
+      console.error("[Create Saved Search] Error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid saved search payload" });
+      }
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.put("/api/saved-searches/:id", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const updates = savedSearchUpdateSchema.parse(req.body);
+
+      const existing = await storage.getSavedSearch(req.params.id, userId);
+      if (!existing) {
+        return res.status(404).json({ error: "Saved search not found" });
+      }
+
+      const updated = await storage.updateSavedSearch(req.params.id, userId, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Saved search not found" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("[Update Saved Search] Error:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Invalid saved search payload" });
+      }
+      res.status(500).send(error.message);
+    }
+  });
+
+  app.delete("/api/saved-searches/:id", requireAuth, requireRole('creator'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const existing = await storage.getSavedSearch(req.params.id, userId);
+      if (!existing) {
+        return res.status(404).json({ error: "Saved search not found" });
+      }
+
+      await storage.deleteSavedSearch(req.params.id, userId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Delete Saved Search] Error:", error);
       res.status(500).send(error.message);
     }
   });
@@ -2318,6 +2848,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const message = await storage.createMessage(validated);
 
+      // Send persistent notification to recipient about new message
+      const conversation = await storage.getConversation(message.conversationId);
+      if (conversation) {
+        const isCreatorSender = message.senderId === conversation.creatorId;
+
+        // Get company user ID if recipient is company
+        let recipientId: string | null = null;
+        if (isCreatorSender && conversation.companyId) {
+          const companyProfile = await storage.getCompanyProfileById(conversation.companyId);
+          recipientId = companyProfile?.userId || null;
+        } else {
+          recipientId = conversation.creatorId;
+        }
+
+        if (recipientId) {
+          const senderUser = await storage.getUserById(message.senderId);
+          const senderName = senderUser?.firstName || senderUser?.username || 'Someone';
+          const messagePreview = message.content.length > 100
+            ? message.content.substring(0, 100) + '...'
+            : message.content;
+
+          // Get company name for context if sender is company
+          let companyName = '';
+          if (!isCreatorSender && conversation.companyId) {
+            const companyProfile = await storage.getCompanyProfileById(conversation.companyId);
+            companyName = companyProfile?.legalName || companyProfile?.tradeName || '';
+          }
+
+          await notificationService.sendNotification(
+            recipientId,
+            'new_message',
+            `New message from ${senderName}`,
+            messagePreview,
+            {
+              userName: senderName,
+              companyName: companyName,
+              messagePreview: messagePreview,
+              conversationId: conversation.id,
+              messageId: message.id,
+              linkUrl: `/messages/${conversation.id}`,
+            }
+          );
+        }
+      }
+
       // Auto-moderate message for banned content
       try {
         await moderateMessage(message.id, storage);
@@ -2553,6 +3128,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const review = await storage.createReview(validated);
 
+      // Send notification to company about new review
+      const companyProfile = await storage.getCompanyProfileById(review.companyId);
+      if (companyProfile) {
+        const creatorUser = await storage.getUserById(userId);
+        await notificationService.sendNotification(
+          companyProfile.userId,
+          'review_received',
+          `New Review Received (${review.rating} stars)`,
+          `${creatorUser?.firstName || creatorUser?.username || 'A creator'} left you a ${review.rating}-star review${review.comment ? ': "' + review.comment.substring(0, 50) + (review.comment.length > 50 ? '..."' : '"') : '.'}`,
+          {
+            userName: companyProfile.legalName || companyProfile.tradeName || 'Company',
+            reviewRating: review.rating,
+            reviewText: review.comment,
+            linkUrl: '/company-reviews',
+          }
+        );
+      }
+
       // Auto-moderate review for banned content and low ratings
       try {
         await moderateReview(review.id, storage);
@@ -2586,7 +3179,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companyProfile = await storage.getCompanyProfile(userId);
 
       if (!companyProfile) {
-        return res.status(404).send("Company profile not found");
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
       }
 
       const reviews = await storage.getReviewsByCompany(companyProfile.id);
@@ -2913,7 +3507,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companyProfile = await storage.getCompanyProfile(userId);
 
       if (!companyProfile) {
-        return res.status(404).send("Company profile not found");
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
       }
 
       const payments = await storage.getPaymentsByCompany(companyProfile.id);
@@ -2933,7 +3528,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ✅ Get single payment by ID (for all roles - creator, company, admin)
+  // \u2705 Get single payment by ID (for all roles - creator, company, admin)
   // IMPORTANT: This MUST come AFTER specific routes like /creator, /company, /all
   app.get("/api/payments/:id", requireAuth, async (req, res) => {
     try {
@@ -3015,7 +3610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).send("Payment not found");
       }
 
-      // 💰 PROCESS ACTUAL PAYMENT WHEN MARKING AS COMPLETED
+      // \u1F4B0 PROCESS ACTUAL PAYMENT WHEN MARKING AS COMPLETED
       if (status === 'completed') {
         console.log(`[Payment] Processing ${payment.paymentType || 'affiliate'} payment ${id} to send $${payment.netAmount} to creator`);
 
@@ -3138,7 +3733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await notificationService.sendNotification(
             payment.creatorId,
             'payment_received',
-            'Payment Received! 💰',
+            'Payment Received! \u1F4B0',
             `You've received a payment of $${payment.netAmount} for your work on "${paymentTitle}". Transaction ID: ${paymentResult.transactionId}`,
             {
               userName: creator.firstName || creator.username,
@@ -3173,7 +3768,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await notificationService.sendNotification(
                 companyUser.id,
                 'payment_approved',
-                'Payment Sent Successfully ✓',
+                'Payment Sent Successfully \u2713',
                 `Payment of $${payment.netAmount} has been successfully sent to the creator for "${paymentTitle}". Transaction ID: ${paymentResult.transactionId}`,
                 {
                   userName: companyUser.firstName || companyUser.username,
@@ -3331,7 +3926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await notificationService.sendNotification(
           payment.creatorId,
           'payment_approved',
-          'Payment Approved! 🎉',
+          'Payment Approved! \u1F389',
           `Great news! Your payment of $${payment.netAmount} for "${paymentTitle}" has been approved and is being processed.`,
           {
             userName: creator.firstName || creator.username,
@@ -3578,9 +4173,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = (req.user as any).id;
       const companyProfile = await storage.getCompanyProfile(userId);
-      
+
       if (!companyProfile) {
-        return res.status(404).send("Company profile not found");
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
       }
 
       const offers = await storage.getOffersByCompany(companyProfile.id);
@@ -5275,12 +5871,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      // Send notification to company
+      // Send notification to company with direct link to their offer
       await storage.createNotification({
         userId: company.userId,
         type: 'offer_approved',
         title: 'Offer Approved',
         message: `Your offer "${approvedOffer.title}" has been approved and is now live!`,
+        linkUrl: `/company/offers/${approvedOffer.id}`,
         metadata: { offerId: approvedOffer.id },
       });
 
@@ -5302,7 +5899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      // Send notification to company
+      // Send notification to company with direct link to their offer
       const company = await storage.getCompanyProfileById(offer.companyId);
       if (company) {
         await storage.createNotification({
@@ -5310,6 +5907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'offer_rejected',
           title: 'Offer Rejected',
           message: `Your offer "${offer.title}" has been rejected. Reason: ${reason}`,
+          linkUrl: `/company/offers/${offer.id}`,
           metadata: { offerId: offer.id, reason },
         });
       }
@@ -5333,7 +5931,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Offer not found" });
       }
 
-      // Send notification to company
+      // Send notification to company with direct link to edit their offer
       const company = await storage.getCompanyProfileById(offer.companyId);
       if (company) {
         await storage.createNotification({
@@ -5341,6 +5939,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'offer_edit_requested',
           title: 'Edits Requested for Offer',
           message: `An admin has requested edits to your offer "${offer.title}". Please review the notes and make the necessary changes.`,
+          linkUrl: `/company/offers/${offer.id}/edit`,
           metadata: { offerId: offer.id, notes },
         });
       }
@@ -7177,67 +7776,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only allow known safe hosts to avoid open proxy / SSRF
-      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com", "googleapis.com"];
+      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com"];
       const hostname = parsed.hostname || "";
       const allowed = allowedHosts.some((h) => hostname.endsWith(h));
       if (!allowed) return res.status(403).send("forbidden host");
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
 
-      // For GCS URLs, generate a signed URL first (files are not public)
-      let fetchUrl = url;
-      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
-        try {
-          // Extract the file path from GCS URL: https://storage.googleapis.com/bucket-name/path/to/file
-          const pathParts = parsed.pathname.split('/').filter(p => p);
-          if (pathParts.length >= 2) {
-            // Remove bucket name, keep the rest as file path
-            const filePath = pathParts.slice(1).join('/');
-
-            // Generate signed URL using ObjectStorageService
-            const { Storage } = await import('@google-cloud/storage');
-            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
-
-            let gcsStorage: any;
-            // Option 1: Use credentials from JSON string (best for production/Render)
-            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-            if (credentialsJson) {
-              const credentials = JSON.parse(credentialsJson);
-              gcsStorage = new Storage({
-                projectId: projectId || credentials.project_id,
-                credentials,
-              });
-            }
-            // Option 2: Use key file path (for local development)
-            else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-              gcsStorage = new Storage({
-                projectId,
-                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-              });
-            }
-            // Option 3: Fallback to default credentials (useful for GCP environments)
-            else {
-              gcsStorage = new Storage({ projectId });
-            }
-
-            const [signedUrl] = await gcsStorage
-              .bucket(bucketName)
-              .file(filePath)
-              .getSignedUrl({
-                version: 'v4',
-                action: 'read',
-                expires: Date.now() + 60 * 60 * 1000, // 1 hour
-              });
-
-            fetchUrl = signedUrl;
-            console.log('[Proxy Image] Generated signed URL for GCS file:', filePath);
-          }
-        } catch (signedUrlError) {
-          console.error('[Proxy Image] Failed to generate signed URL:', signedUrlError);
-          // Continue with original URL as fallback
-        }
-      }
+      // Cloudinary assets are public by default; legacy GCS signing logic kept for reference
+      // let fetchUrl = url;
+      // if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+      //   try {
+      //     const pathParts = parsed.pathname.split('/').filter(p => p);
+      //     if (pathParts.length >= 2) {
+      //       const filePath = pathParts.slice(1).join('/');
+      //       const { Storage } = await import('@google-cloud/storage');
+      //       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+      //       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+      //       let gcsStorage: any;
+      //       const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+      //       if (credentialsJson) {
+      //         const credentials = JSON.parse(credentialsJson);
+      //         gcsStorage = new Storage({
+      //           projectId: projectId || credentials.project_id,
+      //           credentials,
+      //         });
+      //       } else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+      //         gcsStorage = new Storage({
+      //           projectId,
+      //           keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+      //         });
+      //       } else {
+      //         gcsStorage = new Storage({ projectId });
+      //       }
+      //       const [signedUrl] = await gcsStorage
+      //         .bucket(bucketName)
+      //         .file(filePath)
+      //         .getSignedUrl({
+      //           version: 'v4',
+      //           action: 'read',
+      //           expires: Date.now() + 60 * 60 * 1000,
+      //         });
+      //       fetchUrl = signedUrl;
+      //       console.log('[Proxy Image] Generated signed URL for GCS file:', filePath);
+      //     }
+      //   } catch (signedUrlError) {
+      //     console.error('[Proxy Image] Failed to generate signed URL:', signedUrlError);
+      //   }
+      // }
+      const fetchUrl = url;
 
       const fetchRes = await fetch(fetchUrl, { method: "GET" });
       if (!fetchRes.ok) return res.status(fetchRes.status).send("failed to fetch image");
@@ -7273,67 +7860,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only allow known safe hosts to avoid open proxy / SSRF
-      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com", "googleapis.com"];
+      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com"];
       const hostname = parsed.hostname || "";
       const allowed = allowedHosts.some((h) => hostname.endsWith(h));
       if (!allowed) return res.status(403).send("forbidden host");
 
       if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
 
-      // For GCS URLs, generate a signed URL first (files are not public)
-      let fetchUrl = url;
-      if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
-        try {
-          // Extract the file path from GCS URL: https://storage.googleapis.com/bucket-name/path/to/file
-          const pathParts = parsed.pathname.split('/').filter(p => p);
-          if (pathParts.length >= 2) {
-            // Remove bucket name, keep the rest as file path
-            const filePath = pathParts.slice(1).join('/');
-
-            // Generate signed URL using ObjectStorageService
-            const { Storage } = await import('@google-cloud/storage');
-            const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-            const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
-
-            let gcsStorage: any;
-            // Option 1: Use credentials from JSON string (best for production/Render)
-            const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-            if (credentialsJson) {
-              const credentials = JSON.parse(credentialsJson);
-              gcsStorage = new Storage({
-                projectId: projectId || credentials.project_id,
-                credentials,
-              });
-            }
-            // Option 2: Use key file path (for local development)
-            else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-              gcsStorage = new Storage({
-                projectId,
-                keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-              });
-            }
-            // Option 3: Fallback to default credentials (useful for GCP environments)
-            else {
-              gcsStorage = new Storage({ projectId });
-            }
-
-            const [signedUrl] = await gcsStorage
-              .bucket(bucketName)
-              .file(filePath)
-              .getSignedUrl({
-                version: 'v4',
-                action: 'read',
-                expires: Date.now() + 60 * 60 * 1000, // 1 hour
-              });
-
-            fetchUrl = signedUrl;
-            console.log('[Proxy Video] Generated signed URL for GCS file:', filePath);
-          }
-        } catch (signedUrlError) {
-          console.error('[Proxy Video] Failed to generate signed URL:', signedUrlError);
-          // Continue with original URL as fallback
-        }
-      }
+      // Cloudinary assets are public by default; legacy GCS signing logic kept for reference
+      // let fetchUrl = url;
+      // if (hostname.endsWith("storage.googleapis.com") || hostname.endsWith("googleapis.com")) {
+      //   try {
+      //     const pathParts = parsed.pathname.split('/').filter(p => p);
+      //     if (pathParts.length >= 2) {
+      //       const filePath = pathParts.slice(1).join('/');
+      //       const { Storage } = await import('@google-cloud/storage');
+      //       const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+      //       const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME;
+      //       let gcsStorage: any;
+      //       const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
+      //       if (credentialsJson) {
+      //         const credentials = JSON.parse(credentialsJson);
+      //         gcsStorage = new Storage({
+      //           projectId: projectId || credentials.project_id,
+      //           credentials,
+      //         });
+      //       }
+      //       else if (process.env.GOOGLE_CLOUD_KEYFILE) {
+      //         gcsStorage = new Storage({
+      //           projectId,
+      //           keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
+      //         });
+      //       }
+      //       else {
+      //         gcsStorage = new Storage({ projectId });
+      //       }
+      //       const [signedUrl] = await gcsStorage
+      //         .bucket(bucketName)
+      //         .file(filePath)
+      //         .getSignedUrl({
+      //           version: 'v4',
+      //           action: 'read',
+      //           expires: Date.now() + 60 * 60 * 1000,
+      //         });
+      //       fetchUrl = signedUrl;
+      //       console.log('[Proxy Video] Generated signed URL for GCS file:', filePath);
+      //     }
+      //   } catch (signedUrlError) {
+      //     console.error('[Proxy Video] Failed to generate signed URL:', signedUrlError);
+      //   }
+      // }
+      const fetchUrl = url;
 
       // Get the range header from the request (for video seeking)
       const range = req.headers.range;
@@ -7405,6 +7982,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generic file proxy to support documents and other assets
+  app.get("/proxy/file", async (req, res) => {
+    try {
+      const url = (req.query.url as string) || req.query.u as string;
+      if (!url) return res.status(400).send("url query param is required");
+
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch (e) {
+        return res.status(400).send("invalid url");
+      }
+
+      // Only allow known safe hosts to avoid open proxy / SSRF
+      const allowedHosts = ["res.cloudinary.com", "cloudinary.com", "storage.googleapis.com"];
+      const hostname = parsed.hostname || "";
+      const allowed = allowedHosts.some((h) => hostname === h || hostname.endsWith("." + h));
+      if (!allowed) return res.status(403).send("forbidden host");
+
+      if (parsed.protocol !== "https:") return res.status(400).send("only https urls are allowed");
+
+      const fetchRes = await fetch(url, { method: "GET" });
+      if (!fetchRes.ok) return res.status(fetchRes.status).send("failed to fetch file");
+
+      const contentType = fetchRes.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+
+      const contentLength = fetchRes.headers.get("content-length");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+
+      const cacheControl = fetchRes.headers.get("cache-control");
+      if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+
+      res.setHeader("Access-Control-Allow-Origin", "*");
+
+      if (fetchRes.body) {
+        const reader = fetchRes.body.getReader();
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(Buffer.from(value));
+            }
+            res.end();
+          } catch (error) {
+            console.error('[File Proxy] Error streaming file:', error);
+            res.end();
+          }
+        };
+        await pump();
+      } else {
+        const arrayBuffer = await fetchRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        res.send(buffer);
+      }
+    } catch (error: any) {
+      console.error('[File Proxy] Error fetching file:', error);
+      res.status(500).send(error?.message || 'file proxy error');
+    }
+  });
+
   app.get("/objects/:objectPath(*)", requireAuth, async (req, res) => {
     console.log("🔍 Requested object path:", req.path);
     const userId = (req.user as any)?.id;
@@ -7459,7 +8098,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 try {
                   const headRes = await fetch(videoUrl, { method: 'HEAD' });
                   if (headRes.ok) {
-                    console.log(`[Objects Fallback] ✓ Found video at: ${videoUrl}`);
+                    console.log(`[Objects Fallback] \u2713 Found video at: ${videoUrl}`);
 
                     const range = req.headers.range;
                     const headers: Record<string, string> = {};
@@ -7536,7 +8175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               const imageRes = await fetch(imageUrl);
               if (imageRes.ok) {
-                console.log(`[Objects Fallback] ✓ Found as image: ${imageUrl}`);
+                console.log(`[Objects Fallback] \u2713 Found as image: ${imageUrl}`);
                 const contentType = imageRes.headers.get("content-type");
                 if (contentType) res.setHeader("Content-Type", contentType);
                 res.setHeader("Cache-Control", "public, max-age=31536000");
@@ -7561,7 +8200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Check if the video exists first with a HEAD request
               const headRes = await fetch(videoUrl, { method: 'HEAD' });
               if (headRes.ok) {
-                console.log(`[Objects Fallback] ✓ Found as video: ${videoUrl}`);
+                console.log(`[Objects Fallback] \u2713 Found as video: ${videoUrl}`);
 
                 // Get the range header from the request (for video seeking)
                 const range = req.headers.range;
@@ -7693,76 +8332,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const filename = req.params.filename;
       const isDownload = req.query.download === 'true';
-      const customName = req.query.name as string | undefined;
-      const objectStorageService = new ObjectStorageService();
-
-      // Import Storage from @google-cloud/storage
-      const { Storage } = await import('@google-cloud/storage');
-
-      // Initialize Google Cloud Storage with service account key
-      const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
-      const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
-
-      let gcsStorage: any;
-      // Option 1: Use credentials from JSON string (best for production/Render)
-      const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-      if (credentialsJson) {
-        const credentials = JSON.parse(credentialsJson);
-        gcsStorage = new Storage({
-          projectId: projectId || credentials.project_id,
-          credentials,
-        });
-      }
-      // Option 2: Use key file path (for local development)
-      else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-        gcsStorage = new Storage({
-          projectId,
-          keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-        });
-      }
-      // Option 3: Fallback to default credentials (useful for GCP environments)
-      else {
-        gcsStorage = new Storage({ projectId });
-      }
-
-      // Determine content type based on file extension
       const ext = filename.split('.').pop()?.toLowerCase();
-      const contentTypeMap: { [key: string]: string } = {
-        'pdf': 'application/pdf',
-        'jpg': 'image/jpeg',
-        'jpeg': 'image/jpeg',
-        'png': 'image/png',
-        'gif': 'image/gif',
-        'webp': 'image/webp',
-        'mp4': 'video/mp4',
-        'webm': 'video/webm',
-        'mov': 'video/quicktime',
-      };
-      const contentType = contentTypeMap[ext || ''] || 'application/octet-stream';
+      const resourceType = ['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext || '') ? 'video' : ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '') ? 'image' : 'raw';
 
-      // Build options with Content-Type and optional Content-Disposition
-      const options: any = {
-        version: 'v4' as const,
-        action: 'read' as const,
-        expires: Date.now() + 60 * 60 * 1000, // 1 hour from now
-        responseContentType: contentType,
-      };
+      const objectStorageService = new ObjectStorageService();
+      const url = await objectStorageService.getSignedViewUrl(filename, {
+        resourceType: resourceType as any,
+        expiresIn: 3600, // 1 hour
+      });
 
-      // Set Content-Disposition based on mode
-      if (isDownload) {
-        const downloadName = customName || filename.split('/').pop() || 'download';
-        options.responseContentDisposition = `attachment; filename="${downloadName}"`;
-      } else {
-        // For viewing, set inline to display in browser
-        options.responseContentDisposition = 'inline';
-      }
-
-      const [url] = await gcsStorage
-        .bucket(bucketName)
-        .file(filename)
-        .getSignedUrl(options);
-
-      console.log('[Signed URL API] Generated signed URL for:', filename, isDownload ? '(download)' : '(view)', 'contentType:', contentType);
+      console.log('[Signed URL API] Generated GCS signed URL for:', filename, isDownload ? '(download)' : '(view)');
       res.json({ url });
     } catch (error: any) {
       console.error('Error generating signed URL:', error);
@@ -7782,81 +8361,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const file = multerReq.file;
       const folder = req.body.folder || 'affiliatexchange/uploads';
-      const resourceType = req.body.resourceType || 'auto';
+      const resourceType = (req.body.resourceType as any) || 'auto';
 
-      // Import Storage from @google-cloud/storage
-      const { Storage } = await import('@google-cloud/storage');
-
-      // Initialize Google Cloud Storage
-      const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || 'tool-development-478707';
-      const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'myapp-media-affiliate';
-
-      let gcsStorage: any;
-      // Option 1: Use credentials from JSON string (best for production/Render)
-      const credentialsJson = process.env.GOOGLE_CLOUD_CREDENTIALS_JSON;
-      if (credentialsJson) {
-        const credentials = JSON.parse(credentialsJson);
-        gcsStorage = new Storage({
-          projectId: projectId || credentials.project_id,
-          credentials,
-        });
-      }
-      // Option 2: Use key file path (for local development)
-      else if (process.env.GOOGLE_CLOUD_KEYFILE) {
-        gcsStorage = new Storage({
-          projectId,
-          keyFilename: process.env.GOOGLE_CLOUD_KEYFILE,
-        });
-      }
-      // Option 3: Fallback to default credentials (useful for GCP environments)
-      else {
-        gcsStorage = new Storage({ projectId });
-      }
-
-      // Generate unique filename with original extension
-      const { randomUUID } = await import('crypto');
-      const ext = file.originalname.split('.').pop();
-      const filename = `${randomUUID()}.${ext}`;
-      const destination = `${folder}/${filename}`;
-
-      const blob = gcsStorage.bucket(bucketName).file(destination);
-
-      const blobStream = blob.createWriteStream({
-        resumable: false,
-        metadata: {
-          contentType: file.mimetype
-        }
+      const objectStorageService = new ObjectStorageService();
+      const uploadResult = await objectStorageService.uploadBuffer(file.buffer, {
+        folder,
+        resourceType,
+        publicId: file.originalname,
+        contentType: file.mimetype,
       });
 
-      blobStream.on('error', (err: any) => {
-        console.error('Error uploading file:', err);
-        res.status(500).json({ error: err.message });
+      res.json({
+        message: 'File uploaded successfully',
+        filename: uploadResult.objectPath,
+        originalName: file.originalname,
+        url: uploadResult.url,
+        publicUrl: uploadResult.url,
       });
-
-      blobStream.on('finish', async () => {
-        try {
-          // Generate signed URL for the uploaded file
-          const [url] = await blob.getSignedUrl({
-            version: 'v4',
-            action: 'read',
-            expires: Date.now() + 60 * 60 * 1000,
-          });
-
-          console.log('[Direct Upload API] File uploaded successfully:', destination);
-          res.json({
-            message: 'File uploaded successfully',
-            filename: destination,
-            originalName: file.originalname,
-            url: url,
-            publicUrl: `https://storage.googleapis.com/${bucketName}/${destination}`
-          });
-        } catch (error: any) {
-          console.error('Error generating signed URL after upload:', error);
-          res.status(500).json({ error: 'File uploaded but failed to generate signed URL' });
-        }
-      });
-
-      blobStream.end(file.buffer);
     } catch (error: any) {
       console.error('Error in direct upload:', error);
       res.status(500).json({ error: error.message });
@@ -7869,7 +8390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     const userId = (req.user as any).id;
     try {
-      // Don't normalize logo URLs - keep the full Cloudinary URL for proper display
+      // Save full Cloudinary URL like creator profile does
       const logoUrl = req.body.logoUrl;
       const companyProfile = await storage.getCompanyProfile(userId);
       if (companyProfile) {
@@ -8030,7 +8551,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = (req.user as any).id;
       const companyProfile = await storage.getCompanyProfile(userId);
-      if (!companyProfile) return res.status(404).send("Company profile not found");
+      if (!companyProfile) {
+        // Return empty array instead of 404 to allow page to render properly
+        return res.json([]);
+      }
       const contracts = await storage.getRetainerContractsByCompany(companyProfile.id);
       res.json(contracts);
     } catch (error: any) {
@@ -8225,6 +8749,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contract = await storage.getRetainerContract(validated.contractId);
       if (!contract || contract.assignedCreatorId !== userId) return res.status(403).send("Forbidden");
       const deliverable = await storage.createRetainerDeliverable({ ...validated, creatorId: userId });
+
+      // Send notification to company user
+      const companyProfile = await storage.getCompanyProfileById(contract.companyId);
+      if (companyProfile) {
+        const creatorUser = await storage.getUserById(userId);
+        await notificationService.sendNotification(
+          companyProfile.userId,
+          'deliverable_submitted',
+          'New Deliverable Submitted for Review',
+          `${creatorUser?.firstName || creatorUser?.username || 'A creator'} submitted a new deliverable for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}).`,
+          {
+            userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
+            contractTitle: contract.title,
+            monthNumber: deliverable.monthNumber.toString(),
+            videoNumber: deliverable.videoNumber.toString(),
+            linkUrl: `/company/retainers/${contract.id}`,
+          }
+        );
+      }
+
       res.json(deliverable);
     } catch (error: any) {
       res.status(500).send(error.message);
@@ -8272,6 +8816,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewNotes: null,
       } as any);
 
+      // Send notification to company user
+      const contract = await storage.getRetainerContract(deliverable.contractId);
+      if (contract) {
+        const companyProfile = await storage.getCompanyProfileById(contract.companyId);
+        if (companyProfile) {
+          const creatorUser = await storage.getUserById(userId);
+          await notificationService.sendNotification(
+            companyProfile.userId,
+            'deliverable_resubmitted',
+            'Deliverable Resubmitted After Revision',
+            `${creatorUser?.firstName || creatorUser?.username || 'A creator'} has resubmitted the deliverable for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}) after making revisions.`,
+            {
+              userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
+              contractTitle: contract.title,
+              monthNumber: deliverable.monthNumber.toString(),
+              videoNumber: deliverable.videoNumber.toString(),
+              linkUrl: `/company/retainers/${contract.id}`,
+            }
+          );
+        }
+      }
+
       res.json(updated);
     } catch (error: any) {
       console.error('[Resubmit Deliverable] Error:', error);
@@ -8312,7 +8878,7 @@ const payment = await storage.createRetainerPayment({
   platformFeeAmount: retainerFees.platformFeeAmount.toFixed(2),
   processingFeeAmount: retainerFees.stripeFeeAmount.toFixed(2),
   netAmount: retainerFees.netAmount.toFixed(2),
-  status: 'pending', // ✅ FIXED: Changed from 'completed' to 'pending' for admin review
+  status: 'pending', // \u2705 FIXED: Changed from 'completed' to 'pending' for admin review
   description: `Retainer payment for ${contract.title} - Month ${deliverable.monthNumber}, Video ${deliverable.videoNumber}`,
   initiatedAt: new Date(),
 });
@@ -8326,7 +8892,7 @@ if (creatorUser) {
   await notificationService.sendNotification(
     deliverable.creatorId,
     'payment_pending',
-    'Deliverable Approved - Payment Pending 💰',
+    'Deliverable Approved - Payment Pending \u1F4B0',
     `Your deliverable for "${contract.title}" has been approved! Payment of $${retainerFees.netAmount.toFixed(2)} is pending admin processing.`,
     {
       userName: creatorUser.firstName || creatorUser.username,
@@ -8672,7 +9238,7 @@ res.json(approved);
                 await notificationService.sendNotification(
                   application.creatorId,
                   'application_status_change',
-                  'Your application has been approved! 🎉',
+                  'Your application has been approved! \u1F389',
                   `Congratulations! Your application for "${offer.title}" has been auto-approved. You can now start promoting this offer.`,
                   {
                     userName: creator.firstName || creator.username,
@@ -8687,7 +9253,7 @@ res.json(approved);
               }
               
               processedCount++;
-              console.log(`[Auto-Approval] ✓ Approved application ${application.id} (${processedCount} total)`);
+              console.log(`[Auto-Approval] \u2713 Approved application ${application.id} (${processedCount} total)`);
             } catch (error) {
               console.error(`[Auto-Approval] ✗ Failed to approve application ${application.id}:`, error);
             }
@@ -8925,7 +9491,7 @@ res.json(approved);
             .set({ featuredImageUrl: newUrl })
             .where(eq(offers.id, offer.id));
           totalFixed++;
-          console.log(`  ✓ Fixed offer ${offer.id}: ${offer.featuredImageUrl} -> ${newUrl}`);
+          console.log(`  \u2713 Fixed offer ${offer.id}: ${offer.featuredImageUrl} -> ${newUrl}`);
         }
       }
 
@@ -8940,7 +9506,7 @@ res.json(approved);
             .set({ thumbnailUrl: newUrl })
             .where(eq(offerVideos.id, video.id));
           totalFixed++;
-          console.log(`  ✓ Fixed video thumbnail ${video.id}: ${video.thumbnailUrl} -> ${newUrl}`);
+          console.log(`  \u2713 Fixed video thumbnail ${video.id}: ${video.thumbnailUrl} -> ${newUrl}`);
         }
       }
 
@@ -8955,7 +9521,7 @@ res.json(approved);
             .set({ videoUrl: newUrl })
             .where(eq(offerVideos.id, video.id));
           totalFixed++;
-          console.log(`  ✓ Fixed video URL ${video.id}: ${video.videoUrl} -> ${newUrl}`);
+          console.log(`  \u2713 Fixed video URL ${video.id}: ${video.videoUrl} -> ${newUrl}`);
         }
       }
 
@@ -8970,11 +9536,11 @@ res.json(approved);
             .set({ logoUrl: newUrl })
             .where(eq(companyProfiles.id, company.id));
           totalFixed++;
-          console.log(`  ✓ Fixed company logo ${company.id}: ${company.logoUrl} -> ${newUrl}`);
+          console.log(`  \u2713 Fixed company logo ${company.id}: ${company.logoUrl} -> ${newUrl}`);
         }
       }
 
-      console.log(`[Migration] ✓ Complete! Fixed ${totalFixed} URLs`);
+      console.log(`[Migration] \u2713 Complete! Fixed ${totalFixed} URLs`);
 
       res.json({
         success: true,

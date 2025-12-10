@@ -6,18 +6,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import { Users, FileText, TrendingUp, DollarSign, Plus, CheckCircle, MousePointer } from "lucide-react";
+import { Users, FileText, TrendingUp, DollarSign, Plus, CheckCircle, MousePointer, AlertTriangle, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { StatsGridSkeleton, ListItemSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { FirstTimeTutorial } from "../components/FirstTimeTutorial";
+import { useTutorial } from "../hooks/useTutorial";
+import { TUTORIAL_IDS, companyDashboardTutorialConfig } from "../lib/tutorialConfig";
+import { usePageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, dashboardTourSteps } from "../lib/companyTourConfig";
 
 export default function CompanyDashboard() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+  const { showTutorial, completeTutorial } = useTutorial(TUTORIAL_IDS.COMPANY_DASHBOARD);
+
+  // Quick tour for new company accounts - only start after tutorial is dismissed
+  usePageTour(COMPANY_TOUR_IDS.DASHBOARD, dashboardTourSteps, !showTutorial);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -104,17 +113,44 @@ export default function CompanyDashboard() {
   return (
     <div className="space-y-6 sm:space-y-8">
       <TopNavBar />
+
+      {/* Company Approval Pending - Slim notification banner */}
+      {stats?.companyProfile?.status === 'pending' && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
+          <p className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+            <span className="font-medium">Company Approval Pending:</span> Your company registration is under review. You'll be able to create offers once approved.
+          </p>
+          <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold">Company Dashboard</h1>
           <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage your offers and track creator performance</p>
         </div>
-        <Link href="/company/offers/create" className="w-full sm:w-auto">
-          <Button className="gap-2 w-full h-11 sm:w-auto sm:h-10" data-testid="button-create-offer">
+        {stats?.companyProfile?.status === 'pending' ? (
+          <Button
+            className="gap-2 w-full h-11 sm:w-auto sm:h-10"
+            data-testid="button-create-offer"
+            disabled
+            title="Your company must be approved before creating offers"
+          >
             <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
             <span className="text-base sm:text-sm">Create New Offer</span>
           </Button>
-        </Link>
+        ) : (
+          <Link href="/company/offers/create" className="w-full sm:w-auto">
+            <Button className="gap-2 w-full h-11 sm:w-auto sm:h-10" data-testid="button-create-offer">
+              <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
+              <span className="text-base sm:text-sm">Create New Offer</span>
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Stats Grid - Improved mobile spacing */}
@@ -122,19 +158,7 @@ export default function CompanyDashboard() {
         <StatsGridSkeleton />
       ) : (
         <div className="grid gap-4 sm:gap-6 grid-cols-2 lg:grid-cols-4">
-          <Card className="border-card-border">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Active Creators</CardTitle>
-              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
-            </CardHeader>
-            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats?.activeCreators || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats?.pendingApplications || 0} pending
-              </p>
-            </CardContent>
-          </Card>
-
+          {/* 1. Live Offers */}
           <Card className="border-card-border">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium">Live Offers</CardTitle>
@@ -148,17 +172,35 @@ export default function CompanyDashboard() {
             </CardContent>
           </Card>
 
+          {/* 2. Pending Applications */}
           <Card className="border-card-border">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Applications</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Pending Applications</CardTitle>
               <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
             </CardHeader>
             <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
-              <div className="text-xl sm:text-2xl font-bold">{stats?.totalApplications || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">All time</p>
+              <div className="text-xl sm:text-2xl font-bold">{stats?.pendingApplications || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats?.totalApplications || 0} all time
+              </p>
             </CardContent>
           </Card>
 
+          {/* 3. Active Creators */}
+          <Card className="border-card-border">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium">Active Creators</CardTitle>
+              <Users className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
+            </CardHeader>
+            <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
+              <div className="text-xl sm:text-2xl font-bold">{stats?.activeCreators || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Working on offers
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* 4. Total Clicks */}
           <Card className="border-card-border">
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium">Total Clicks</CardTitle>
@@ -172,22 +214,6 @@ export default function CompanyDashboard() {
             </CardContent>
           </Card>
         </div>
-      )}
-
-      {stats?.companyProfile?.status === 'pending' && (
-        <Card className="border-card-border bg-muted/50">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-1">
-                <h3 className="font-semibold mb-2">Company Approval Pending</h3>
-                <p className="text-sm text-muted-foreground">
-                  Your company registration is under review. You'll be able to create offers once approved.
-                </p>
-              </div>
-              <Badge variant="secondary">Pending</Badge>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -319,6 +345,12 @@ export default function CompanyDashboard() {
         onOpenChange={(open) => !open && setErrorDialog(null)}
         title={errorDialog?.title || "Error"}
         description={errorDialog?.message || "An error occurred"}
+      />
+
+      <FirstTimeTutorial
+        open={showTutorial}
+        onComplete={completeTutorial}
+        config={companyDashboardTutorialConfig}
       />
     </div>
   );

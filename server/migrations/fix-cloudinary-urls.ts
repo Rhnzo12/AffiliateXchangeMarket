@@ -57,7 +57,7 @@ async function fixOfferThumbnails() {
     }
   }
 
-  console.log('✓ Offer featured images updated');
+  console.log('\u2713 Offer featured images updated');
 }
 
 async function fixVideoThumbnails() {
@@ -85,7 +85,7 @@ async function fixVideoThumbnails() {
     }
   }
 
-  console.log('✓ Video thumbnails updated');
+  console.log('\u2713 Video thumbnails updated');
 }
 
 async function fixVideoUrls() {
@@ -113,7 +113,7 @@ async function fixVideoUrls() {
     }
   }
 
-  console.log('✓ Video URLs updated');
+  console.log('\u2713 Video URLs updated');
 }
 
 async function fixCompanyLogos() {
@@ -141,7 +141,7 @@ async function fixCompanyLogos() {
     }
   }
 
-  console.log('✓ Company logos updated');
+  console.log('\u2713 Company logos updated');
 }
 
 async function main() {
@@ -154,7 +154,7 @@ async function main() {
     await fixVideoUrls();
     await fixCompanyLogos();
 
-    console.log('\n✓ Migration completed successfully!');
+    console.log('\n\u2713 Migration completed successfully!');
     process.exit(0);
   } catch (error) {
     console.error('\n✗ Migration failed:', error);

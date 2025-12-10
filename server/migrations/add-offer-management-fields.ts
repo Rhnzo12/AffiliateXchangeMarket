@@ -55,7 +55,7 @@ async function main() {
         ADD COLUMN IF NOT EXISTS edit_requests JSONB DEFAULT '[]'::jsonb;
       `);
 
-      console.log('\n✓ Migration completed successfully!');
+      console.log('\n\u2713 Migration completed successfully!');
       console.log('New columns added:');
       console.log('  - rejected_at');
       console.log('  - rejection_reason');

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, favoritesTourSteps } from "../lib/creatorTourConfig";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -38,6 +40,10 @@ const formatCommission = (offer: any) => {
 export default function Favorites() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
+
+  // Quick Guide Tour
+  useCreatorPageTour(CREATOR_TOUR_IDS.FAVORITES, favoritesTourSteps);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [nicheFilter, setNicheFilter] = useState("all");
   const [commissionFilter, setCommissionFilter] = useState("all");

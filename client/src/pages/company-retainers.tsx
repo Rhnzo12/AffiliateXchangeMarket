@@ -34,8 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { Plus, DollarSign, Video, Calendar, Users, Eye, Filter, X, ChevronDown, ChevronUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Plus, DollarSign, Video, Calendar, Users, Eye, Filter, X, ChevronDown, ChevronUp, AlertTriangle, Clock, AlertCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -43,6 +43,8 @@ import { Link } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
+import { usePageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, retainersTourSteps } from "../lib/companyTourConfig";
 
 const retainerTierSchema = z.object({
   name: z.string().min(1, "Tier name is required"),
@@ -75,6 +77,9 @@ type CreateRetainerForm = z.infer<typeof createRetainerSchema>;
 export default function CompanyRetainers() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+
+  // Quick tour for retainers page
+  usePageTour(COMPANY_TOUR_IDS.RETAINERS, retainersTourSteps);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -91,9 +96,23 @@ export default function CompanyRetainers() {
     errorDetails: "",
   });
 
+  // Exit confirmation dialog state
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
+  const [exitMessage, setExitMessage] = useState<{ title: string; description: string }>({
+    title: "Leave Page?",
+    description: "Are you sure you want to close this dialog?",
+  });
+
   const { data: contracts, isLoading } = useQuery<any[]>({
     queryKey: ["/api/company/retainer-contracts"],
   });
+
+  // Fetch company stats to check approval status
+  const { data: companyStats } = useQuery<any>({
+    queryKey: ["/api/company/stats"],
+  });
+
+  const isCompanyPending = companyStats?.companyProfile?.status === 'pending';
 
   const contractsList = contracts ?? [];
 
@@ -158,6 +177,104 @@ export default function CompanyRetainers() {
     control: form.control,
     name: "retainerTiers",
   });
+
+  // Check if form has unsaved changes
+  const hasUnsavedChanges = () => {
+    const values = form.getValues();
+    return (
+      values.title.trim() !== "" ||
+      values.description.trim() !== "" ||
+      values.monthlyAmount.trim() !== "" ||
+      values.videosPerMonth.trim() !== "" ||
+      values.requiredPlatform.trim() !== "" ||
+      (values.platformAccountDetails?.trim() || "") !== "" ||
+      (values.contentGuidelines?.trim() || "") !== "" ||
+      (values.brandSafetyRequirements?.trim() || "") !== "" ||
+      (values.minimumFollowers?.trim() || "") !== "" ||
+      (values.niches?.trim() || "") !== "" ||
+      values.contentApprovalRequired === true ||
+      values.exclusivityRequired === true ||
+      (values.minimumVideoLengthSeconds?.trim() || "") !== "" ||
+      (values.postingSchedule?.trim() || "") !== ""
+    );
+  };
+
+  // Handle dialog close attempt - always show confirmation when closing
+  const handleDialogClose = (openState: boolean) => {
+    if (openState) {
+      // Opening the dialog
+      setOpen(true);
+    } else {
+      // Closing the dialog - always show confirmation
+      if (hasUnsavedChanges()) {
+        setExitMessage({
+          title: "Unsaved Changes",
+          description: "You have unsaved changes in your retainer contract. Are you sure you want to leave? All your progress will be lost.",
+        });
+      } else {
+        setExitMessage({
+          title: "Leave Page?",
+          description: "You haven't added any information yet. Are you sure you want to close this dialog?",
+        });
+      }
+      setShowExitConfirmation(true);
+    }
+  };
+
+  // Confirm closing the dialog
+  const confirmCloseDialog = () => {
+    setShowExitConfirmation(false);
+    setOpen(false);
+    form.reset();
+  };
+
+  // Cancel closing the dialog
+  const cancelCloseDialog = () => {
+    setShowExitConfirmation(false);
+  };
+
+  // Warn before browser close/refresh when dialog is open with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (open && hasUnsavedChanges()) {
+        e.preventDefault();
+        e.returnValue = "";
+        return "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [open]);
+
+  // Handle browser back/forward navigation when dialog is open - always show confirmation
+  useEffect(() => {
+    if (!open) return;
+
+    // Push a state to detect when user tries to go back
+    window.history.pushState(null, "", window.location.href);
+
+    const handlePopState = () => {
+      // Push state again to prevent navigation
+      window.history.pushState(null, "", window.location.href);
+
+      if (hasUnsavedChanges()) {
+        setExitMessage({
+          title: "Unsaved Changes",
+          description: "You have unsaved changes in your retainer contract. Are you sure you want to leave? All your progress will be lost.",
+        });
+      } else {
+        setExitMessage({
+          title: "Leave Page?",
+          description: "You haven't added any information yet. Are you sure you want to close this dialog?",
+        });
+      }
+      setShowExitConfirmation(true);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [open, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateRetainerForm) => {
@@ -235,6 +352,21 @@ export default function CompanyRetainers() {
   return (
     <div className="space-y-6">
       <TopNavBar />
+
+      {/* Company Approval Pending Banner */}
+      {isCompanyPending && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
+          <p className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+            <span className="font-medium">Company Approval Pending:</span> Your company registration is under review. You'll be able to create retainers once approved.
+          </p>
+          <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold" data-testid="heading-company-retainers">
@@ -244,7 +376,17 @@ export default function CompanyRetainers() {
             Hire creators for ongoing monthly video production
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        {isCompanyPending ? (
+          <Button
+            data-testid="button-create-retainer"
+            disabled
+            title="Your company must be approved before creating retainers"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Retainer
+          </Button>
+        ) : (
+        <Dialog open={open} onOpenChange={handleDialogClose}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-retainer">
               <Plus className="h-4 w-4 mr-2" />
@@ -681,7 +823,7 @@ export default function CompanyRetainers() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setOpen(false)}
+                    onClick={() => handleDialogClose(false)}
                   >
                     Cancel
                   </Button>
@@ -697,6 +839,7 @@ export default function CompanyRetainers() {
             </Form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card className="border-card-border">
@@ -783,10 +926,6 @@ export default function CompanyRetainers() {
             <p className="text-muted-foreground mb-4">
               Create your first monthly retainer contract to hire creators for ongoing video production
             </p>
-            <Button onClick={() => setOpen(true)} data-testid="button-create-first-retainer">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Retainer
-            </Button>
           </CardContent>
         </Card>
       ) : filteredContracts.length === 0 ? (
@@ -938,6 +1077,29 @@ export default function CompanyRetainers() {
         errorDetails={errorDialog.errorDetails}
         variant="error"
       />
+
+      {/* Exit Confirmation Dialog */}
+      <Dialog open={showExitConfirmation} onOpenChange={setShowExitConfirmation}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              {exitMessage.title}
+            </DialogTitle>
+            <DialogDescription>
+              {exitMessage.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={cancelCloseDialog}>
+              Continue
+            </Button>
+            <Button variant="destructive" onClick={confirmCloseDialog}>
+              Leave Page
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

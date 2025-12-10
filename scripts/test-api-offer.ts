@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 const offerId = process.argv[2];
 
 if (!offerId) {
-  console.error("❌ Please provide an offer ID");
+  console.error("\u274C Please provide an offer ID");
   console.error("Usage: tsx scripts/test-api-offer.ts <offer-id>");
   process.exit(1);
 }
@@ -37,19 +37,19 @@ async function testApiOffer() {
     `);
 
     if (columnsResult.rows.length === 0) {
-      console.error("\n❌ PROBLEM FOUND: Creator requirements columns DO NOT EXIST in database!");
+      console.error("\n\u274C PROBLEM FOUND: Creator requirements columns DO NOT EXIST in database!");
       console.error("\n🔧 FIX: Run the migration:");
       console.error("   npm run migrate:creator-requirements\n");
       process.exit(1);
     }
 
-    console.log(`✅ Found ${columnsResult.rows.length}/6 columns in database:`);
+    console.log(`\u2705 Found ${columnsResult.rows.length}/6 columns in database:`);
     columnsResult.rows.forEach((row: any) => {
       console.log(`   - ${row.column_name} (${row.data_type})`);
     });
 
     if (columnsResult.rows.length < 6) {
-      console.error("\n⚠️  WARNING: Some columns are missing! Expected 6, found " + columnsResult.rows.length);
+      console.error("\n\u26A0\uFE0F  WARNING: Some columns are missing! Expected 6, found " + columnsResult.rows.length);
       console.error("   Run: npm run migrate:creator-requirements\n");
     }
 
@@ -70,12 +70,12 @@ async function testApiOffer() {
     `);
 
     if (offerResult.rows.length === 0) {
-      console.error(`\n❌ Offer ${offerId} not found in database`);
+      console.error(`\n\u274C Offer ${offerId} not found in database`);
       process.exit(1);
     }
 
     const offer = offerResult.rows[0] as any;
-    console.log(`✅ Offer found: "${offer.title}"`);
+    console.log(`\u2705 Offer found: "${offer.title}"`);
 
     console.log("\n📋 Step 3: Creator Requirements Data:");
     console.log("─".repeat(70));
@@ -97,16 +97,16 @@ async function testApiOffer() {
 
     console.log("\n📊 Analysis:");
     if (!hasAnyData) {
-      console.log("❌ This offer has NO creator requirements data");
+      console.log("\u274C This offer has NO creator requirements data");
       console.log("\n🔧 Possible causes:");
       console.log("   1. Offer was created BEFORE the backend fix");
       console.log("   2. Form fields were left empty when creating the offer");
-      console.log("\n💡 Solutions:");
+      console.log("\n\u1F4A1 Solutions:");
       console.log("   • Update this offer:");
       console.log(`     npm run update:offer-requirements ${offerId}`);
       console.log("   • OR create a new offer with requirements filled in");
     } else {
-      console.log("✅ This offer HAS creator requirements data!");
+      console.log("\u2705 This offer HAS creator requirements data!");
       console.log("   Data exists in database and should be returned by the API");
       console.log("\n🔧 If requirements still not showing on frontend:");
       console.log("   1. Check browser console for errors");
@@ -115,10 +115,10 @@ async function testApiOffer() {
       console.log("   4. Check network tab to see API response");
     }
 
-    console.log("\n✨ Test complete!\n");
+    console.log("\n\u2728 Test complete!\n");
     process.exit(0);
   } catch (error: any) {
-    console.error("\n❌ Test failed:", error.message);
+    console.error("\n\u274C Test failed:", error.message);
     console.error("\nFull error:", error);
     process.exit(1);
   }

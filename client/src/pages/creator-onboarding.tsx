@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Checkbox } from "../components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { uploadToCloudinary } from "../lib/cloudinary-upload";
 import {
   Sparkles,
   Upload,
@@ -141,7 +142,12 @@ export default function CreatorOnboarding() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ folder, resourceType: "image" }),
+        body: JSON.stringify({
+          folder,
+          resourceType: "image",
+          contentType: file.type,
+          fileName: file.name,
+        }),
       });
 
       if (!uploadResponse.ok) {
@@ -150,24 +156,15 @@ export default function CreatorOnboarding() {
 
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "image/jpeg",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (!uploadResult.ok) {
-        const errorText = await uploadResult.text();
-        console.error("GCS upload error:", errorText);
+      if (!uploadResult?.secure_url) {
         throw new Error("Failed to upload file to storage");
       }
 
-      // Construct the public URL from the upload response
-      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
-      setProfileImageUrl(uploadedUrl);
+      // Save full Cloudinary URL
+      const objectPath = uploadResult.secure_url;
+      setProfileImageUrl(objectPath);
 
       toast({
         title: "Success!",
@@ -335,6 +332,42 @@ export default function CreatorOnboarding() {
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to save profile");
+      }
+
+      // Save payment method if user didn't choose to set it up later
+      if (paymentMethod && paymentMethod !== "setup_later") {
+        const paymentPayload: any = {
+          payoutMethod: paymentMethod,
+        };
+
+        if (paymentMethod === "etransfer") {
+          paymentPayload.payoutEmail = payoutEmail;
+        } else if (paymentMethod === "wire") {
+          paymentPayload.bankRoutingNumber = bankRoutingNumber;
+          paymentPayload.bankAccountNumber = bankAccountNumber;
+        } else if (paymentMethod === "paypal") {
+          paymentPayload.paypalEmail = paypalEmail;
+        } else if (paymentMethod === "crypto") {
+          paymentPayload.cryptoWalletAddress = cryptoWalletAddress;
+          paymentPayload.cryptoNetwork = cryptoNetwork;
+        }
+
+        const paymentResponse = await fetch("/api/payment-settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(paymentPayload),
+        });
+
+        if (!paymentResponse.ok) {
+          const error = await paymentResponse.json();
+          throw new Error(error.error || "Failed to save payment method");
+        }
+
+        // Invalidate payment settings query to refresh the data
+        await queryClient.invalidateQueries({ queryKey: ["/api/payment-settings"] });
       }
 
       toast({
@@ -507,6 +540,7 @@ export default function CreatorOnboarding() {
                           type="button"
                           onClick={() => removeNiche(nicheValue)}
                           className="ml-1 hover:text-destructive"
+                          aria-label={`Remove ${niche?.label || nicheValue}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -529,7 +563,7 @@ export default function CreatorOnboarding() {
             <Alert className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'}>
               <Video className={`h-5 w-5 ${!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-600' : 'text-blue-600'}`} />
               <AlertTitle className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-900 dark:text-red-300' : 'text-blue-900 dark:text-blue-300'}>
-                {!youtubeUrl && !tiktokUrl && !instagramUrl ? '⚠️ Video Platform Required' : '✓ Video Platform Added'}
+                {!youtubeUrl && !tiktokUrl && !instagramUrl ? '\u26A0\uFE0F Video Platform Required' : '\u2713 Video Platform Added'}
               </AlertTitle>
               <AlertDescription className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-800 dark:text-red-200' : 'text-blue-800 dark:text-blue-200'}>
                 {!youtubeUrl && !tiktokUrl && !instagramUrl ? (

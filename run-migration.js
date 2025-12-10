@@ -20,7 +20,7 @@ async function runMigration() {
       .sort();
 
     if (migrationFiles.length === 0) {
-      console.log('ℹ️  No SQL migration files found.');
+      console.log('\u2139\uFE0F  No SQL migration files found.');
       return;
     }
 
@@ -35,7 +35,7 @@ async function runMigration() {
       const migrationSQL = readFileSync(filePath, 'utf-8');
 
       if (!migrationSQL.trim()) {
-        console.log(`⚠️  Skipping empty migration file: ${file}`);
+        console.log(`\u26A0\uFE0F  Skipping empty migration file: ${file}`);
         continue;
       }
 
@@ -43,7 +43,7 @@ async function runMigration() {
 
       // Preserve backwards compatibility messaging for the legacy fix script
       if (file === 'fix_schema_types.sql') {
-        console.log('⚠️  Warning: This will truncate the analytics table and recreate click_events and messages tables');
+        console.log('\u26A0\uFE0F  Warning: This will truncate the analytics table and recreate click_events and messages tables');
       }
 
       const sanitizedSQL = migrationSQL
@@ -62,27 +62,27 @@ async function runMigration() {
 
         try {
           await sql(statement);
-          console.log(`  ✅ [${i + 1}/${statements.length}] Success`);
+          console.log(`  \u2705 [${i + 1}/${statements.length}] Success`);
           executedStatements++;
         } catch (error) {
           if (typeof error.message === 'string' && (
             error.message.includes('already exists') ||
             error.message.includes('does not exist')
           )) {
-            console.log(`  ⚠️  [${i + 1}/${statements.length}] Skipped (already applied or missing dependency)`);
+            console.log(`  \u26A0\uFE0F  [${i + 1}/${statements.length}] Skipped (already applied or missing dependency)`);
             skippedStatements++;
           } else {
-            console.error(`  ❌ [${i + 1}/${statements.length}] Error:`, error.message);
+            console.error(`  \u274C [${i + 1}/${statements.length}] Error:`, error.message);
             console.log('  Statement preview:', statement.substring(0, 200) + (statement.length > 200 ? '...' : ''));
             throw error;
           }
         }
       }
 
-      console.log(`✅ Completed: ${file}\n`);
+      console.log(`\u2705 Completed: ${file}\n`);
     }
 
-    console.log('✅ Migration run complete!');
+    console.log('\u2705 Migration run complete!');
     console.log('\n📋 Summary:');
     console.log(`  - Files processed: ${migrationFiles.length}`);
     console.log(`  - Statements executed: ${executedStatements}`);
@@ -93,7 +93,7 @@ async function runMigration() {
     console.log('\n🔄 Please restart your server for changes to take effect');
 
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('\u274C Migration failed:', error);
     process.exit(1);
   }
 }

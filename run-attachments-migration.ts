@@ -12,7 +12,7 @@ async function main() {
     `);
     
     if (result.rows.length > 0) {
-      console.log("✅ Attachments column already exists!");
+      console.log("\u2705 Attachments column already exists!");
       console.log("Column details:", result.rows[0]);
     } else {
       console.log("Column does not exist. Creating it now...");
@@ -22,12 +22,12 @@ async function main() {
         ADD COLUMN attachments text[] DEFAULT ARRAY[]::text[]
       `);
       
-      console.log("✅ Successfully added attachments column to messages table!");
+      console.log("\u2705 Successfully added attachments column to messages table!");
     }
     
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error:", error);
+    console.error("\u274C Error:", error);
     process.exit(1);
   }
 }

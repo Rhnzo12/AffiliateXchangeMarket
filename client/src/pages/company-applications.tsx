@@ -9,13 +9,15 @@ import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../components/ui/accordion";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 import { Label } from "../components/ui/label";
 import { FileText, CheckCircle, Clock, XCircle, MessageCircle, DollarSign, Filter, Search, X } from "lucide-react";
 import { apiRequest, queryClient } from "../lib/queryClient";
@@ -26,7 +28,11 @@ import { ReviewPromptDialog } from "../components/ReviewPromptDialog";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
 
-export default function CompanyApplications() {
+type CompanyApplicationsProps = {
+  hideTopNav?: boolean;
+};
+
+export default function CompanyApplications({ hideTopNav = false }: CompanyApplicationsProps) {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -36,8 +42,11 @@ export default function CompanyApplications() {
   const [reviewPromptOpen, setReviewPromptOpen] = useState(false);
   const [reviewPromptData, setReviewPromptData] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [offerFilter, setOfferFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [offerFilter, setOfferFilter] = useState<string[]>([]);
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<string[]>([]);
+  const [pendingOfferFilter, setPendingOfferFilter] = useState<string[]>([]);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
@@ -75,27 +84,50 @@ export default function CompanyApplications() {
     enabled: isAuthenticated,
   });
 
+  const { data: companyOffers = [] } = useQuery<any[]>({
+    queryKey: ["/api/company/offers"],
+    enabled: isAuthenticated,
+  });
+
   const totalApplications = applications.length;
 
-  const uniqueStatuses = useMemo(
-    () => Array.from(new Set(applications.map((application: any) => application.status).filter(Boolean))),
-    [applications]
+  const statusOptions = useMemo(
+    () => [
+      { value: "pending", label: "Pending" },
+      { value: "approved", label: "Approved" },
+      { value: "active", label: "Active" },
+      { value: "paused", label: "Paused" },
+      { value: "completed", label: "Completed" },
+      { value: "rejected", label: "Rejected" },
+    ],
+    []
   );
 
   const uniqueOffers = useMemo(() => {
     const map = new Map<string, string>();
-    applications.forEach((application: any) => {
-      if (application.offer?.id && application.offer?.title) {
-        map.set(application.offer.id, application.offer.title);
+
+    companyOffers.forEach((offer: any) => {
+      if (offer.id && offer.title) {
+        map.set(offer.id, offer.title);
       }
     });
+
+    // Fallback to any offers present on applications (e.g., if offers query fails)
+    if (map.size === 0) {
+      applications.forEach((application: any) => {
+        if (application.offer?.id && application.offer?.title) {
+          map.set(application.offer.id, application.offer.title);
+        }
+      });
+    }
+
     return Array.from(map.entries());
-  }, [applications]);
+  }, [applications, companyOffers]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter((app: any) => {
-      const matchesStatus = statusFilter === "all" || app.status === statusFilter;
-      const matchesOffer = offerFilter === "all" || app.offer?.id === offerFilter;
+      const matchesStatus = statusFilter.length === 0 || statusFilter.includes(app.status);
+      const matchesOffer = offerFilter.length === 0 || offerFilter.includes(app.offer?.id);
       const matchesSearch = searchTerm
         ? [
             app.offer?.title,
@@ -113,13 +145,28 @@ export default function CompanyApplications() {
   }, [applications, offerFilter, searchTerm, statusFilter]);
 
   const hasActiveFilters =
-    searchTerm.trim().length > 0 || statusFilter !== "all" || offerFilter !== "all";
+    searchTerm.trim().length > 0 || statusFilter.length > 0 || offerFilter.length > 0;
 
   const clearFilters = () => {
     setSearchTerm("");
-    setStatusFilter("all");
-    setOfferFilter("all");
+    setStatusFilter([]);
+    setOfferFilter([]);
+    setPendingStatusFilter([]);
+    setPendingOfferFilter([]);
   };
+
+  const applyFilters = () => {
+    setStatusFilter([...pendingStatusFilter]);
+    setOfferFilter([...pendingOfferFilter]);
+    setFilterMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (filterMenuOpen) {
+      setPendingStatusFilter([...statusFilter]);
+      setPendingOfferFilter([...offerFilter]);
+    }
+  }, [filterMenuOpen, offerFilter, statusFilter]);
 
   const completeApplicationMutation = useMutation({
     mutationFn: async (applicationId: string) => {
@@ -319,7 +366,7 @@ export default function CompanyApplications() {
 
   return (
     <div className="space-y-4 sm:space-y-8">
-      <TopNavBar />
+      {!hideTopNav && <TopNavBar />}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold">Applications</h1>
         <p className="text-sm sm:text-base text-muted-foreground mt-1">
@@ -329,63 +376,129 @@ export default function CompanyApplications() {
 
       <Card className="border-card-border">
         <CardContent className="pt-6 space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Filter className="h-4 w-4" />
-              <span className="text-sm font-semibold uppercase tracking-wider">Search & Filter</span>
-            </div>
-            <div className="sm:ml-auto text-sm text-muted-foreground">
-              Showing <span className="font-semibold text-foreground">{filteredApplications.length}</span> of {totalApplications}
-              {` application${totalApplications === 1 ? "" : "s"}`}
-            </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" className="text-xs sm:ml-4" onClick={clearFilters}>
-                <X className="h-3 w-3 mr-1" />
-                Clear Filters
-              </Button>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:gap-4">
+            <div className="flex w-full items-center gap-2 xl:max-w-md">
               <Input
                 placeholder="Search by offer, creator, or tracking link"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
+                className="w-full"
               />
+              <DropdownMenu open={filterMenuOpen} onOpenChange={setFilterMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Filter applications" className="shrink-0">
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72 space-y-2">
+                  <DropdownMenuLabel>Filter applications</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Accordion type="multiple" className="px-2" collapsible defaultValue={[]}>
+                    <AccordionItem value="status">
+                      <AccordionTrigger className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Status
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        <DropdownMenuCheckboxItem
+                          checked={pendingStatusFilter.length === 0}
+                          onCheckedChange={(checked) =>
+                            setPendingStatusFilter(checked ? [] : pendingStatusFilter)
+                          }
+                          onSelect={(event) => event.preventDefault()}
+                          className="cursor-pointer"
+                        >
+                          All Status
+                        </DropdownMenuCheckboxItem>
+                        {statusOptions.map((status) => {
+                          const isChecked = pendingStatusFilter.includes(status.value);
+                          return (
+                            <DropdownMenuCheckboxItem
+                              key={status.value}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setPendingStatusFilter((prev) => [...prev, status.value]);
+                                } else {
+                                  setPendingStatusFilter((prev) => prev.filter((value) => value !== status.value));
+                                }
+                              }}
+                              onSelect={(event) => event.preventDefault()}
+                              className="cursor-pointer"
+                            >
+                              {status.label}
+                            </DropdownMenuCheckboxItem>
+                          );
+                        })}
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    <AccordionItem value="offer">
+                      <AccordionTrigger className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Offer
+                      </AccordionTrigger>
+                      <AccordionContent className="space-y-1">
+                        <DropdownMenuCheckboxItem
+                          checked={pendingOfferFilter.length === 0}
+                          onCheckedChange={(checked) => setPendingOfferFilter(checked ? [] : pendingOfferFilter)}
+                          onSelect={(event) => event.preventDefault()}
+                          className="cursor-pointer"
+                        >
+                          All offers
+                        </DropdownMenuCheckboxItem>
+                        {uniqueOffers.map(([id, title]) => {
+                          const isChecked = pendingOfferFilter.includes(id);
+                          return (
+                            <DropdownMenuCheckboxItem
+                              key={id}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setPendingOfferFilter((prev) => [...prev, id]);
+                                } else {
+                                  setPendingOfferFilter((prev) => prev.filter((value) => value !== id));
+                                }
+                              }}
+                              onSelect={(event) => event.preventDefault()}
+                              className="cursor-pointer"
+                            >
+                              {title}
+                            </DropdownMenuCheckboxItem>
+                          );
+                        })}
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between gap-2 px-2 pb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 text-muted-foreground"
+                      onClick={clearFilters}
+                    >
+                      <X className="h-4 w-4" />
+                      Clear filters
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="gap-2 border-0 bg-gray-200 text-black shadow-none hover:bg-gray-300"
+                      onClick={applyFilters}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {uniqueStatuses.map((status) => (
-                    <SelectItem key={status} value={status} className="capitalize">
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Offer</label>
-              <Select value={offerFilter} onValueChange={setOfferFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All offers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Offers</SelectItem>
-                  {uniqueOffers.map(([id, title]) => (
-                    <SelectItem key={id} value={id}>
-                      {title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground xl:ml-auto">
+              Showing <span className="font-semibold text-foreground">{filteredApplications.length}</span> of {totalApplications}
+              {` application${totalApplications === 1 ? "" : "s"}`}
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="text-xs" onClick={clearFilters}>
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filters
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

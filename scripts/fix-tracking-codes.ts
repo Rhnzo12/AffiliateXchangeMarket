@@ -51,7 +51,7 @@ async function fixTrackingCodes() {
             })
             .where(eq(applications.id, application.id));
 
-          console.log(`✅ Fixed application ${application.id.substring(0, 8)}`);
+          console.log(`\u2705 Fixed application ${application.id.substring(0, 8)}`);
           console.log(`   Old: ${oldCode}`);
           console.log(`   New: ${trackingCode}\n`);
 
@@ -60,27 +60,27 @@ async function fixTrackingCodes() {
           skipped++;
         }
       } catch (error) {
-        console.error(`❌ Error fixing application ${application.id}:`, error);
+        console.error(`\u274C Error fixing application ${application.id}:`, error);
         errors++;
       }
     }
 
     console.log('\n📈 Migration Summary:');
-    console.log(`   ✅ Fixed: ${fixed}`);
+    console.log(`   \u2705 Fixed: ${fixed}`);
     console.log(`   ⏭️  Skipped (already correct): ${skipped}`);
-    console.log(`   ❌ Errors: ${errors}`);
+    console.log(`   \u274C Errors: ${errors}`);
     console.log(`   📊 Total: ${allApprovedApplications.length}`);
 
     if (fixed > 0) {
-      console.log('\n✨ Migration complete! All tracking codes have been updated.');
+      console.log('\n\u2728 Migration complete! All tracking codes have been updated.');
       console.log('   Users can now use their new tracking links.');
     } else {
-      console.log('\n✨ No updates needed - all tracking codes are already correct!');
+      console.log('\n\u2728 No updates needed - all tracking codes are already correct!');
     }
 
     process.exit(0);
   } catch (error) {
-    console.error('\n❌ Migration failed:', error);
+    console.error('\n\u274C Migration failed:', error);
     process.exit(1);
   }
 }

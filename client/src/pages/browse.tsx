@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
+import { useTutorial } from "../hooks/useTutorial";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent } from "../components/ui/card";
+import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Slider } from "../components/ui/slider";
 import { Checkbox } from "../components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Switch } from "../components/ui/switch";
 import { ScrollArea } from "../components/ui/scroll-area";
 import {
@@ -27,13 +27,33 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../components/ui/sheet";
-import { Search, SlidersHorizontal, TrendingUp, DollarSign, Clock, Star, Play, Heart, ArrowRight, Users, Sparkles, Award, Percent } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { Search, SlidersHorizontal, TrendingUp, DollarSign, Clock, Star, Play, Heart, Users, Video, Calendar, Eye, Send, Bookmark, BookmarkPlus, RefreshCcw, Trash2, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { proxiedSrc } from "../lib/image";
-import { TopNavBar } from "../components/TopNavBar";
 import { OfferCardSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { FirstTimeTutorial } from "../components/FirstTimeTutorial";
+import { TUTORIAL_IDS, browsePageTutorialConfig } from "../lib/tutorialConfig";
+import { useHeaderContent } from "../components/HeaderContentContext";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, browseTourSteps } from "../lib/creatorTourConfig";
 
 const COMMISSION_TYPES = [
   { value: "per_sale", label: "Per Sale" },
@@ -66,6 +86,20 @@ const normalizeNicheValue = (value?: string | null): string => {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
+};
+
+// Helper function to format niche/category names for display
+const formatNicheLabel = (value?: string | null): string => {
+  if (!value) return "";
+
+  const cleanedValue = value
+    .toString()
+    .replace(/_/g, " ")
+    .replace(/\s*&\s*/g, " & ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleanedValue.replace(/\b\w/g, (char) => char.toUpperCase());
 };
 
 const getOfferNicheValues = (offer: any): string[] => {
@@ -179,13 +213,54 @@ const formatApplicationDate = (date: string | Date): string => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+type SavedSearchFilters = {
+  searchTerm?: string;
+  selectedNiches?: string[];
+  selectedCategories?: string[];
+  commissionType?: string;
+  commissionRange?: number[];
+  minimumPayout?: number[];
+  minRating?: number;
+  showTrending?: boolean;
+  showPriority?: boolean;
+  sortBy?: string;
+};
+
+type SavedSearch = {
+  id: string;
+  name: string;
+  filters: SavedSearchFilters;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const summarizeSavedSearch = (filters: SavedSearchFilters): string => {
+  const parts: string[] = [];
+
+  if (filters.searchTerm) parts.push(`"${filters.searchTerm}"`);
+  if (filters.selectedNiches?.length) parts.push(`${filters.selectedNiches.length} niche${filters.selectedNiches.length > 1 ? "s" : ""}`);
+  if (filters.selectedCategories?.length) parts.push(`${filters.selectedCategories.length} category filter${filters.selectedCategories.length > 1 ? "s" : ""}`);
+  if (filters.commissionType) parts.push(`Type: ${filters.commissionType.replace(/_/g, " ")}`);
+  if (filters.minimumPayout?.[0]) parts.push(`Min payout: $${filters.minimumPayout[0]}`);
+  if (filters.minRating && filters.minRating > 0) parts.push(`${filters.minRating}+ stars`);
+  if (filters.showTrending) parts.push("Trending only");
+  if (filters.showPriority) parts.push("Priority only");
+  if (filters.sortBy && filters.sortBy !== "newest") parts.push(`Sort: ${filters.sortBy.replace(/_/g, " ")}`);
+
+  return parts.length > 0 ? parts.join(" • ") : "No filters applied";
+};
+
 export default function Browse() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading, user } = useAuth();
-  const [activeTab, setActiveTab] = useState("all");
+  const { showTutorial, completeTutorial } = useTutorial(TUTORIAL_IDS.BROWSE_PAGE);
+
+  // Quick Guide Tour - only starts after initial tutorial is dismissed
+  useCreatorPageTour(CREATOR_TOUR_IDS.BROWSE, browseTourSteps, !showTutorial);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [commissionType, setCommissionType] = useState<string>("");
   const [commissionRange, setCommissionRange] = useState([0, 10000]);
   const [minimumPayout, setMinimumPayout] = useState([0]);
@@ -193,6 +268,9 @@ export default function Browse() {
   const [showTrending, setShowTrending] = useState(false);
   const [showPriority, setShowPriority] = useState(false);
   const [sortBy, setSortBy] = useState("newest");
+  const [saveSearchDialogOpen, setSaveSearchDialogOpen] = useState(false);
+  const [savedSearchName, setSavedSearchName] = useState("");
+  const { setHeaderContent } = useHeaderContent();
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
     title: string;
@@ -208,6 +286,30 @@ export default function Browse() {
       window.location.href = "/login";
     }
   }, [isAuthenticated, isLoading]);
+
+  const currentFilters = useMemo<SavedSearchFilters>(() => ({
+    searchTerm,
+    selectedNiches,
+    selectedCategories,
+    commissionType,
+    commissionRange,
+    minimumPayout,
+    minRating,
+    showTrending,
+    showPriority,
+    sortBy,
+  }), [
+    commissionRange,
+    commissionType,
+    minRating,
+    minimumPayout,
+    searchTerm,
+    selectedCategories,
+    selectedNiches,
+    showPriority,
+    showTrending,
+    sortBy,
+  ]);
 
   // Fetch niches from API
   const { data: niches = [], isLoading: nichesLoading } = useQuery<Array<{ id: string; name: string; description: string | null; isActive: boolean }>>({
@@ -230,7 +332,7 @@ export default function Browse() {
 
       return data;
     },
-    enabled: isAuthenticated && activeTab === "all",
+    enabled: isAuthenticated,
   });
 
   // Fetch monthly retainer contracts
@@ -258,52 +360,29 @@ export default function Browse() {
     enabled: isAuthenticated,
   });
 
-  // Trending offers query (most applied in last 7 days)
-  const { data: trendingOffersData, isLoading: trendingLoading } = useQuery<any[]>({
-    queryKey: ["/api/offers/trending"],
-    queryFn: async () => {
-      const res = await fetch('/api/offers/trending', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch trending offers');
-      return res.json();
-    },
-    enabled: isAuthenticated && activeTab === "trending",
-  });
-
-  // Recommended offers query (based on creator niches)
-  const { data: recommendedOffersData, isLoading: recommendedLoading } = useQuery<any[]>({
-    queryKey: ["/api/offers/recommended"],
-    queryFn: async () => {
-      const res = await fetch('/api/offers/recommended', { credentials: 'include' });
-      if (!res.ok) {
-        if (res.status === 404) {
-          return [];
-        }
-        throw new Error('Failed to fetch recommended offers');
-      }
-      const data = await res.json();
-      // Handle error responses from backend
-      if (data.error) {
-        return [];
-      }
-      return data;
-    },
-    enabled: isAuthenticated && activeTab === "recommended",
-  });
 
   const categoryOptions = useMemo(
     () => [
       { label: "All", value: "all" },
+      { label: "Trending", value: "trending" },
       { label: "Monthly Retainers", value: "monthly_retainers" },
-      ...niches.map((niche) => ({ label: niche.name, value: normalizeNicheValue(niche.name) })),
+      ...niches.map((niche) => ({ label: formatNicheLabel(niche.name), value: normalizeNicheValue(niche.name) })),
     ],
     [niches],
   );
 
   useEffect(() => {
-    if (selectedCategory !== "all" && !categoryOptions.some((option) => option.value === selectedCategory)) {
-      setSelectedCategory("all");
+    if (selectedCategories.length === 0) {
+      return;
     }
-  }, [categoryOptions, selectedCategory]);
+    const validCategories = new Set(
+      categoryOptions.map((option) => option.value),
+    );
+    const filteredSelections = selectedCategories.filter((cat) => validCategories.has(cat));
+    if (filteredSelections.length !== selectedCategories.length) {
+      setSelectedCategories(filteredSelections);
+    }
+  }, [categoryOptions, selectedCategories]);
 
   useEffect(() => {
     if (selectedNiches.length === 0) {
@@ -323,86 +402,65 @@ export default function Browse() {
     }
   }, [categoryOptions, selectedNiches]);
 
-  // New listings query (recently approved)
-  const { data: newListingsData, isLoading: newListingsLoading } = useQuery<any[]>({
-    queryKey: ["/api/offers/new"],
-    queryFn: async () => {
-      const res = await fetch('/api/offers?sortBy=newest', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch new listings');
-      return res.json();
-    },
-    enabled: isAuthenticated && activeTab === "new",
-  });
-
-  // Highest commission query
-  const { data: highestCommissionData, isLoading: highestCommissionLoading } = useQuery<any[]>({
-    queryKey: ["/api/offers/highest-commission"],
-    queryFn: async () => {
-      const res = await fetch('/api/offers?sortBy=highest_commission', { credentials: 'include' });
-      if (!res.ok) throw new Error('Failed to fetch highest commission offers');
-      return res.json();
-    },
-    enabled: isAuthenticated && activeTab === "highest-commission",
-  });
-
-  // Get current data based on active tab
+  // Get current offers based on selected categories
   const getCurrentOffers = () => {
-    let currentOffers: any[] = [];
+    const currentOffers = offers || [];
+    const retainers = retainerContracts || [];
 
-    switch (activeTab) {
-      case "trending":
-        currentOffers = trendingOffersData || [];
-        break;
-      case "recommended":
-        currentOffers = recommendedOffersData || [];
-        break;
-      case "new":
-        currentOffers = newListingsData || [];
-        break;
-      case "highest-commission":
-        currentOffers = highestCommissionData || [];
-        break;
-      default:
-        currentOffers = offers || [];
+    // If no categories selected, show all offers including retainers
+    if (selectedCategories.length === 0) {
+      return [...currentOffers, ...retainers];
     }
 
-    // If "Monthly Retainers" category is selected, show only retainer contracts
-    if (selectedCategory === "monthly_retainers") {
-      return retainerContracts || [];
+    // Check for special categories
+    const hasMonthlyRetainers = selectedCategories.includes("monthly_retainers");
+    const hasTrending = selectedCategories.includes("trending");
+    const hasAll = selectedCategories.includes("all");
+
+    // Get niche categories (exclude special ones)
+    const nicheCategories = selectedCategories.filter(
+      cat => cat !== "all" && cat !== "trending" && cat !== "monthly_retainers"
+    );
+
+    // If "All" is selected along with other categories, treat as if no filter
+    if (hasAll) {
+      return [...currentOffers, ...retainers];
     }
 
-    // For "All" category, merge both regular offers and retainer contracts
-    if (selectedCategory === "all") {
-      return [...currentOffers, ...(retainerContracts || [])];
+    let result: any[] = [];
+
+    // Add trending offers if trending is selected
+    if (hasTrending) {
+      const trendingResults = currentOffers.filter(offer =>
+        offer.commissionType !== 'monthly_retainer' &&
+        (isPriorityOffer(offer) || getCommissionValue(offer) > 15)
+      );
+      result = [...result, ...trendingResults];
     }
 
-    // For other categories, return only regular offers (no retainer contracts)
-    return currentOffers;
+    // Add monthly retainers if selected
+    if (hasMonthlyRetainers) {
+      result = [...result, ...retainers];
+    }
+
+    // For niche categories, include regular offers (filtering happens in filteredOffers)
+    if (nicheCategories.length > 0) {
+      // Add all regular offers - actual niche filtering happens in filteredOffers
+      result = [...result, ...currentOffers];
+    }
+
+    // Remove duplicates by id
+    const seen = new Set<string>();
+    return result.filter(offer => {
+      if (seen.has(offer.id)) return false;
+      seen.add(offer.id);
+      return true;
+    });
   };
 
-  // Get loading state based on active tab
+  // Get loading state
   const isCurrentLoading = () => {
-    let tabLoading = false;
-
-    switch (activeTab) {
-      case "trending":
-        tabLoading = trendingLoading;
-        break;
-      case "recommended":
-        tabLoading = recommendedLoading;
-        break;
-      case "new":
-        tabLoading = newListingsLoading;
-        break;
-      case "highest-commission":
-        tabLoading = highestCommissionLoading;
-        break;
-      default:
-        tabLoading = offersLoading;
-    }
-
-    // Include retainer loading state
-    return tabLoading || retainersLoading;
+    return offersLoading || retainersLoading;
   };
 
   // Apply client-side filters
@@ -423,14 +481,36 @@ export default function Browse() {
 
     const offerNiches = getOfferNicheValues(offer);
 
-    // Category filter (from category pills)
-    if (selectedCategory !== "all") {
-      // Handle Monthly Retainers special category
-      if (selectedCategory === "monthly_retainers") {
-        if (offer.commissionType !== "monthly_retainer") {
-          return false;
+    // Category filter (from category pills) - now supports multiple selections
+    if (selectedCategories.length > 0 && !selectedCategories.includes("all")) {
+      const hasMonthlyRetainers = selectedCategories.includes("monthly_retainers");
+      const hasTrending = selectedCategories.includes("trending");
+      const nicheCategories = selectedCategories.filter(
+        cat => cat !== "all" && cat !== "trending" && cat !== "monthly_retainers"
+      );
+
+      let matchesAnyCategory = false;
+
+      // Check if offer matches monthly retainers category
+      if (hasMonthlyRetainers && offer.commissionType === "monthly_retainer") {
+        matchesAnyCategory = true;
+      }
+
+      // Check if offer matches trending category
+      if (hasTrending && offer.commissionType !== 'monthly_retainer' &&
+          (isPriorityOffer(offer) || getCommissionValue(offer) > 15)) {
+        matchesAnyCategory = true;
+      }
+
+      // Check if offer matches any niche category
+      if (nicheCategories.length > 0) {
+        const matchesNiche = nicheCategories.some(cat => offerNiches.includes(cat));
+        if (matchesNiche) {
+          matchesAnyCategory = true;
         }
-      } else if (!offerNiches.includes(selectedCategory)) {
+      }
+
+      if (!matchesAnyCategory) {
         return false;
       }
     }
@@ -526,10 +606,7 @@ export default function Browse() {
     return offersToSort;
   }, [filteredOffers, sortBy]);
 
-  // Get trending offers for the trending section (only on "all" tab, exclude monthly retainers)
-  const trendingOffers = activeTab === "all" && selectedCategory !== "monthly_retainers" ? sortedOffers
-    ?.filter(offer => offer.commissionType !== 'monthly_retainer' && (isPriorityOffer(offer) || getCommissionValue(offer) > 15))
-    ?.slice(0, 4) || [] : [];
+  // No separate trending section - all offers shown in main grid
 
   // Separate regular offers and monthly retainers
   const regularOffers = sortedOffers?.filter(offer => offer.commissionType !== 'monthly_retainer') || [];
@@ -541,6 +618,24 @@ export default function Browse() {
     );
   };
 
+  const toggleCategory = (category: string) => {
+    setSelectedCategories(prev => {
+      // If "All" is clicked, clear all selections (show everything)
+      if (category === "all") {
+        return [];
+      }
+      const isSelected = prev.includes(category);
+
+      // Toggle category selection while keeping other selections intact
+      const nextSelections = isSelected
+        ? prev.filter((cat) => cat !== category)
+        : [...prev, category];
+
+      // If nothing remains selected, treat as "All"
+      return nextSelections;
+    });
+  };
+
   const clearFilters = () => {
     setSelectedNiches([]);
     setCommissionType("");
@@ -550,7 +645,7 @@ export default function Browse() {
     setShowTrending(false);
     setShowPriority(false);
     setSearchTerm("");
-    setSelectedCategory("all");
+    setSelectedCategories([]);
   };
 
   const { data: favorites = [] } = useQuery<any[]>({
@@ -575,6 +670,11 @@ export default function Browse() {
       }
       return res.json();
     },
+    enabled: isAuthenticated,
+  });
+
+  const { data: savedSearches = [], isLoading: savedSearchesLoading } = useQuery<SavedSearch[]>({
+    queryKey: ["/api/saved-searches"],
     enabled: isAuthenticated,
   });
 
@@ -605,6 +705,122 @@ export default function Browse() {
     favoriteMutation.mutate({ offerId, isFav });
   };
 
+  const createSavedSearchMutation = useMutation({
+    mutationFn: async (payload: { name: string; filters: SavedSearchFilters }) => {
+      const res = await apiRequest("POST", "/api/saved-searches", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-searches"] });
+      toast({ title: "Saved search created", description: "Your filters were saved for quick access." });
+      setSaveSearchDialogOpen(false);
+      setSavedSearchName("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Unable to save search",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateSavedSearchMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: Partial<{ name: string; filters: SavedSearchFilters }> }) => {
+      const res = await apiRequest("PUT", `/api/saved-searches/${id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-searches"] });
+      toast({ title: "Saved search updated", description: "Filters have been refreshed." });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Unable to update search",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteSavedSearchMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/saved-searches/${id}`);
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-searches"] });
+      toast({ title: "Saved search removed" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Unable to remove search",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSaveSearch = () => {
+    const trimmedName = savedSearchName.trim();
+    if (!trimmedName) {
+      toast({
+        title: "Name your search",
+        description: "Add a name to quickly recognize this filter set.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createSavedSearchMutation.mutate({ name: trimmedName, filters: currentFilters });
+  };
+
+  const handleApplySavedSearch = (savedSearch: SavedSearch) => {
+    const filters = savedSearch.filters || {};
+    setSearchTerm(filters.searchTerm ?? "");
+    setSelectedNiches(filters.selectedNiches ?? []);
+    setSelectedCategories(filters.selectedCategories ?? []);
+    setCommissionType(filters.commissionType ?? "");
+    setCommissionRange(filters.commissionRange && filters.commissionRange.length === 2 ? filters.commissionRange : [0, 10000]);
+    setMinimumPayout(filters.minimumPayout && filters.minimumPayout.length > 0 ? filters.minimumPayout : [0]);
+    setMinRating(filters.minRating ?? 0);
+    setShowTrending(Boolean(filters.showTrending));
+    setShowPriority(Boolean(filters.showPriority));
+    setSortBy(filters.sortBy ?? "newest");
+
+    toast({
+      title: "Saved search applied",
+      description: `Applied "${savedSearch.name}" filters.`,
+    });
+  };
+
+  const handleUpdateSavedSearch = (id: string) => {
+    updateSavedSearchMutation.mutate({ id, payload: { filters: currentFilters } });
+  };
+
+  const handleDeleteSavedSearch = (id: string) => {
+    deleteSavedSearchMutation.mutate(id);
+  };
+
+  useEffect(() => {
+    const searchBar = (
+      <div className="relative w-full max-w-xl">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search offers..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 bg-muted/50"
+          data-testid="input-search-header"
+        />
+      </div>
+    );
+
+    setHeaderContent(searchBar);
+
+    return () => setHeaderContent(null);
+  }, [searchTerm, setHeaderContent]);
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-screen">
       <div className="animate-pulse text-lg">Loading...</div>
@@ -613,20 +829,6 @@ export default function Browse() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Top Navigation Bar */}
-      <TopNavBar>
-        <div className="relative flex-1 max-w-xl">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search offers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-muted/50"
-            data-testid="input-search-header"
-          />
-        </div>
-      </TopNavBar>
-
       {/* Main Content */}
       <div className="max-w-[1600px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
         {/* Header - Left Aligned, Black Text */}
@@ -635,55 +837,30 @@ export default function Browse() {
           <p className="text-muted-foreground text-sm sm:text-base">Discover exclusive affiliate opportunities from verified brands</p>
         </div>
 
-        {/* Tabs Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 h-auto p-1 gap-1">
-            <TabsTrigger value="all" className="flex items-center gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4">
-              <Star className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline text-xs sm:text-sm">All Offers</span>
-              <span className="sm:hidden text-xs">All</span>
-            </TabsTrigger>
-            <TabsTrigger value="trending" className="flex items-center gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4">
-              <TrendingUp className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden md:inline text-xs sm:text-sm">Trending</span>
-              <span className="md:hidden text-xs">Top</span>
-            </TabsTrigger>
-            <TabsTrigger value="highest-commission" className="flex items-center gap-1 sm:gap-2 py-2 sm:py-3 px-1 sm:px-4">
-              <DollarSign className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden lg:inline text-xs sm:text-sm">Highest Commission</span>
-              <span className="hidden md:inline lg:hidden text-xs">High $</span>
-              <span className="md:hidden text-xs">$$$</span>
-            </TabsTrigger>
-            <TabsTrigger value="new" className="flex items-center gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4">
-              <Clock className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline text-xs sm:text-sm">New Listings</span>
-              <span className="sm:hidden text-xs">New</span>
-            </TabsTrigger>
-            <TabsTrigger value="recommended" className="flex items-center gap-1 sm:gap-2 py-2 sm:py-3 px-2 sm:px-4">
-              <Sparkles className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline text-xs sm:text-sm">For You</span>
-              <span className="sm:hidden text-xs">You</span>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {/* Category Pills - Horizontal Scroll */}
+        {/* Category Pills - Horizontal Scroll with Multi-Select */}
         <ScrollArea orientation="horizontal" className="w-full pb-3">
   <div className="flex gap-2 pb-1 pr-4 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-    {categoryOptions.map(({ label, value }) => (
-      <button
-        key={value || label}
-        onClick={() => setSelectedCategory(value)}
-        className={`px-5 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-          selectedCategory === value
-            ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
-            : 'bg-secondary/50 hover:bg-secondary text-secondary-foreground'
-        }`}
-        aria-pressed={selectedCategory === value}
-      >
-        {label}
-      </button>
-    ))}
+    {categoryOptions.map(({ label, value }) => {
+      // "All" is selected when no categories are selected
+      const isSelected = value === "all"
+        ? selectedCategories.length === 0
+        : selectedCategories.includes(value);
+      const ariaPressedValue: "true" | "false" = isSelected ? "true" : "false";
+      return (
+        <button
+          key={value || label}
+          onClick={() => toggleCategory(value)}
+          className={`px-5 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+            isSelected
+              ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
+              : 'bg-secondary/50 hover:bg-secondary text-secondary-foreground'
+          }`}
+          aria-pressed={ariaPressedValue}
+        >
+          {label}
+        </button>
+      );
+    })}
   </div>
 </ScrollArea>
 
@@ -714,12 +891,13 @@ export default function Browse() {
                 )}
               </Button>
             </SheetTrigger>
-            <SheetContent>
+            <SheetContent className="flex flex-col">
               <SheetHeader>
                 <SheetTitle>Filter Offers</SheetTitle>
                 <SheetDescription>Refine your search with advanced filters</SheetDescription>
               </SheetHeader>
 
+              <ScrollArea className="flex-1 -mx-6 px-6">
               <div className="space-y-6 mt-6">
                 {/* Niche Filter */}
                 <div className="space-y-3">
@@ -744,7 +922,7 @@ export default function Browse() {
                               htmlFor={`niche-${niche.id}`}
                               className="text-sm font-normal cursor-pointer"
                             >
-                              {niche.name}
+                              {formatNicheLabel(niche.name)}
                             </Label>
                           </div>
                         );
@@ -860,14 +1038,116 @@ export default function Browse() {
                   />
                 </div>
 
-                <div className="pt-4 flex gap-3">
+                <div className="pt-4 pb-6 flex gap-3">
                   <Button onClick={clearFilters} variant="outline" className="flex-1" data-testid="button-clear-filters">
                     Clear All
                   </Button>
                 </div>
               </div>
+              </ScrollArea>
             </SheetContent>
           </Sheet>
+
+          <Button
+            variant="outline"
+            className="flex-shrink-0 gap-2"
+            onClick={() => setSaveSearchDialogOpen(true)}
+          >
+            <BookmarkPlus className="h-4 w-4" />
+            Save search
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="flex-shrink-0 gap-2">
+                <Bookmark className="h-4 w-4" />
+                Saved searches
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-80">
+              <DropdownMenuLabel>Saved searches</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {savedSearchesLoading ? (
+                <DropdownMenuItem className="pointer-events-none text-muted-foreground">
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Loading...
+                </DropdownMenuItem>
+              ) : savedSearches.length === 0 ? (
+                <DropdownMenuItem className="pointer-events-none text-muted-foreground">
+                  No saved searches yet
+                </DropdownMenuItem>
+              ) : (
+                savedSearches.map((search) => (
+                  <DropdownMenuItem
+                    key={search.id}
+                    className="whitespace-normal py-3 flex flex-col items-start gap-2"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      handleApplySavedSearch(search);
+                    }}
+                  >
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <div>
+                        <p className="font-medium leading-tight">{search.name}</p>
+                        <p className="text-xs text-muted-foreground leading-tight">{new Date(search.updatedAt || search.createdAt || new Date()).toLocaleDateString()}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="h-8"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleApplySavedSearch(search);
+                          }}
+                        >
+                          Apply
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleUpdateSavedSearch(search.id);
+                          }}
+                          title="Update with current filters"
+                        >
+                          {updateSavedSearchMutation.isPending && updateSavedSearchMutation.variables?.id === search.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteSavedSearch(search.id);
+                          }}
+                          title="Delete saved search"
+                        >
+                          {deleteSavedSearchMutation.isPending && deleteSavedSearchMutation.variables === search.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                      {summarizeSavedSearch(search.filters || {})}
+                    </p>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Loading State */}
@@ -882,195 +1162,78 @@ export default function Browse() {
           </div>
         ) : (
           <>
-            {/* Trending Offers Section - Only on "all" tab and not on monthly retainers category */}
-            {activeTab === "all" && selectedCategory !== "monthly_retainers" && trendingOffers.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Trending Offers</h2>
-              </div>
-              <Button variant="ghost" className="gap-1 text-primary hover:gap-2 transition-all text-sm sm:text-base">
-                See All <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-              {trendingOffers.map((offer) => {
-                const isFavorite = favorites.some(f => f.offerId === offer.id);
-                const category = getOfferCategory(offer);
-                const isRetainer = offer.commissionType === 'monthly_retainer';
-
-                // Check if creator has applied to this offer
-                const application = applications.find((app: any) => app.offerId === offer.id);
-                const hasApplied = !!application;
-                const commissionDisplay = getCommissionDisplay(offer);
-
-                return (
-                  <Link key={offer.id} href={offer.isRetainerContract ? `/retainers/${offer.id}` : `/offers/${offer.id}`}>
-                    <Card className={`group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-visible h-full ${
-                      isRetainer ? 'ring-2 ring-purple-400/50 hover:ring-purple-500 hover:shadow-purple-500/20' : ''
-                    }`}>
-                      {/* Thumbnail Container with Logo */}
-                      <div className="relative">
-                        {/* Clean Thumbnail - No Gradient Overlay */}
-                        <div className={`aspect-video relative overflow-hidden rounded-t-lg ${
-                          isRetainer
-                            ? 'bg-gradient-to-br from-purple-100 via-violet-100 to-indigo-100'
-                            : 'bg-gradient-to-br from-purple-100 to-pink-100'
-                        }`}>
-                          {!isRetainer && offer.featuredImageUrl ? (
-                            <img
-                              src={proxiedSrc(offer.featuredImageUrl)}
-                              alt={offer.title}
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          ) : !isRetainer ? (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <Play className="h-12 w-12 text-muted-foreground/30" />
-                            </div>
-                          ) : null}
-
-                          {/* Favorite button - Top Left */}
-                          <button
-                            className="absolute top-3 left-3 rounded-full flex items-center justify-center transition-all hover:scale-110 shadow-md backdrop-blur-sm"
-                            style={{
-                              width: '36px',
-                              height: '36px',
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                              border: 'none',
-                              cursor: 'pointer',
-                              zIndex: 10
-                            }}
-                            onClick={(e) => handleFavoriteToggle(e, offer.id)}
-                            data-testid={`button-favorite-${offer.id}`}
-                          >
-                            <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
-                          </button>
-
-                          {/* Category Badge - Top Right */}
-                          {category && (
-                            <div className={`absolute top-0 right-0 ${category.color} text-white px-3 py-1.5 rounded-bl-lg shadow-lg font-bold text-xs tracking-wide`}>
-                              {category.label}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Company Logo - Positioned outside thumbnail but inside wrapper */}
-                        {!isRetainer && offer.company?.logoUrl && (
-                          <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
-                            <img
-                              src={proxiedSrc(offer.company.logoUrl)}
-                              alt={offer.company.tradeName}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <CardContent className="p-4 sm:p-5 pt-7 sm:pt-8 space-y-2 sm:space-y-3">
-                        {/* Title */}
-                        <h3 className="font-semibold text-sm sm:text-base line-clamp-2 text-foreground leading-snug">
-                          {offer.title}
-                        </h3>
-
-                        {/* Company Name */}
-                        {offer.company?.tradeName && (
-                          <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
-                            {offer.company.tradeName}
-                          </p>
-                        )}
-
-                        {/* Hashtag Badges */}
-                        <div className="flex flex-wrap gap-1 sm:gap-1.5">
-                          {offer.primaryNiche && (
-                            <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                              #{offer.primaryNiche}
-                            </Badge>
-                          )}
-                          {offer.secondaryNiche && (
-                            <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                              #{offer.secondaryNiche}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Commission and Stats */}
-                        <div className="flex items-end justify-between pt-1 sm:pt-2">
-                          <div>
-                            <div className={`text-xl sm:text-2xl font-bold ${
-                              isRetainer ? 'text-purple-600 group-hover:text-purple-700' : 'text-green-600'
-                            } transition-colors`}>
-                              {commissionDisplay.isCurrency
-                                ? `$${commissionDisplay.value}`
-                                : commissionDisplay.value}
-                            </div>
-                            <div className={`text-[10px] sm:text-xs ${
-                              isRetainer ? 'text-purple-600/70 font-medium' : 'text-muted-foreground'
-                            }`}>
-                              {getCommissionTypeLabel(offer)}
-                            </div>
-                          </div>
-
-                          {/* Active creators */}
-                          <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
-                            <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                            <span className="hidden xs:inline">{offer.activeCreatorsCount || 0} active</span>
-                            <span className="xs:hidden">{offer.activeCreatorsCount || 0}</span>
-                          </div>
-                        </div>
-
-                        {/* Application Status */}
-                        {hasApplied && application && (
-                          <div className="pt-2 sm:pt-3 border-t mt-2 sm:mt-3">
-                            <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                              <div className="flex items-center gap-2">
-                                <Badge variant={getApplicationStatusBadge(application.status).variant} className="text-xs">
-                                  {getApplicationStatusBadge(application.status).label}
-                                </Badge>
-                              </div>
-                              <div className="text-[10px] sm:text-xs text-muted-foreground">
-                                <span className="hidden sm:inline">Applied: </span>{formatApplicationDate(application.createdAt)}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
             {/* Main Offers Grid */}
             <div className="space-y-8">
-              {/* Regular Offers Section */}
-              {selectedCategory !== "monthly_retainers" && (
-                <div className="space-y-4">
-                  {/* Tab-specific headers */}
-                  {activeTab === "all" && selectedCategory === "all" && regularOffers.length > 0 && trendingOffers.length > 0 && (
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">All Offers</h2>
-                  )}
-                  {activeTab === "trending" && regularOffers.length > 0 && (
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">Trending Offers</h2>
-                  )}
-                  {activeTab === "highest-commission" && regularOffers.length > 0 && (
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">Highest Commission</h2>
-                  )}
-                  {activeTab === "new" && regularOffers.length > 0 && (
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">New Listings</h2>
-                  )}
-                  {activeTab === "recommended" && regularOffers.length > 0 && (
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">Recommended For You</h2>
-                  )}
+              {/* Main Offers Section */}
+              <div className="space-y-4">
+                {/* Section header - dynamically changes based on selected filter */}
+                {(() => {
+                  // Get niche categories for display
+                  const nicheCategories = selectedCategories.filter(
+                    cat => cat !== "all" && cat !== "trending" && cat !== "monthly_retainers"
+                  );
+                  const onlyMonthlyRetainers = selectedCategories.length === 1 && selectedCategories.includes("monthly_retainers");
+                  const onlyTrending = selectedCategories.length === 1 && selectedCategories.includes("trending");
+                  const hasTrending = selectedCategories.includes("trending");
+                  const hasMonthlyRetainers = selectedCategories.includes("monthly_retainers");
 
-                  {!regularOffers || regularOffers.length === 0 ? (
+                  // Don't show header for monthly retainers only (shown in separate section)
+                  if (onlyMonthlyRetainers) return null;
+
+                  // Show "Trending Offers" when only trending is selected
+                  if (onlyTrending && sortedOffers.length > 0) {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
+                        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Trending Offers</h2>
+                      </div>
+                    );
+                  }
+
+                  // Show "Monthly Retainers Offers" when combined with other categories
+                  if (hasMonthlyRetainers && selectedCategories.length > 1 && !hasTrending && nicheCategories.length === 0) {
+                    return <h2 className="text-xl sm:text-2xl font-bold text-foreground">Monthly Retainers Offers</h2>;
+                  }
+
+                  // Show specific niche name when single niche is selected
+                  if (nicheCategories.length === 1 && !hasTrending && !hasMonthlyRetainers && sortedOffers.length > 0) {
+                    const categoryName = formatNicheLabel(nicheCategories[0]);
+                    return (
+                      <h2 className="text-xl sm:text-2xl font-bold text-foreground capitalize">
+                        {categoryName} Offers
+                      </h2>
+                    );
+                  }
+
+                  // Show "Filtered Offers" for multiple selections
+                  if ((nicheCategories.length > 1 || (nicheCategories.length > 0 && (hasTrending || hasMonthlyRetainers))) && sortedOffers.length > 0) {
+                    return <h2 className="text-xl sm:text-2xl font-bold text-foreground">Filtered Offers</h2>;
+                  }
+
+                  // Default: "All Offers" when no category is selected
+                  if (selectedCategories.length === 0 && sortedOffers.length > 0) {
+                    return <h2 className="text-xl sm:text-2xl font-bold text-foreground">All Offers</h2>;
+                  }
+
+                  return null;
+                })()}
+
+                {/* Use regularOffers for all category, sortedOffers for niche categories, skip for monthly_retainers (shown separately) */}
+                {(() => {
+                  // Skip this section entirely for monthly_retainers only - they are shown in their own section below
+                  const onlyMonthlyRetainers = selectedCategories.length === 1 && selectedCategories.includes("monthly_retainers");
+                  if (onlyMonthlyRetainers) {
+                    return null;
+                  }
+
+                  // When monthly_retainers is selected, exclude them from grid (they show in expanded section)
+                  const hasMonthlyRetainersSelected = selectedCategories.includes("monthly_retainers");
+                  let displayOffers = selectedCategories.length === 0 ? regularOffers : sortedOffers;
+                  if (hasMonthlyRetainersSelected) {
+                    displayOffers = displayOffers.filter(offer => offer.commissionType !== 'monthly_retainer');
+                  }
+
+                  return !displayOffers || displayOffers.length === 0 ? (
             <Card className="border-dashed border-2">
               <CardContent className="p-8 sm:p-12 md:p-16 text-center">
                 <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-muted/50 flex items-center justify-center mb-4 sm:mb-6">
@@ -1084,8 +1247,8 @@ export default function Browse() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-              {regularOffers.map((offer) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+              {displayOffers.map((offer) => {
                 const isFavorite = favorites.some(f => f.offerId === offer.id);
                 const category = getOfferCategory(offer);
                 const isRetainer = offer.commissionType === 'monthly_retainer';
@@ -1139,10 +1302,10 @@ export default function Browse() {
                           className="rounded-full flex items-center justify-center transition-all hover:scale-110 shadow-lg backdrop-blur-md"
                           style={{
                             position: 'absolute',
-                            top: '12px',
-                            left: '12px',
-                            width: '36px',
-                            height: '36px',
+                            top: '8px',
+                            left: '8px',
+                            width: '44px',
+                            height: '44px',
                             backgroundColor: 'rgba(255, 255, 255, 0.95)',
                             zIndex: 10,
                             border: 'none',
@@ -1150,6 +1313,7 @@ export default function Browse() {
                           }}
                           onClick={(e) => handleFavoriteToggle(e, offer.id)}
                           data-testid={`button-favorite-${offer.id}`}
+                          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                         >
                           <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-red-500 text-red-500 scale-110' : 'text-gray-600'}`} />
                         </button>
@@ -1173,11 +1337,16 @@ export default function Browse() {
                         <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed">{offer.shortDescription}</p>
 
                         <div className="flex flex-wrap gap-1 sm:gap-1.5">
-                          {offer.primaryNiche && (
-                            <Badge variant="outline" className={`text-[10px] sm:text-xs border ${NICHE_COLORS[offer.primaryNiche] || 'bg-secondary'}`}>
-                              {offer.primaryNiche}
-                            </Badge>
-                          )}
+                          {offer.primaryNiche && (() => {
+                            const formattedNiche = formatNicheLabel(offer.primaryNiche);
+                            const badgeClass = NICHE_COLORS[formattedNiche] || 'bg-secondary';
+
+                            return (
+                              <Badge variant="outline" className={`text-[10px] sm:text-xs border ${badgeClass}`}>
+                                {formattedNiche}
+                              </Badge>
+                            );
+                          })()}
                         </div>
 
                         <div className="flex items-center justify-between pt-2 sm:pt-3 border-t">
@@ -1222,183 +1391,13 @@ export default function Browse() {
                 );
               })}
             </div>
-          )}
-                </div>
-              )}
+          );
+        })()}
+              </div>
 
-              {/* Monthly Retainers Section - Only show when on "all" category */}
-              {activeTab === "all" && selectedCategory === "all" && monthlyRetainerOffers.length > 0 && (
+              {/* Show monthly retainers section whenever "monthly_retainers" category is selected */}
+              {selectedCategories.includes("monthly_retainers") && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground">Monthly Retainers</h2>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
-                    {monthlyRetainerOffers.map((offer) => {
-                      const isFavorite = favorites.some(f => f.offerId === offer.id);
-                      // Always show RETAINER badge for monthly retainer offers in this section
-                      const category = { label: "RETAINER", color: "bg-gradient-to-r from-purple-600 to-violet-600" };
-                      const isRetainer = offer.commissionType === 'monthly_retainer';
-
-                      const commissionDisplay = getCommissionDisplay(offer);
-
-                      // Check if creator has applied to this retainer contract
-                      const application = offer.isRetainerContract
-                        ? retainerApplications.find((app: any) => app.contractId === offer.id)
-                        : applications.find((app: any) => app.offerId === offer.id);
-                      const hasApplied = !!application;
-
-                      return (
-                        <Link key={offer.id} href={offer.isRetainerContract ? `/retainers/${offer.id}` : `/offers/${offer.id}`}>
-                          <Card className={`group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-visible h-full ${
-                            isRetainer ? 'ring-2 ring-purple-400/50 hover:ring-purple-500 hover:shadow-purple-500/20' : ''
-                          }`} data-testid={`card-offer-${offer.id}`}>
-                            {/* Thumbnail Container with Logo */}
-                            <div className="relative">
-                              {/* Gradient Background */}
-                              <div className={`aspect-video relative overflow-hidden rounded-t-lg ${
-                                isRetainer ? 'bg-gradient-to-br from-purple-100 via-violet-100 to-indigo-100' : ''
-                              }`}>
-                                {!isRetainer && offer.featuredImageUrl ? (
-                                  <>
-                                    <img
-                                      src={proxiedSrc(offer.featuredImageUrl)}
-                                      alt={offer.title}
-                                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                      referrerPolicy="no-referrer"
-                                      onError={(e) => {
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                        const fallback = (e.target as HTMLImageElement).nextElementSibling;
-                                        if (fallback) {
-                                          fallback.classList.remove('hidden');
-                                          fallback.classList.add('flex');
-                                        }
-                                      }}
-                                    />
-                                    {/* Fallback if image fails */}
-                                    <div className="absolute inset-0 hidden items-center justify-center bg-gradient-to-br from-primary/10 to-purple-500/10">
-                                      <Play className="h-12 w-12 text-muted-foreground/50" />
-                                    </div>
-                                  </>
-                                ) : !isRetainer ? (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/10 to-purple-500/10">
-                                    <Play className="h-12 w-12 text-muted-foreground/50" />
-                                  </div>
-                                ) : null}
-
-                                {/* Favorite button - Top Left */}
-                                <button
-                                  className="absolute top-3 left-3 rounded-full flex items-center justify-center transition-all hover:scale-110 shadow-md backdrop-blur-sm"
-                                  style={{
-                                    width: '36px',
-                                    height: '36px',
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    zIndex: 10
-                                  }}
-                                  onClick={(e) => handleFavoriteToggle(e, offer.id)}
-                                  data-testid={`button-favorite-${offer.id}`}
-                                >
-                                  <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
-                                </button>
-
-                                {/* Category Badge - Top Right */}
-                                {category && (
-                                  <div className={`absolute top-0 right-0 ${category.color} text-white px-3 py-1.5 rounded-bl-lg shadow-lg font-bold text-xs tracking-wide`}>
-                                    {category.label}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Company Logo - Positioned outside thumbnail but inside wrapper */}
-                              {offer.company?.logoUrl && (
-                                <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
-                                  <img
-                                    src={proxiedSrc(offer.company.logoUrl)}
-                                    alt={offer.company.tradeName}
-                                    className="h-full w-full object-cover"
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            <CardContent className="p-4 sm:p-5 pt-7 sm:pt-8 space-y-2 sm:space-y-3">
-                              {/* Title */}
-                              <h3 className="font-semibold text-sm sm:text-base line-clamp-2 text-foreground leading-snug">
-                                {offer.title}
-                              </h3>
-
-                              {/* Company Name */}
-                              {offer.company?.tradeName && (
-                                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
-                                  {offer.company.tradeName}
-                                </p>
-                              )}
-
-                              {/* Hashtag Badges */}
-                              <div className="flex flex-wrap gap-1 sm:gap-1.5">
-                                {offer.primaryNiche && (
-                                  <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                                    #{offer.primaryNiche}
-                                  </Badge>
-                                )}
-                                {offer.secondaryNiche && (
-                                  <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                                    #{offer.secondaryNiche}
-                                  </Badge>
-                                )}
-                              </div>
-
-                              {/* Commission and Stats */}
-                              <div className="flex items-end justify-between pt-1 sm:pt-2">
-                                <div>
-                                  <div className="text-xl sm:text-2xl font-bold text-purple-600 group-hover:text-purple-700 transition-colors">
-                                    {commissionDisplay.isCurrency
-                                      ? `$${commissionDisplay.value}`
-                                      : commissionDisplay.value}
-                                  </div>
-                                  <div className="text-[10px] sm:text-xs text-purple-600/70 font-medium">
-                                    per month
-                                  </div>
-                                </div>
-
-                                {/* Active creators */}
-                                <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
-                                  <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                                  <span className="hidden xs:inline">{offer.activeCreatorsCount || 0} active</span>
-                                  <span className="xs:hidden">{offer.activeCreatorsCount || 0}</span>
-                                </div>
-                              </div>
-
-                              {/* Application Status */}
-                              {hasApplied && application && (
-                                <div className="pt-2 sm:pt-3 border-t mt-2 sm:mt-3">
-                                  <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant={getApplicationStatusBadge(application.status).variant} className="text-xs">
-                                        {getApplicationStatusBadge(application.status).label}
-                                      </Badge>
-                                    </div>
-                                    <div className="text-[10px] sm:text-xs text-muted-foreground">
-                                      <span className="hidden sm:inline">Applied: </span>{formatApplicationDate(application.createdAt)}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Show monthly retainers when "monthly_retainers" category is selected */}
-              {selectedCategory === "monthly_retainers" && (
-                <div className="space-y-4">
-                  <h2 className="text-xl sm:text-2xl font-bold text-foreground">Monthly Retainer Contracts</h2>
                   {!monthlyRetainerOffers || monthlyRetainerOffers.length === 0 ? (
                     <Card className="border-dashed border-2">
                       <CardContent className="p-8 sm:p-12 md:p-16 text-center">
@@ -1413,163 +1412,155 @@ export default function Browse() {
                       </CardContent>
                     </Card>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 sm:gap-6">
+                    <div className="space-y-4">
                       {monthlyRetainerOffers.map((offer) => {
-                        const isFavorite = favorites.some(f => f.offerId === offer.id);
-                        // Always show RETAINER badge for monthly retainer offers in this section
-                        const category = { label: "RETAINER", color: "bg-gradient-to-r from-purple-600 to-violet-600" };
-                        const isRetainer = offer.commissionType === 'monthly_retainer';
-
-                        const commissionDisplay = getCommissionDisplay(offer);
-
                         // Check if creator has applied to this retainer contract
                         const application = offer.isRetainerContract
                           ? retainerApplications.find((app: any) => app.contractId === offer.id)
                           : applications.find((app: any) => app.offerId === offer.id);
                         const hasApplied = !!application;
+                        const monthlyAmount = offer.monthlyAmount || offer.commissionAmount || 0;
 
                         return (
-                          <Link key={offer.id} href={offer.isRetainerContract ? `/retainers/${offer.id}` : `/offers/${offer.id}`}>
-                            <Card className={`group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-visible h-full ${
-                              isRetainer ? 'ring-2 ring-purple-400/50 hover:ring-purple-500 hover:shadow-purple-500/20' : ''
-                            }`} data-testid={`card-offer-${offer.id}`}>
-                              {/* Thumbnail Container with Logo */}
-                              <div className="relative">
-                                {/* Gradient Background */}
-                                <div className={`aspect-video relative overflow-hidden rounded-t-lg ${
-                                  isRetainer ? 'bg-gradient-to-br from-purple-100 via-violet-100 to-indigo-100' : ''
-                                }`}>
-                                  {!isRetainer && offer.featuredImageUrl ? (
-                                    <>
-                                      <img
-                                        src={proxiedSrc(offer.featuredImageUrl)}
-                                        alt={offer.title}
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                        referrerPolicy="no-referrer"
-                                        onError={(e) => {
-                                          console.error(`Image failed to load: ${offer.title}`, offer.featuredImageUrl);
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                          const fallback = (e.target as HTMLImageElement).nextElementSibling;
-                                          if (fallback) {
-                                            fallback.classList.remove('hidden');
-                                            fallback.classList.add('flex');
-                                          }
-                                        }}
-                                      />
-                                      {/* Fallback if image fails */}
-                                      <div className="absolute inset-0 hidden items-center justify-center bg-gradient-to-br from-primary/10 to-purple-500/10">
-                                        <Play className="h-12 w-12 text-muted-foreground/50" />
-                                      </div>
-                                    </>
-                                  ) : !isRetainer ? (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/10 to-purple-500/10">
-                                      <Play className="h-12 w-12 text-muted-foreground/50" />
-                                    </div>
-                                  ) : null}
-
-                                  {/* Favorite button - Top Left */}
-                                  <button
-                                    className="absolute top-3 left-3 rounded-full flex items-center justify-center transition-all hover:scale-110 shadow-md backdrop-blur-sm"
-                                    style={{
-                                      width: '36px',
-                                      height: '36px',
-                                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      zIndex: 10
-                                    }}
-                                    onClick={(e) => handleFavoriteToggle(e, offer.id)}
-                                    data-testid={`button-favorite-${offer.id}`}
+                          <Card
+                            key={offer.id}
+                            className="group hover:shadow-lg transition-all duration-300 ring-1 ring-purple-400/30 hover:ring-purple-500/50"
+                            data-testid={`card-retainer-${offer.id}`}
+                          >
+                            <CardHeader className="space-y-3">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  <h3 className="text-lg sm:text-xl font-bold">{offer.title}</h3>
+                                  <p className="text-muted-foreground line-clamp-2 leading-relaxed">
+                                    {offer.description || offer.shortDescription}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2 pt-2">
+                                    {offer.contentApprovalRequired && (
+                                      <Badge variant="secondary">Approval required</Badge>
+                                    )}
+                                    {offer.exclusivityRequired && (
+                                      <Badge className="bg-primary/10 text-primary" variant="outline">
+                                        Exclusivity
+                                      </Badge>
+                                    )}
+                                    {offer.minimumVideoLengthSeconds && (
+                                      <Badge variant="outline">
+                                        Min length: {offer.minimumVideoLengthSeconds}s
+                                      </Badge>
+                                    )}
+                                    {offer.postingSchedule && (
+                                      <Badge variant="outline">{offer.postingSchedule}</Badge>
+                                    )}
+                                  </div>
+                                </div>
+                                <Link href={offer.isRetainerContract ? `/retainers/${offer.id}` : `/offers/${offer.id}`}>
+                                  <Button
+                                    variant="outline"
+                                    className="group/btn hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium shrink-0"
+                                    data-testid={`button-view-retainer-${offer.id}`}
                                   >
-                                    <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
-                                  </button>
-
-                                  {/* Category Badge - Top Right */}
-                                  {category && (
-                                    <div className={`absolute top-0 right-0 ${category.color} text-white px-3 py-1.5 rounded-bl-lg shadow-lg font-bold text-xs tracking-wide`}>
-                                      {category.label}
-                                    </div>
-                                  )}
+                                    <Eye className="h-4 w-4 mr-2 group-hover/btn:scale-110 transition-transform duration-200" />
+                                    View Details
+                                  </Button>
+                                </Link>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-primary/5 transition-colors duration-200">
+                                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                    <DollarSign className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Monthly Payment</p>
+                                    <p className="font-semibold">${monthlyAmount.toLocaleString()}</p>
+                                  </div>
                                 </div>
 
-                                {/* Company Logo - Positioned outside thumbnail but inside wrapper */}
-                                {offer.company?.logoUrl && (
-                                  <div className="absolute -bottom-6 sm:-bottom-7 left-3 sm:left-4 h-12 w-12 sm:h-14 sm:w-14 rounded-lg sm:rounded-xl overflow-hidden bg-white shadow-lg border-2 border-background z-20">
-                                    <img
-                                      src={proxiedSrc(offer.company.logoUrl)}
-                                      alt={offer.company.tradeName}
-                                      className="h-full w-full object-cover"
-                                    />
+                                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-primary/5 transition-colors duration-200">
+                                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                    <Video className="h-5 w-5 text-primary" />
                                   </div>
-                                )}
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Videos/Month</p>
+                                    <p className="font-semibold">{offer.videosPerMonth || 0}</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-primary/5 transition-colors duration-200">
+                                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                    <Calendar className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Duration</p>
+                                    <p className="font-semibold">{offer.durationMonths || 0} months</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-primary/5 transition-colors duration-200">
+                                  <div className="h-10 w-10 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                                    <Users className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-muted-foreground">Platform</p>
+                                    <p className="font-semibold">{offer.requiredPlatform || 'Any'}</p>
+                                  </div>
+                                </div>
                               </div>
 
-                              <CardContent className="p-4 sm:p-5 pt-7 sm:pt-8 space-y-2 sm:space-y-3">
-                                {/* Title */}
-                                <h3 className="font-semibold text-sm sm:text-base line-clamp-2 text-foreground leading-snug">
-                                  {offer.title}
-                                </h3>
-
-                                {/* Company Name */}
-                                {offer.company?.tradeName && (
-                                  <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
-                                    {offer.company.tradeName}
-                                  </p>
-                                )}
-
-                                {/* Hashtag Badges */}
-                                <div className="flex flex-wrap gap-1 sm:gap-1.5">
-                                  {offer.primaryNiche && (
-                                    <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                                      #{offer.primaryNiche}
-                                    </Badge>
-                                  )}
-                                  {offer.secondaryNiche && (
-                                    <Badge variant="secondary" className="text-[10px] sm:text-xs font-normal">
-                                      #{offer.secondaryNiche}
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                {/* Commission and Stats */}
-                                <div className="flex items-end justify-between pt-1 sm:pt-2">
-                                  <div>
-                                    <div className="text-xl sm:text-2xl font-bold text-purple-600 group-hover:text-purple-700 transition-colors">
-                                      {commissionDisplay.isCurrency
-                                        ? `$${commissionDisplay.value}`
-                                        : commissionDisplay.value}
-                                    </div>
-                                    <div className="text-[10px] sm:text-xs text-purple-600/70 font-medium">
-                                      per month
-                                    </div>
-                                  </div>
-
-                                  {/* Active creators */}
-                                  <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
-                                    <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    <span className="hidden xs:inline">{offer.activeCreatorsCount || 0} active</span>
-                                    <span className="xs:hidden">{offer.activeCreatorsCount || 0}</span>
+                              {Array.isArray(offer.retainerTiers) && offer.retainerTiers.length > 0 && (
+                                <div className="mt-4 pt-4 border-t space-y-3">
+                                  <p className="text-sm font-semibold">Tiered packages</p>
+                                  <div className="grid md:grid-cols-3 gap-3">
+                                    {offer.retainerTiers.map((tier: any, tierIndex: number) => (
+                                      <div
+                                        key={`${offer.id}-tier-${tierIndex}`}
+                                        className="rounded-lg border p-3 bg-muted/30"
+                                      >
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className="font-semibold">{tier.name}</span>
+                                          <Badge variant="outline">${tier.monthlyAmount?.toLocaleString?.() || tier.monthlyAmount}</Badge>
+                                        </div>
+                                        <p className="text-sm text-muted-foreground">
+                                          {tier.videosPerMonth} videos / {tier.durationMonths} month{tier.durationMonths === 1 ? "" : "s"}
+                                        </p>
+                                      </div>
+                                    ))}
                                   </div>
                                 </div>
+                              )}
 
-                                {/* Application Status */}
-                                {hasApplied && application && (
-                                  <div className="pt-2 sm:pt-3 border-t mt-2 sm:mt-3">
-                                    <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant={getApplicationStatusBadge(application.status).variant} className="text-xs">
-                                          {getApplicationStatusBadge(application.status).label}
-                                        </Badge>
-                                      </div>
-                                      <div className="text-[10px] sm:text-xs text-muted-foreground">
-                                        <span className="hidden sm:inline">Applied: </span>{formatApplicationDate(application.createdAt)}
-                                      </div>
+                              {!hasApplied && (
+                                <div className="mt-4 pt-4 border-t">
+                                  <Link href={offer.isRetainerContract ? `/retainers/${offer.id}` : `/offers/${offer.id}`}>
+                                    <Button
+                                      className="w-full sm:w-auto"
+                                      variant="default"
+                                      data-testid={`button-apply-${offer.id}`}
+                                    >
+                                      <Send className="h-4 w-4 mr-2" />
+                                      Apply Now
+                                    </Button>
+                                  </Link>
+                                </div>
+                              )}
+
+                              {hasApplied && application && (
+                                <div className="mt-4 pt-4 border-t">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant={getApplicationStatusBadge(application.status).variant} className="text-xs">
+                                        {getApplicationStatusBadge(application.status).label}
+                                      </Badge>
+                                    </div>
+                                    <div className="text-[10px] sm:text-xs text-muted-foreground">
+                                      <span className="hidden sm:inline">Applied: </span>{formatApplicationDate(application.createdAt)}
                                     </div>
                                   </div>
-                                )}
-                              </CardContent>
-                            </Card>
-                          </Link>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
                         );
                       })}
                     </div>
@@ -1588,6 +1579,60 @@ export default function Browse() {
         title={errorDialog.title}
         description={errorDialog.description}
         variant="error"
+      />
+
+      <Dialog
+        open={saveSearchDialogOpen}
+        onOpenChange={(open) => {
+          setSaveSearchDialogOpen(open);
+          if (!open) {
+            setSavedSearchName("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save this search</DialogTitle>
+            <DialogDescription>Store your current keywords and filters for quick reuse.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="saved-search-name">Search name</Label>
+              <Input
+                id="saved-search-name"
+                value={savedSearchName}
+                onChange={(e) => setSavedSearchName(e.target.value)}
+                placeholder="e.g. High commission SaaS"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Current search term, selected niches, and filters will be saved.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSaveSearchDialogOpen(false);
+                setSavedSearchName("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSearch} disabled={createSavedSearchMutation.isPending}>
+              {createSavedSearchMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save search
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <FirstTimeTutorial
+        open={showTutorial}
+        onComplete={completeTutorial}
+        config={browsePageTutorialConfig}
       />
     </div>
   );

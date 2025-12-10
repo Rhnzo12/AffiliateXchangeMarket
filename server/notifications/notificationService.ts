@@ -5,6 +5,33 @@ import type { InsertNotification, UserNotificationPreferences } from '../../shar
 import * as emailTemplates from './emailTemplates';
 import { getTemplateForType } from './templateEngine';
 
+/**
+ * Get the base URL for the application from environment variables
+ * Defaults to http://localhost:5000 if not set
+ */
+function getBaseUrl(): string {
+  return process.env.BASE_URL || 'http://localhost:5000';
+}
+
+/**
+ * Convert a relative URL to an absolute URL using the BASE_URL
+ * If the URL is already absolute, return it as-is
+ */
+function toAbsoluteUrl(url: string): string {
+  if (!url) return url;
+
+  // If already absolute (starts with http:// or https://), return as-is
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+
+  // Convert relative URL to absolute
+  const baseUrl = getBaseUrl();
+  // Ensure we don't double up on slashes
+  const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+  return `${baseUrl}${cleanUrl}`;
+}
+
 let sendGridConfigured = false;
 let webPushConfigured = false;
 
@@ -48,6 +75,8 @@ export type NotificationType =
   | 'work_completion_approval'
   | 'priority_listing_expiring'
   | 'deliverable_rejected'
+  | 'deliverable_submitted'
+  | 'deliverable_resubmitted'
   | 'revision_requested'
   | 'email_verification'
   | 'password_reset'
@@ -69,7 +98,7 @@ interface NotificationData {
   reviewId?: string;
   contractId?: string;
   deliverableId?: string;
-  paymentId?: string; // ✅ ADDED: Payment ID for linking to payment details
+  paymentId?: string; // \u2705 ADDED: Payment ID for linking to payment details
   trackingLink?: string;
   trackingCode?: string;
   amount?: string;
@@ -209,6 +238,8 @@ export class NotificationService {
         return '/company/offers';
 
       case 'deliverable_rejected':
+      case 'deliverable_submitted':
+      case 'deliverable_resubmitted':
       case 'revision_requested':
         // Creator: go to specific deliverable
         if (data.contractId && data.deliverableId) {
@@ -271,6 +302,10 @@ export class NotificationService {
       const linkUrl = this.generateLinkUrl(type, data, user.role);
       console.log(`[Notifications] Generated linkUrl: ${linkUrl}`);
 
+      // Convert linkUrl to absolute URL for emails
+      const absoluteLinkUrl = toAbsoluteUrl(linkUrl);
+      console.log(`[Notifications] Absolute linkUrl for emails: ${absoluteLinkUrl}`);
+
       // FIRST: Check for custom email template before creating any notifications
       // If a custom template exists, use its subject as the notification title
       let customTemplate: { subject: string; html: string } | null = null;
@@ -278,7 +313,8 @@ export class NotificationService {
       let effectiveMessage = message;
 
       try {
-        customTemplate = await getTemplateForType(type, { ...data, linkUrl });
+        // Use absolute URL for email templates
+        customTemplate = await getTemplateForType(type, { ...data, linkUrl: absoluteLinkUrl });
         if (customTemplate) {
           console.log(`[Notifications] Found custom template for ${type}, using template subject as notification title`);
           effectiveTitle = customTemplate.subject;
@@ -292,17 +328,19 @@ export class NotificationService {
 
       console.log(`[Notifications] Checking in-app notifications: preferences?.inAppNotifications = ${preferences?.inAppNotifications}, will send = ${preferences?.inAppNotifications !== false}`);
       if (preferences?.inAppNotifications !== false) {
+        // Use relative URL for in-app notifications (they're internal to the app)
         await this.sendInAppNotification(userId, type, effectiveTitle, effectiveMessage, linkUrl, data);
       } else {
         console.log(`[Notifications] Skipping in-app notification (disabled by preferences)`);
       }
 
       if (preferences?.emailNotifications !== false && this.shouldSendEmail(type, preferences)) {
-        // Pass linkUrl in data for email templates, and the pre-fetched custom template
-        await this.sendEmailNotificationWithTemplate(user.email, type, { ...data, linkUrl }, customTemplate);
+        // Pass absolute linkUrl in data for email templates, and the pre-fetched custom template
+        await this.sendEmailNotificationWithTemplate(user.email, type, { ...data, linkUrl: absoluteLinkUrl }, customTemplate);
       }
 
       if (preferences?.pushNotifications !== false && this.shouldSendPush(type, preferences)) {
+        // Use relative URL for push notifications (they're internal to the app)
         await this.sendPushNotification(preferences, effectiveTitle, effectiveMessage, { ...data, linkUrl });
       }
     } catch (error) {
@@ -441,6 +479,14 @@ export class NotificationService {
         return emailTemplates.contentFlaggedEmail(data);
       case 'high_risk_company':
         return emailTemplates.highRiskCompanyEmail(data);
+      case 'deliverable_submitted':
+        return emailTemplates.deliverableSubmittedEmail(data);
+      case 'deliverable_resubmitted':
+        return emailTemplates.deliverableResubmittedEmail(data);
+      case 'deliverable_rejected':
+        return emailTemplates.deliverableRejectedEmail(data);
+      case 'revision_requested':
+        return emailTemplates.revisionRequestedEmail(data);
       default:
         return null;
     }
@@ -461,11 +507,17 @@ export class NotificationService {
     }
 
     try {
+      // Convert linkUrl to absolute URL for emails if present
+      const emailData = {
+        ...data,
+        linkUrl: data.linkUrl ? toAbsoluteUrl(data.linkUrl) : data.linkUrl
+      };
+
       let emailContent: { subject: string; html: string } | null = null;
 
       // First, try to get a custom template from the database
       try {
-        emailContent = await getTemplateForType(type, data);
+        emailContent = await getTemplateForType(type, emailData);
         if (emailContent) {
           console.log(`[Notifications] Using custom template for ${type}`);
         }
@@ -476,7 +528,7 @@ export class NotificationService {
       // If no custom template found, fall back to hardcoded templates
       if (!emailContent) {
         console.log(`[Notifications] No custom template available for ${type}, using hardcoded default`);
-        emailContent = this.getHardcodedEmailTemplate(type, data);
+        emailContent = this.getHardcodedEmailTemplate(type, emailData);
         if (!emailContent) {
           console.warn(`[Notifications] Unknown email type: ${type}`);
           return;

@@ -25,7 +25,7 @@ async function runMigration() {
     console.log("📝 Executing migration SQL...\n");
     await db.execute(sql.raw(migrationSQL));
 
-    console.log("✅ Migration completed successfully!\n");
+    console.log("\u2705 Migration completed successfully!\n");
 
     // Verify the columns were added
     console.log("🔍 Verifying new columns...");
@@ -45,29 +45,29 @@ async function runMigration() {
     `);
 
     if (result.rows.length === 6) {
-      console.log("✅ All 6 columns added successfully:");
+      console.log("\u2705 All 6 columns added successfully:");
       result.rows.forEach((row: any) => {
         console.log(`   - ${row.column_name} (${row.data_type})`);
       });
     } else {
-      console.log(`⚠️  Expected 6 columns, found ${result.rows.length}`);
+      console.log(`\u26A0\uFE0F  Expected 6 columns, found ${result.rows.length}`);
       result.rows.forEach((row: any) => {
         console.log(`   - ${row.column_name} (${row.data_type})`);
       });
     }
 
-    console.log("\n✨ Migration complete! You can now:");
+    console.log("\n\u2728 Migration complete! You can now:");
     console.log("   1. Restart your application");
     console.log("   2. Create a new offer with creator requirements");
     console.log("   3. View the offer to see the requirements displayed\n");
 
     process.exit(0);
   } catch (error: any) {
-    console.error("❌ Migration failed:", error.message);
+    console.error("\u274C Migration failed:", error.message);
 
     // Check if columns already exist
     if (error.message?.includes("already exists")) {
-      console.log("ℹ️  The columns may already exist. Verifying...");
+      console.log("\u2139\uFE0F  The columns may already exist. Verifying...");
 
       try {
         const result = await db.execute(sql`
@@ -84,10 +84,10 @@ async function runMigration() {
           )
         `);
 
-        console.log(`✅ Found ${result.rows.length}/6 columns already in database`);
+        console.log(`\u2705 Found ${result.rows.length}/6 columns already in database`);
         process.exit(0);
       } catch (verifyError) {
-        console.error("❌ Could not verify columns:", verifyError);
+        console.error("\u274C Could not verify columns:", verifyError);
       }
     }
 

@@ -14,7 +14,7 @@ async function runMigration() {
     console.log('Executing migration SQL...');
     await db.execute(sql.raw(migrationSQL));
 
-    console.log('✅ Migration completed successfully!');
+    console.log('\u2705 Migration completed successfully!');
     console.log('The following columns have been added:');
     console.log('  - password_change_otp');
     console.log('  - password_change_otp_expiry');
@@ -22,7 +22,7 @@ async function runMigration() {
     console.log('\nYou can now restart your server.');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('\u274C Migration failed:', error);
     process.exit(1);
   }
 }

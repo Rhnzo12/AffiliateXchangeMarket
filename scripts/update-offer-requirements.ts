@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 const offerId = process.argv[2];
 
 if (!offerId) {
-  console.error("❌ Please provide an offer ID");
+  console.error("\u274C Please provide an offer ID");
   console.error("Usage: tsx scripts/update-offer-requirements.ts <offer-id>");
   process.exit(1);
 }
@@ -37,11 +37,11 @@ async function updateOfferRequirements() {
       .returning();
 
     if (result.length === 0) {
-      console.error(`❌ Offer ${offerId} not found`);
+      console.error(`\u274C Offer ${offerId} not found`);
       process.exit(1);
     }
 
-    console.log("✅ Offer updated successfully!\n");
+    console.log("\u2705 Offer updated successfully!\n");
     console.log("Updated requirements:");
     console.log(`   - Minimum Followers: ${requirements.minimumFollowers}`);
     console.log(`   - Allowed Platforms: ${requirements.allowedPlatforms.join(", ")}`);
@@ -50,11 +50,11 @@ async function updateOfferRequirements() {
     console.log(`   - Content Style: ${requirements.contentStyleRequirements}`);
     console.log(`   - Brand Safety: ${requirements.brandSafetyRequirements}`);
 
-    console.log("\n✨ View the offer at: /offers/" + offerId);
+    console.log("\n\u2728 View the offer at: /offers/" + offerId);
 
     process.exit(0);
   } catch (error: any) {
-    console.error("❌ Update failed:", error.message);
+    console.error("\u274C Update failed:", error.message);
     process.exit(1);
   }
 }

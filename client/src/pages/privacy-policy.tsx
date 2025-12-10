@@ -30,7 +30,7 @@ export default function PrivacyPolicy() {
           <div>
             <h1 className="text-4xl font-bold mb-4">Privacy Policy</h1>
             <p className="text-muted-foreground">
-              Last Updated: November 23, 2025
+              Last Updated: December 5, 2025
             </p>
           </div>
 
@@ -270,10 +270,128 @@ export default function PrivacyPolicy() {
                 <p>
                   Our Services are not intended for individuals under 18 years of age. We do not knowingly collect personal information from children. If you become aware that a child has provided us with personal information, please contact us immediately.
                 </p>
+                <p className="mt-4">
+                  If we discover that we have inadvertently collected personal information from a child under 18, we will delete that information as quickly as possible. Parents or guardians who believe their child has provided us with personal information should contact us at privacy@affiliatexchange.com.
+                </p>
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">13. Changes to This Privacy Policy</h2>
+                <h2 className="text-2xl font-semibold mb-4">13. Automated Decision-Making and Profiling</h2>
+                <p>
+                  We may use automated systems and algorithms to enhance your experience on our platform:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li><strong>Offer Matching:</strong> We use automated algorithms to recommend relevant brand offers to creators based on their profile, niche, audience demographics, and past performance. This helps connect creators with opportunities that best match their audience.</li>
+                  <li><strong>Creator Recommendations:</strong> Brands receive automated recommendations for creators who match their offer requirements (follower count, engagement rate, niche alignment, location).</li>
+                  <li><strong>Fraud Detection:</strong> Automated systems analyze click patterns, conversion rates, and account behavior to detect potential fraud, manipulation, or abuse. Accounts flagged by these systems may be subject to review or suspension.</li>
+                  <li><strong>Pricing and Commission Optimization:</strong> We may use data analysis to suggest optimal commission rates and pricing strategies to brands based on market trends and performance data.</li>
+                  <li><strong>Content Moderation:</strong> Automated tools scan uploaded content for prohibited material, spam, or policy violations before manual review.</li>
+                  <li><strong>Performance Analytics:</strong> Machine learning models analyze campaign performance to provide insights and predictions about future results.</li>
+                </ul>
+                <p className="mt-4">
+                  <strong>Your Rights Regarding Automated Decisions:</strong> If you are in the EEA, UK, or Switzerland, you have the right to request human review of automated decisions that significantly affect you, express your point of view, and contest the decision. Contact privacy@affiliatexchange.com to exercise these rights.
+                </p>
+                <p className="mt-4">
+                  <strong>Opting Out:</strong> While some automated processing is essential for our Services to function (fraud detection, security), you can opt out of certain automated recommendations by adjusting your preferences in account settings. Note that opting out may limit the functionality and personalization of our Services.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">14. Do Not Track Signals</h2>
+                <p>
+                  Some browsers offer a "Do Not Track" (DNT) signal that sends a request to websites not to track your browsing activity. Currently, there is no industry standard for responding to DNT signals.
+                </p>
+                <p className="mt-4">
+                  At this time, our Services do not respond to DNT browser signals. However, you can control tracking through:
+                </p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Cookie consent preferences in our cookie banner</li>
+                  <li>Account privacy settings</li>
+                  <li>Browser cookie settings and extensions</li>
+                  <li>Opt-out tools provided by third-party analytics services</li>
+                </ul>
+                <p className="mt-4">
+                  We will update this policy if we adopt a DNT standard in the future.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">15. Data Breach Notification</h2>
+                <p>
+                  We take data security seriously and have implemented comprehensive measures to protect your information. However, in the event of a data breach that affects your personal information, we are committed to transparency and prompt notification.
+                </p>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Our Breach Response Process:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li><strong>Detection and Assessment:</strong> Continuous monitoring systems detect potential security incidents. Our security team immediately investigates and assesses the scope and severity of any breach.</li>
+                  <li><strong>Containment and Remediation:</strong> We take immediate action to contain the breach, prevent further unauthorized access, and remediate vulnerabilities.</li>
+                  <li><strong>Regulatory Notification:</strong> We will notify relevant authorities (e.g., EU data protection authorities, state attorneys general) within 72 hours of discovering a breach affecting personal data, as required by law.</li>
+                  <li><strong>User Notification:</strong> If the breach poses a risk to your rights and freedoms, we will notify you via email, in-app notification, or prominent website notice within 72 hours of discovery. We will not delay notification if it would impede law enforcement investigations.</li>
+                  <li><strong>Transparency:</strong> Our notification will include: the nature of the breach, types of data affected, likely consequences, measures we have taken or will take, and steps you can take to protect yourself.</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">What You Should Do:</h3>
+                <p>If we notify you of a breach, we recommend:</p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Change your password immediately</li>
+                  <li>Enable two-factor authentication (2FA) if not already enabled</li>
+                  <li>Monitor your financial accounts for suspicious activity</li>
+                  <li>Be cautious of phishing attempts referencing the breach</li>
+                  <li>Review your account activity and report any unauthorized transactions</li>
+                </ul>
+                <p className="mt-4">
+                  To report a suspected security incident, contact security@affiliatexchange.com immediately.
+                </p>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">16. Your Choices and Controls</h2>
+                <p>
+                  You have various options to control how your personal information is collected and used:
+                </p>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Account Settings:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li><strong>Profile Visibility:</strong> Control whether your profile is visible to brands, other creators, or the public</li>
+                  <li><strong>Search Visibility:</strong> Choose whether you appear in brand searches for creators</li>
+                  <li><strong>Communication Preferences:</strong> Manage email notifications, SMS alerts, and push notifications</li>
+                  <li><strong>Data Sharing:</strong> Control whether your performance data is shared with third parties for benchmarking</li>
+                  <li><strong>Marketing Communications:</strong> Opt in or out of promotional emails and newsletters</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Cookie Management:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Access cookie preferences through our cookie banner or account settings</li>
+                  <li>Disable non-essential cookies at any time</li>
+                  <li>Clear cookies through your browser settings</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Data Portability:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Request a copy of your data in machine-readable format (JSON, CSV)</li>
+                  <li>Export your performance analytics, earnings history, and campaign data</li>
+                  <li>Download your profile information, content, and messages</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Account Deletion:</h3>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Delete your account at any time through account settings</li>
+                  <li>Request immediate deletion by contacting privacy@affiliatexchange.com</li>
+                  <li>Understand that certain data may be retained for legal compliance (see Section 7)</li>
+                </ul>
+
+                <h3 className="text-lg font-semibold mb-3 mt-4">Marketing Opt-Out:</h3>
+                <p>To opt out of marketing communications:</p>
+                <ul className="list-disc pl-6 space-y-2">
+                  <li>Click "Unsubscribe" in any promotional email</li>
+                  <li>Update email preferences in account settings</li>
+                  <li>Email optout@affiliatexchange.com with your request</li>
+                  <li>Note: You will still receive transactional emails (account notifications, payment confirmations, security alerts)</li>
+                </ul>
+              </section>
+
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">17. Changes to This Privacy Policy</h2>
                 <p>
                   We may update this Privacy Policy from time to time. We will notify you of any material changes by:
                 </p>
@@ -288,7 +406,7 @@ export default function PrivacyPolicy() {
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">14. Contact Us</h2>
+                <h2 className="text-2xl font-semibold mb-4">18. Contact Us</h2>
                 <p>If you have questions or concerns about this Privacy Policy, please contact us:</p>
                 <div className="mt-4 space-y-2">
                   <p><strong>Company Name:</strong> AffiliateXchange Inc.</p>
@@ -305,24 +423,24 @@ export default function PrivacyPolicy() {
               </section>
 
               <section>
-                <h2 className="text-2xl font-semibold mb-4">15. Additional Information for Specific Jurisdictions</h2>
+                <h2 className="text-2xl font-semibold mb-4">19. Additional Information for Specific Jurisdictions</h2>
 
-                <h3 className="text-xl font-semibold mb-3">15.1 California Privacy Rights</h3>
+                <h3 className="text-xl font-semibold mb-3">19.1 California Privacy Rights</h3>
                 <p>
                   California Civil Code Section 1798.83 permits California residents to request information about disclosure of personal information to third parties for direct marketing purposes. We do not share personal information with third parties for their direct marketing purposes.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">15.2 Nevada Privacy Rights</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.2 Nevada Privacy Rights</h3>
                 <p>
                   Nevada residents have the right to opt-out of the sale of personal information. We do not sell personal information as defined under Nevada law.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">15.3 Canada (PIPEDA)</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.3 Canada (PIPEDA)</h3>
                 <p>
                   Canadian residents have rights under the Personal Information Protection and Electronic Documents Act (PIPEDA), including the right to access and correct personal information.
                 </p>
 
-                <h3 className="text-xl font-semibold mb-3 mt-6">15.4 Australia (Privacy Act)</h3>
+                <h3 className="text-xl font-semibold mb-3 mt-6">19.4 Australia (Privacy Act)</h3>
                 <p>
                   Australian residents have rights under the Privacy Act 1988, including the right to access and correct personal information held by us.
                 </p>

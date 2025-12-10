@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, applicationsTourSteps } from "../lib/creatorTourConfig";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -65,6 +67,7 @@ const StarRating = ({ rating, onRatingChange }: { rating: number; onRatingChange
           type="button"
           onClick={() => onRatingChange(star)}
           className="focus:outline-none"
+          aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
         >
           <Star
             className={`h-6 w-6 cursor-pointer transition-colors ${
@@ -83,6 +86,10 @@ export default function Applications() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
+
+  // Quick Guide Tour
+  useCreatorPageTour(CREATOR_TOUR_IDS.APPLICATIONS, applicationsTourSteps);
+
   const [activeTab, setActiveTab] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -384,7 +391,13 @@ export default function Applications() {
                 <h3 className="font-semibold text-lg mb-2">No applications yet</h3>
                 <p className="text-muted-foreground mb-4">Start browsing offers and apply to begin earning</p>
                 <Link href="/browse">
-                  <Button data-testid="button-browse-offers">Browse Offers</Button>
+                  <Button
+                    data-testid="button-browse-offers"
+                    variant="ghost"
+                    className="bg-muted text-black border-none shadow-none hover:bg-muted"
+                  >
+                    Browse Offers
+                  </Button>
                 </Link>
               </CardContent>
             </Card>

@@ -30,6 +30,9 @@ import {
   Crown,
   Filter,
   X,
+  Search,
+  AlertTriangle,
+  Clock,
 } from "lucide-react";
 import { Link } from "wouter";
 import { proxiedSrc } from "../lib/image";
@@ -54,6 +57,8 @@ import {
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { OfferCardSkeleton } from "../components/skeletons";
+import { usePageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, offersTourSteps } from "../lib/companyTourConfig";
 
 const COMMISSION_TYPES = [
   { value: "per_sale", label: "Per Sale" },
@@ -154,6 +159,9 @@ export default function CompanyOffers() {
   const [nicheFilter, setNicheFilter] = useState("all");
   const [errorDialog, setErrorDialog] = useState<{ title: string; description: string } | null>(null);
 
+  // Quick tour for offers page
+  usePageTour(COMPANY_TOUR_IDS.OFFERS, offersTourSteps);
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       setErrorDialog({
@@ -170,6 +178,14 @@ export default function CompanyOffers() {
     queryKey: ["/api/company/offers"],
     enabled: isAuthenticated,
   });
+
+  // Fetch company stats to check approval status
+  const { data: companyStats } = useQuery<any>({
+    queryKey: ["/api/company/stats"],
+    enabled: isAuthenticated,
+  });
+
+  const isCompanyPending = companyStats?.companyProfile?.status === 'pending';
 
   const uniqueStatuses = useMemo(
     () => Array.from(new Set(offers.map((offer: any) => offer.status).filter(Boolean))),
@@ -259,10 +275,34 @@ export default function CompanyOffers() {
   return (
     <div className="min-h-screen bg-background">
       {/* Top Navigation Bar */}
-      <TopNavBar />
+      <TopNavBar>
+        <div className="relative flex-1 max-w-xl">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search offers, companies, or niches"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="pl-10 bg-muted/50"
+          />
+        </div>
+      </TopNavBar>
 
       {/* Main Content */}
       <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-8">
+        {/* Company Approval Pending Banner */}
+        {isCompanyPending && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 shrink-0" />
+            <p className="flex-1 text-sm text-amber-800 dark:text-amber-200">
+              <span className="font-medium">Company Approval Pending:</span> Your company registration is under review. You'll be able to create offers once approved.
+            </p>
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50">
+              <Clock className="h-3 w-3 mr-1" />
+              Pending
+            </Badge>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="space-y-2">
@@ -271,12 +311,24 @@ export default function CompanyOffers() {
               Manage your affiliate offers and track performance
             </p>
           </div>
-          <Link href="/company/offers/create">
-            <Button className="gap-2" data-testid="button-create-offer">
+          {isCompanyPending ? (
+            <Button
+              className="gap-2"
+              data-testid="button-create-offer"
+              disabled
+              title="Your company must be approved before creating offers"
+            >
               <Plus className="h-4 w-4" />
               Create New Offer
             </Button>
-          </Link>
+          ) : (
+            <Link href="/company/offers/create">
+              <Button className="gap-2" data-testid="button-create-offer">
+                <Plus className="h-4 w-4" />
+                Create New Offer
+              </Button>
+            </Link>
+          )}
         </div>
 
         <Card className="border-card-border">
@@ -299,14 +351,6 @@ export default function CompanyOffers() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Search</label>
-                <Input
-                  placeholder="Search offers, companies, or niches"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                />
-              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -376,12 +420,6 @@ export default function CompanyOffers() {
               <p className="text-muted-foreground mb-6">
                 Create your first affiliate offer to start working with creators
               </p>
-              <Link href="/company/offers/create">
-                <Button data-testid="button-create-first-offer">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Your First Offer
-                </Button>
-              </Link>
             </CardContent>
           </Card>
         ) : filteredOffers.length === 0 ? (
@@ -446,6 +484,7 @@ export default function CompanyOffers() {
                                 cursor: 'pointer',
                               }}
                               onClick={(e) => e.preventDefault()}
+                              aria-label="Offer actions menu"
                               data-testid={`button-menu-${offer.id}`}
                             >
                               <MoreVertical className="h-5 w-5 text-gray-600" />
@@ -584,7 +623,7 @@ export default function CompanyOffers() {
                     </div>
 
                     {/* Stats Row */}
-                    <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground pt-2 border-t">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-muted-foreground pt-2 border-t">
                       <div className="flex items-center gap-1">
                         <Eye className="h-3 w-3" />
                         <span>{offer.viewCount || 0} views</span>
@@ -593,7 +632,7 @@ export default function CompanyOffers() {
                         <Users className="h-3 w-3" />
                         <span>{offer.activeCreatorsCount || 0} active</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 col-span-2 sm:col-span-1">
                         <MousePointer className="h-3 w-3" />
                         <span>{offer.totalClicks || 0} clicks</span>
                       </div>
@@ -615,7 +654,7 @@ export default function CompanyOffers() {
                 This will permanently delete the offer "{offerToDelete?.title}". This action cannot be undone.
                 {offers.find(o => o.id === offerToDelete?.id)?.applicationCount > 0 && (
                   <span className="block mt-2 text-destructive font-semibold">
-                    ⚠️ Warning: This offer has {offers.find(o => o.id === offerToDelete?.id)?.applicationCount} active application(s).
+                    \u26A0\uFE0F Warning: This offer has {offers.find(o => o.id === offerToDelete?.id)?.applicationCount} active application(s).
                   </span>
                 )}
               </AlertDialogDescription>

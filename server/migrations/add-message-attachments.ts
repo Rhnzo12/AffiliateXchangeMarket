@@ -14,9 +14,9 @@ export async function addMessageAttachments() {
       ADD COLUMN IF NOT EXISTS attachments text[] DEFAULT ARRAY[]::text[]
     `);
 
-    console.log("✅ Successfully added attachments column to messages table");
+    console.log("\u2705 Successfully added attachments column to messages table");
   } catch (error) {
-    console.error("❌ Error adding attachments column:", error);
+    console.error("\u274C Error adding attachments column:", error);
     throw error;
   }
 }

@@ -14,6 +14,7 @@ import {
   creatorProfiles,
   companyProfiles,
   companyVerificationDocuments,
+  socialAccountConnections,
   offers,
   offerVideos,
   applications,
@@ -21,6 +22,7 @@ import {
   messages,
   reviews,
   favorites,
+  savedSearches,
   analytics,
   clickEvents,
   paymentSettings,
@@ -43,6 +45,8 @@ import {
   type InsertCreatorProfile,
   type CompanyProfile,
   type InsertCompanyProfile,
+  type SocialAccountConnection,
+  type InsertSocialAccountConnection,
   type Offer,
   type InsertOffer,
   type OfferVideo,
@@ -55,6 +59,8 @@ import {
   type InsertReview,
   type Favorite,
   type InsertFavorite,
+  type SavedSearch,
+  type InsertSavedSearch,
   type Analytics,
   type PaymentSetting,
   type InsertPaymentSetting,
@@ -698,6 +704,17 @@ export interface IStorage {
   createFavorite(favorite: InsertFavorite): Promise<Favorite>;
   deleteFavorite(creatorId: string, offerId: string): Promise<void>;
 
+  // Saved Searches
+  getSavedSearchesByCreator(creatorId: string): Promise<SavedSearch[]>;
+  getSavedSearch(id: string, creatorId: string): Promise<SavedSearch | null>;
+  createSavedSearch(savedSearch: InsertSavedSearch & { creatorId: string }): Promise<SavedSearch>;
+  updateSavedSearch(
+    id: string,
+    creatorId: string,
+    updates: Partial<Omit<InsertSavedSearch, "creatorId">>,
+  ): Promise<SavedSearch | null>;
+  deleteSavedSearch(id: string, creatorId: string): Promise<void>;
+
   // Analytics
   getAnalyticsByCreator(creatorId: string): Promise<any>;
   getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]>;
@@ -1069,6 +1086,117 @@ export class DatabaseStorage implements IStorage {
       .where(eq(creatorProfiles.userId, userId))
       .returning();
     return result[0];
+  }
+
+  // Social Account Connections
+  async getSocialConnections(userId: string): Promise<SocialAccountConnection[]> {
+    try {
+      const result = await db
+        .select()
+        .from(socialAccountConnections)
+        .where(eq(socialAccountConnections.userId, userId));
+      return result;
+    } catch (error: any) {
+      if (MISSING_SCHEMA_CODES.has(error.code)) {
+        console.log("[Storage] socialAccountConnections table does not exist yet");
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getSocialConnectionByPlatform(
+    userId: string,
+    platform: 'youtube' | 'tiktok' | 'instagram'
+  ): Promise<SocialAccountConnection | undefined> {
+    try {
+      const result = await db
+        .select()
+        .from(socialAccountConnections)
+        .where(
+          and(
+            eq(socialAccountConnections.userId, userId),
+            eq(socialAccountConnections.platform, platform)
+          )
+        )
+        .limit(1);
+      return result[0];
+    } catch (error: any) {
+      if (MISSING_SCHEMA_CODES.has(error.code)) {
+        console.log("[Storage] socialAccountConnections table does not exist yet");
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async createSocialConnection(
+    connection: InsertSocialAccountConnection
+  ): Promise<SocialAccountConnection> {
+    const result = await db
+      .insert(socialAccountConnections)
+      .values({
+        ...connection,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return result[0];
+  }
+
+  async updateSocialConnection(
+    userId: string,
+    platform: 'youtube' | 'tiktok' | 'instagram',
+    updates: Partial<InsertSocialAccountConnection>
+  ): Promise<SocialAccountConnection | undefined> {
+    const result = await db
+      .update(socialAccountConnections)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(
+        and(
+          eq(socialAccountConnections.userId, userId),
+          eq(socialAccountConnections.platform, platform)
+        )
+      )
+      .returning();
+    return result[0];
+  }
+
+  async upsertSocialConnection(
+    connection: InsertSocialAccountConnection
+  ): Promise<SocialAccountConnection> {
+    const existing = await this.getSocialConnectionByPlatform(
+      connection.userId,
+      connection.platform as 'youtube' | 'tiktok' | 'instagram'
+    );
+
+    if (existing) {
+      const updated = await this.updateSocialConnection(
+        connection.userId,
+        connection.platform as 'youtube' | 'tiktok' | 'instagram',
+        connection
+      );
+      return updated!;
+    }
+
+    return this.createSocialConnection(connection);
+  }
+
+  async deleteSocialConnection(
+    userId: string,
+    platform: 'youtube' | 'tiktok' | 'instagram'
+  ): Promise<boolean> {
+    const result = await db
+      .delete(socialAccountConnections)
+      .where(
+        and(
+          eq(socialAccountConnections.userId, userId),
+          eq(socialAccountConnections.platform, platform)
+        )
+      )
+      .returning();
+    return result.length > 0;
   }
 
   // Company Profiles
@@ -1632,7 +1760,7 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // ✅ ADD: Map to include company data and stats
+    // \u2705 ADD: Map to include company data and stats
     let offersWithStats = await Promise.all(
       results.map(async (row: any) => {
         const activeCreatorsCount = await this.getActiveCreatorsCountForOffer(row.offer.id);
@@ -1810,7 +1938,7 @@ export class DatabaseStorage implements IStorage {
       commission_details.amount = offer.commissionAmount;
     }
 
-    // ✅ FIX: Added featuredImageUrl and creator requirements fields to the INSERT
+    // \u2705 FIX: Added featuredImageUrl and creator requirements fields to the INSERT
     // Format arrays properly for PostgreSQL
     const allowedPlatformsArray = offer.allowedPlatforms && offer.allowedPlatforms.length > 0
       ? `ARRAY[${offer.allowedPlatforms.map(p => `'${p.replace(/'/g, "''")}'`).join(',')}]::text[]`
@@ -3153,6 +3281,64 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(favorites.creatorId, creatorId), eq(favorites.offerId, offerId)));
   }
 
+  // Saved Searches
+  async getSavedSearchesByCreator(creatorId: string): Promise<SavedSearch[]> {
+    const result = await db
+      .select()
+      .from(savedSearches)
+      .where(eq(savedSearches.creatorId, creatorId))
+      .orderBy(desc(savedSearches.updatedAt));
+
+    return result || [];
+  }
+
+  async getSavedSearch(id: string, creatorId: string): Promise<SavedSearch | null> {
+    const result = await db
+      .select()
+      .from(savedSearches)
+      .where(and(eq(savedSearches.id, id), eq(savedSearches.creatorId, creatorId)))
+      .limit(1);
+
+    return result[0] ?? null;
+  }
+
+  async createSavedSearch(savedSearch: InsertSavedSearch & { creatorId: string }): Promise<SavedSearch> {
+    const [created] = await db
+      .insert(savedSearches)
+      .values({
+        ...savedSearch,
+        id: randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateSavedSearch(
+    id: string,
+    creatorId: string,
+    updates: Partial<Omit<InsertSavedSearch, "creatorId">>,
+  ): Promise<SavedSearch | null> {
+    const [updated] = await db
+      .update(savedSearches)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(savedSearches.id, id), eq(savedSearches.creatorId, creatorId)))
+      .returning();
+
+    return updated ?? null;
+  }
+
+  async deleteSavedSearch(id: string, creatorId: string): Promise<void> {
+    await db
+      .delete(savedSearches)
+      .where(and(eq(savedSearches.id, id), eq(savedSearches.creatorId, creatorId)));
+  }
+
   // Analytics
   async getAnalyticsByCreator(creatorId: string): Promise<any> {
     try {
@@ -3263,7 +3449,10 @@ export class DatabaseStorage implements IStorage {
       const result = await db
         .select({
           date: sql<string>`TO_CHAR(${analytics.date}, 'Mon DD')`,
+          isoDate: analytics.date,
           clicks: sql<number>`COALESCE(SUM(${analytics.clicks}), 0)`,
+          conversions: sql<number>`COALESCE(SUM(${analytics.conversions}), 0)`,
+          earnings: sql<number>`COALESCE(SUM(CAST(${analytics.earnings} AS DECIMAL)), 0)`,
         })
         .from(analytics)
         .innerJoin(applications, eq(analytics.applicationId, applications.id))
@@ -3296,9 +3485,10 @@ export class DatabaseStorage implements IStorage {
       const result = await db
         .select({
           date: sql<string>`TO_CHAR(${analytics.date}, 'Mon DD')`,
+          isoDate: analytics.date,
           clicks: sql<number>`COALESCE(SUM(${analytics.clicks}), 0)`,
           conversions: sql<number>`COALESCE(SUM(${analytics.conversions}), 0)`,
-          earnings: sql<number>`COALESCE(SUM(${analytics.earnings}), 0)`,
+          earnings: sql<number>`COALESCE(SUM(CAST(${analytics.earnings} AS DECIMAL)), 0)`,
         })
         .from(analytics)
         .where(and(...whereClauses))
@@ -5428,7 +5618,7 @@ async getApplicationsTimeSeriesByCompany(userId: string, dateRange: string): Pro
 
     const result = await db
       .select({
-        date: sql<string>`TO_CHAR(DATE(${applications.createdAt}), 'Mon DD')`,  // ✅ Use DATE() here too
+        date: sql<string>`TO_CHAR(DATE(${applications.createdAt}), 'Mon DD')`,  // \u2705 Use DATE() here too
         isoDate: sql<Date>`DATE(${applications.createdAt})`,
         total: sql<number>`COUNT(*)::int`,
         pending: sql<number>`COUNT(*) FILTER (WHERE ${applications.status} = 'pending')::int`,
@@ -5439,7 +5629,7 @@ async getApplicationsTimeSeriesByCompany(userId: string, dateRange: string): Pro
       })
       .from(applications)
       .where(and(...whereClauses))
-      .groupBy(sql`DATE(${applications.createdAt})`)  // ✅ This now matches the isoDate
+      .groupBy(sql`DATE(${applications.createdAt})`)  // \u2705 This now matches the isoDate
       .orderBy(sql`DATE(${applications.createdAt})`);
 
     return result || [];

@@ -711,62 +711,72 @@ export default function AdminReviews() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Overall Rating: {editedReview.overallRating}</Label>
+                  <Label htmlFor="overall-rating">Overall Rating: {editedReview.overallRating}</Label>
                   <input
                     type="range"
+                    id="overall-rating"
                     min="1"
                     max="5"
                     value={editedReview.overallRating}
                     onChange={(e) => setEditedReview({ ...editedReview, overallRating: parseInt(e.target.value) })}
                     className="w-full"
                     data-testid="input-overall-rating"
+                    aria-label="Overall rating"
                   />
                 </div>
                 <div>
-                  <Label>Payment Speed: {editedReview.paymentSpeedRating}</Label>
+                  <Label htmlFor="payment-speed-rating">Payment Speed: {editedReview.paymentSpeedRating}</Label>
                   <input
                     type="range"
+                    id="payment-speed-rating"
                     min="1"
                     max="5"
                     value={editedReview.paymentSpeedRating}
                     onChange={(e) => setEditedReview({ ...editedReview, paymentSpeedRating: parseInt(e.target.value) })}
                     className="w-full"
                     data-testid="input-payment-speed-rating"
+                    aria-label="Payment speed rating"
                   />
                 </div>
                 <div>
-                  <Label>Communication: {editedReview.communicationRating}</Label>
+                  <Label htmlFor="communication-rating">Communication: {editedReview.communicationRating}</Label>
                   <input
                     type="range"
+                    id="communication-rating"
                     min="1"
                     max="5"
                     value={editedReview.communicationRating}
                     onChange={(e) => setEditedReview({ ...editedReview, communicationRating: parseInt(e.target.value) })}
                     className="w-full"
                     data-testid="input-communication-rating"
+                    aria-label="Communication rating"
                   />
                 </div>
                 <div>
-                  <Label>Offer Quality: {editedReview.offerQualityRating}</Label>
+                  <Label htmlFor="offer-quality-rating">Offer Quality: {editedReview.offerQualityRating}</Label>
                   <input
                     type="range"
+                    id="offer-quality-rating"
                     min="1"
                     max="5"
                     value={editedReview.offerQualityRating}
                     onChange={(e) => setEditedReview({ ...editedReview, offerQualityRating: parseInt(e.target.value) })}
                     className="w-full"
                     data-testid="input-offer-quality-rating"
+                    aria-label="Offer quality rating"
                   />
                 </div>
                 <div>
-                  <Label>Support: {editedReview.supportRating}</Label>
+                  <Label htmlFor="support-rating">Support: {editedReview.supportRating}</Label>
                   <input
                     type="range"
+                    id="support-rating"
                     min="1"
                     max="5"
                     value={editedReview.supportRating}
                     onChange={(e) => setEditedReview({ ...editedReview, supportRating: parseInt(e.target.value) })}
                     className="w-full"
+                    aria-label="Support rating"
                     data-testid="input-support-rating"
                   />
                 </div>

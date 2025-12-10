@@ -121,7 +121,7 @@ const failed = results.filter(r => r.status === 'fail').length;
 const warnings = results.filter(r => r.status === 'warn').length;
 
 results.forEach(result => {
-  const icon = result.status === 'pass' ? '✅' : result.status === 'warn' ? '⚠️' : '❌';
+  const icon = result.status === 'pass' ? '\u2705' : result.status === 'warn' ? '\u26A0\uFE0F' : '\u274C';
   console.log(`${icon} ${result.name}`);
   if (result.status !== 'pass') {
     console.log(`   ${result.message}`);
@@ -129,22 +129,22 @@ results.forEach(result => {
 });
 
 console.log('\n' + '='.repeat(60));
-console.log(`\n✅ Passed: ${passed}`);
-console.log(`⚠️  Warnings: ${warnings}`);
-console.log(`❌ Failed: ${failed}`);
+console.log(`\n\u2705 Passed: ${passed}`);
+console.log(`\u26A0\uFE0F  Warnings: ${warnings}`);
+console.log(`\u274C Failed: ${failed}`);
 
 if (failed > 0) {
-  console.log('\n❌ Environment is NOT ready for testing. Please fix the failed checks.');
+  console.log('\n\u274C Environment is NOT ready for testing. Please fix the failed checks.');
   console.log('\nTo set environment variables, edit your .env file:');
   console.log('  cp .env.example .env');
   console.log('  # Then edit .env with your values\n');
   process.exit(1);
 } else if (warnings > 0) {
-  console.log('\n⚠️  Environment is mostly ready, but some optional features may not work.');
+  console.log('\n\u26A0\uFE0F  Environment is mostly ready, but some optional features may not work.');
   console.log('Review the warnings above.\n');
   process.exit(0);
 } else {
-  console.log('\n✅ Environment is ready for testing all 8 features!\n');
+  console.log('\n\u2705 Environment is ready for testing all 8 features!\n');
   console.log('Next steps:');
   console.log('  1. npm run dev');
   console.log('  2. Follow TESTING_GUIDE.md\n');

@@ -14,10 +14,10 @@ cloudinary.uploader.upload(videoPath, {
   public_id: 'atpvv1z6vyft1guhekdj'
 })
 .then(result => {
-  console.log('✅ Video uploaded successfully!');
+  console.log('\u2705 Video uploaded successfully!');
   console.log('Public ID:', result.public_id);
   console.log('URL:', result.secure_url);
 })
 .catch(error => {
-  console.error('❌ Upload failed:', error);
+  console.error('\u274C Upload failed:', error);
 });

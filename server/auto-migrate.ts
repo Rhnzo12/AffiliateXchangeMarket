@@ -38,35 +38,35 @@ export async function runAutoMigrations() {
     const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
 
     if (missingColumns.length === 0) {
-      console.log('✓ All offer management columns exist');
+      console.log('\u2713 All offer management columns exist');
     } else {
-      console.log(`⚠️  Missing columns: ${missingColumns.join(', ')}`);
+      console.log(`\u26A0\uFE0F  Missing columns: ${missingColumns.join(', ')}`);
       console.log('🔧 Adding missing columns...');
 
       // Add missing columns
       if (!existingColumns.includes('rejected_at')) {
         await client.query('ALTER TABLE offers ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP;');
-        console.log('  ✓ Added rejected_at');
+        console.log('  \u2713 Added rejected_at');
       }
 
       if (!existingColumns.includes('rejection_reason')) {
         await client.query('ALTER TABLE offers ADD COLUMN IF NOT EXISTS rejection_reason TEXT;');
-        console.log('  ✓ Added rejection_reason');
+        console.log('  \u2713 Added rejection_reason');
       }
 
       if (!existingColumns.includes('featured_on_homepage')) {
         await client.query('ALTER TABLE offers ADD COLUMN IF NOT EXISTS featured_on_homepage BOOLEAN DEFAULT false;');
-        console.log('  ✓ Added featured_on_homepage');
+        console.log('  \u2713 Added featured_on_homepage');
       }
 
       if (!existingColumns.includes('listing_fee')) {
         await client.query('ALTER TABLE offers ADD COLUMN IF NOT EXISTS listing_fee NUMERIC(10, 2) DEFAULT 0;');
-        console.log('  ✓ Added listing_fee');
+        console.log('  \u2713 Added listing_fee');
       }
 
       if (!existingColumns.includes('edit_requests')) {
         await client.query(`ALTER TABLE offers ADD COLUMN IF NOT EXISTS edit_requests JSONB DEFAULT '[]'::jsonb;`);
-        console.log('  ✓ Added edit_requests');
+        console.log('  \u2713 Added edit_requests');
       }
     }
 
@@ -81,20 +81,20 @@ export async function runAutoMigrations() {
     const missingNotifTypes = requiredNotifTypes.filter(t => !existingNotifTypes.includes(t));
 
     if (missingNotifTypes.length > 0) {
-      console.log(`⚠️  Missing notification types: ${missingNotifTypes.join(', ')}`);
+      console.log(`\u26A0\uFE0F  Missing notification types: ${missingNotifTypes.join(', ')}`);
       console.log('🔧 Adding notification types...');
 
       for (const notifType of missingNotifTypes) {
         try {
           await client.query(`ALTER TYPE notification_type ADD VALUE IF NOT EXISTS '${notifType}';`);
-          console.log(`  ✓ Added ${notifType}`);
+          console.log(`  \u2713 Added ${notifType}`);
         } catch (error) {
           // Value might already exist, ignore error
-          console.log(`  ℹ️  ${notifType} may already exist`);
+          console.log(`  \u2139\uFE0F  ${notifType} may already exist`);
         }
       }
     } else {
-      console.log('✓ All notification types exist');
+      console.log('\u2713 All notification types exist');
     }
 
     // --- Retainer contract tiering/support columns ---
@@ -128,9 +128,9 @@ export async function runAutoMigrations() {
     );
 
     if (missingRetainerColumns.length === 0) {
-      console.log('✓ All retainer contract columns exist');
+      console.log('\u2713 All retainer contract columns exist');
     } else {
-      console.log(`⚠️  Missing retainer columns: ${missingRetainerColumns.join(', ')}`);
+      console.log(`\u26A0\uFE0F  Missing retainer columns: ${missingRetainerColumns.join(', ')}`);
       console.log('🔧 Adding missing retainer columns...');
 
       await client.query(`
@@ -155,12 +155,12 @@ export async function runAutoMigrations() {
           ALTER COLUMN exclusivity_required SET NOT NULL;
       `);
 
-      console.log('✓ Retainer contract columns added/updated');
+      console.log('\u2713 Retainer contract columns added/updated');
     }
 
-    console.log('✅ Database migrations completed successfully!');
+    console.log('\u2705 Database migrations completed successfully!');
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    console.error('\u274C Migration failed:', error);
     throw error;
   } finally {
     client.release();

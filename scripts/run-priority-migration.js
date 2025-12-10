@@ -8,7 +8,7 @@ async function runMigration() {
   const DATABASE_URL = process.env.DATABASE_URL;
 
   if (!DATABASE_URL) {
-    console.error('❌ DATABASE_URL environment variable is not set');
+    console.error('\u274C DATABASE_URL environment variable is not set');
     process.exit(1);
   }
 
@@ -21,14 +21,14 @@ async function runMigration() {
     await sql`
       ALTER TABLE offers ADD COLUMN IF NOT EXISTS priority_expires_at TIMESTAMP;
     `;
-    console.log('✅ Added priority_expires_at column');
+    console.log('\u2705 Added priority_expires_at column');
 
     // Add priority_purchased_at column
     console.log('Adding priority_purchased_at column...');
     await sql`
       ALTER TABLE offers ADD COLUMN IF NOT EXISTS priority_purchased_at TIMESTAMP;
     `;
-    console.log('✅ Added priority_purchased_at column');
+    console.log('\u2705 Added priority_purchased_at column');
 
     // Create index
     console.log('Creating index...');
@@ -37,7 +37,7 @@ async function runMigration() {
       ON offers(priority_expires_at)
       WHERE priority_expires_at IS NOT NULL;
     `;
-    console.log('✅ Created index');
+    console.log('\u2705 Created index');
 
     // Add platform settings
     console.log('Adding platform settings...');
@@ -48,7 +48,7 @@ async function runMigration() {
         (gen_random_uuid(), 'priority_listing_duration_days', '30', 'Duration of priority listing in days', 'features', NOW(), NOW())
       ON CONFLICT (key) DO NOTHING;
     `;
-    console.log('✅ Added platform settings');
+    console.log('\u2705 Added platform settings');
 
     // Verify
     console.log('\n🔍 Verifying columns...');
@@ -62,15 +62,15 @@ async function runMigration() {
     console.log('Columns found:', result);
 
     if (result.length === 2) {
-      console.log('\n✅ Migration completed successfully!');
-      console.log('🎉 Priority listing fields are now available');
+      console.log('\n\u2705 Migration completed successfully!');
+      console.log('\u1F389 Priority listing fields are now available');
     } else {
-      console.log('\n⚠️ Migration may have issues - only found', result.length, 'columns');
+      console.log('\n\u26A0\uFE0F Migration may have issues - only found', result.length, 'columns');
     }
 
     process.exit(0);
   } catch (error) {
-    console.error('❌ Migration failed:', error.message);
+    console.error('\u274C Migration failed:', error.message);
     console.error('Full error:', error);
     process.exit(1);
   }

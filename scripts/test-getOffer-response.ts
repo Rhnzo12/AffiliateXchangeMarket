@@ -9,7 +9,7 @@ import { storage } from "../server/storage";
 const offerId = process.argv[2];
 
 if (!offerId) {
-  console.error("❌ Please provide an offer ID");
+  console.error("\u274C Please provide an offer ID");
   console.error("Usage: tsx scripts/test-getOffer-response.ts <offer-id>");
   process.exit(1);
 }
@@ -21,11 +21,11 @@ async function testGetOfferResponse() {
     const offer = await storage.getOffer(offerId);
 
     if (!offer) {
-      console.error(`❌ Offer ${offerId} not found`);
+      console.error(`\u274C Offer ${offerId} not found`);
       process.exit(1);
     }
 
-    console.log(`✅ Offer found: "${offer.title}"\n`);
+    console.log(`\u2705 Offer found: "${offer.title}"\n`);
 
     console.log("📋 Checking Creator Requirements Fields in API Response:");
     console.log("─".repeat(70));
@@ -56,7 +56,7 @@ async function testGetOfferResponse() {
 
     console.log("\n📊 Analysis:");
     if (hasCamelCase) {
-      console.log("✅ API returns camelCase fields (CORRECT)");
+      console.log("\u2705 API returns camelCase fields (CORRECT)");
       console.log("   Frontend should be able to read: offer.minimumFollowers, etc.");
       console.log("\n🔧 If still not showing on frontend:");
       console.log("   1. Open browser DevTools (F12)");
@@ -67,23 +67,23 @@ async function testGetOfferResponse() {
       console.log("\n   If YES → Frontend code issue (check React component)");
       console.log("   If NO → Server not returning the data (cache/restart issue)");
     } else if (hasSnakeCase) {
-      console.log("❌ API returns snake_case fields (WRONG)");
+      console.log("\u274C API returns snake_case fields (WRONG)");
       console.log("   Frontend expects camelCase but API is returning snake_case");
       console.log("\n🔧 FIX: This is a Drizzle ORM configuration issue");
       console.log("   The schema should convert snake_case to camelCase automatically");
     } else {
-      console.log("❌ API returns NEITHER format");
+      console.log("\u274C API returns NEITHER format");
       console.log("   Data is completely missing from the response");
       console.log("\n🔧 FIX: Check if getOffer is selecting all columns");
     }
 
-    console.log("\n✨ Full offer object keys:");
+    console.log("\n\u2728 Full offer object keys:");
     console.log(Object.keys(offer).filter(k => k.includes('estrict') || k.includes('ollower') || k.includes('latform') || k.includes('equirement')).join(', '));
 
-    console.log("\n✨ Test complete!\n");
+    console.log("\n\u2728 Test complete!\n");
     process.exit(0);
   } catch (error: any) {
-    console.error("\n❌ Test failed:", error.message);
+    console.error("\n\u274C Test failed:", error.message);
     console.error("\nFull error:", error);
     process.exit(1);
   }

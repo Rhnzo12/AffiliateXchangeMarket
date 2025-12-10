@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/use-toast";
 import { useLocation } from "wouter";
 import { queryClient } from "../lib/queryClient";
+import { uploadToCloudinary } from "../lib/cloudinary-upload";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -124,6 +125,26 @@ export default function CompanyOnboarding() {
     }
   }, [user]);
 
+  // Load existing verification documents so uploads are preserved across sessions
+  useEffect(() => {
+    const loadVerificationDocuments = async () => {
+      try {
+        const response = await fetch("/api/company/verification-documents", {
+          credentials: "include",
+        });
+
+        if (!response.ok) return;
+
+        const documents = await response.json();
+        setVerificationDocuments(documents);
+      } catch (error) {
+        console.error("Failed to load verification documents:", error);
+      }
+    };
+
+    loadVerificationDocuments();
+  }, []);
+
   // Check if user should be here
   useEffect(() => {
     if (user && user.role !== 'company') {
@@ -172,7 +193,12 @@ export default function CompanyOnboarding() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ folder, resourceType: "image" }),
+        body: JSON.stringify({
+          folder,
+          resourceType: "image",
+          contentType: file.type,
+          fileName: file.name,
+        }),
       });
 
       if (!uploadResponse.ok) {
@@ -181,24 +207,15 @@ export default function CompanyOnboarding() {
 
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "image/jpeg",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (!uploadResult.ok) {
-        const errorText = await uploadResult.text();
-        console.error("GCS upload error:", errorText);
+      if (!uploadResult?.secure_url) {
         throw new Error("Failed to upload file to storage");
       }
 
-      // Construct the public URL from the upload response
-      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
-      setLogoUrl(uploadedUrl);
+      // Save full Cloudinary URL like creator profile does
+      const objectPath = uploadResult.secure_url;
+      setLogoUrl(objectPath);
 
       toast({
         title: "Success!",
@@ -270,37 +287,40 @@ export default function CompanyOnboarding() {
 
       const uploadData = await uploadResponse.json();
 
-      // Upload file to Google Cloud Storage using signed URL
-      const uploadResult = await fetch(uploadData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": uploadData.contentType || file.type || "application/octet-stream",
-        },
-        body: file,
-      });
+      const uploadResult = await uploadToCloudinary(uploadData, file);
 
-      if (!uploadResult.ok) {
-        const errorText = await uploadResult.text();
-        console.error("GCS upload error:", errorText);
+      if (!uploadResult?.secure_url) {
         throw new Error("Failed to upload file to storage");
       }
 
-      // Construct the public URL from the upload response
-      const uploadedUrl = `https://storage.googleapis.com/${uploadData.fields.bucket}/${uploadData.fields.key}`;
+      // Save full Cloudinary URL like creator profile does
+      const uploadedUrl = uploadResult.secure_url;
 
       // Determine document type
       const documentType = file.type === 'application/pdf' ? 'pdf' : 'image';
 
-      // Add to documents array with a temporary ID
-      const newDocument: VerificationDocument = {
-        id: `temp-${Date.now()}`,
-        documentUrl: uploadedUrl,
-        documentName: file.name,
-        documentType,
-        fileSize: file.size,
-      };
+      // Persist the document metadata so the path is available to the API
+      const saveResponse = await fetch("/api/company/verification-documents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          documentUrl: uploadedUrl,
+          documentName: file.name,
+          documentType,
+          fileSize: file.size,
+        }),
+      });
 
-      setVerificationDocuments(prev => [...prev, newDocument]);
+      if (!saveResponse.ok) {
+        throw new Error("Failed to save verification document");
+      }
+
+      const { document } = await saveResponse.json();
+
+      setVerificationDocuments(prev => [...prev, document]);
 
       toast({
         title: "Success!",
@@ -319,16 +339,51 @@ export default function CompanyOnboarding() {
     }
   };
 
-  const handleRemoveDocument = (documentId: string) => {
-    setVerificationDocuments(prev => prev.filter(doc => doc.id !== documentId));
+  const handleRemoveDocument = async (documentId: string) => {
+    try {
+      const document = verificationDocuments.find((doc) => doc.id === documentId);
+
+      // Only attempt server deletion for persisted documents
+      if (document && !document.id.startsWith("temp-")) {
+        await fetch(`/api/company/verification-documents/${documentId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to delete verification document:", error);
+    } finally {
+      setVerificationDocuments(prev => prev.filter(doc => doc.id !== documentId));
+    }
+  };
+
+  // Helper to extract file path from GCS or Cloudinary URLs
+  const extractFilePathFromUrl = (documentUrl: string): string => {
+    const url = new URL(documentUrl);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+
+    // Handle GCS URLs: https://storage.googleapis.com/{bucket}/{path}
+    if (url.hostname === 'storage.googleapis.com' || url.hostname.endsWith('.storage.googleapis.com')) {
+      // Skip bucket name (first part), return rest as file path
+      return pathParts.slice(1).join('/');
+    }
+
+    // Handle Cloudinary URLs: https://res.cloudinary.com/{cloud}/image/upload/v{version}/{public_id}
+    if (url.hostname.includes('cloudinary.com')) {
+      const uploadIndex = pathParts.findIndex(part => part === 'upload');
+      if (uploadIndex === -1) {
+        throw new Error('Invalid Cloudinary URL format');
+      }
+      // Skip 'upload' and version number (v123456), get the rest as public_id
+      return pathParts.slice(uploadIndex + 2).join('/');
+    }
+
+    throw new Error('Unknown storage URL format');
   };
 
   const handleViewDocument = async (documentUrl: string) => {
     try {
-      // Extract the file path from the GCS URL
-      const url = new URL(documentUrl);
-      const pathParts = url.pathname.split('/');
-      const filePath = pathParts.slice(2).join('/');
+      const filePath = extractFilePathFromUrl(documentUrl);
 
       // Fetch signed URL from the API
       const response = await fetch(`/api/get-signed-url/${filePath}`, {
@@ -353,10 +408,7 @@ export default function CompanyOnboarding() {
 
   const handleDownloadDocument = async (documentUrl: string, documentName: string) => {
     try {
-      // Extract the file path from the GCS URL
-      const url = new URL(documentUrl);
-      const pathParts = url.pathname.split('/');
-      const filePath = pathParts.slice(2).join('/');
+      const filePath = extractFilePathFromUrl(documentUrl);
 
       // Fetch signed URL with download flag from the API
       const response = await fetch(`/api/get-signed-url/${filePath}?download=true&name=${encodeURIComponent(documentName)}`, {
@@ -577,8 +629,8 @@ export default function CompanyOnboarding() {
         throw new Error(error.error || "Failed to submit onboarding");
       }
 
-      // Save all verification documents to the new table
-      for (const doc of verificationDocuments) {
+      // Persist any documents that haven't been saved yet (should be temporary IDs only)
+      for (const doc of verificationDocuments.filter(doc => doc.id.startsWith("temp-"))) {
         try {
           await fetch("/api/company/verification-documents", {
             method: "POST",
@@ -596,6 +648,48 @@ export default function CompanyOnboarding() {
         } catch (docError) {
           console.error("Error saving verification document:", docError);
           // Continue with other documents even if one fails
+        }
+      }
+
+      // Save payment method if user didn't choose to set it up later
+      if (paymentMethod && paymentMethod !== "setup_later") {
+        const paymentPayload: any = {
+          payoutMethod: paymentMethod,
+        };
+
+        if (paymentMethod === "etransfer") {
+          paymentPayload.payoutEmail = payoutEmail;
+        } else if (paymentMethod === "wire") {
+          paymentPayload.bankRoutingNumber = bankRoutingNumber;
+          paymentPayload.bankAccountNumber = bankAccountNumber;
+        } else if (paymentMethod === "paypal") {
+          paymentPayload.paypalEmail = paypalEmail;
+        } else if (paymentMethod === "crypto") {
+          paymentPayload.cryptoWalletAddress = cryptoWalletAddress;
+          paymentPayload.cryptoNetwork = cryptoNetwork;
+        }
+
+        try {
+          const paymentResponse = await fetch("/api/payment-settings", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify(paymentPayload),
+          });
+
+          if (!paymentResponse.ok) {
+            const error = await paymentResponse.json();
+            throw new Error(error.error || "Failed to save payment method");
+          }
+
+          // Invalidate payment settings query to refresh the data
+          await queryClient.invalidateQueries({ queryKey: ["/api/payment-settings"] });
+        } catch (paymentError) {
+          console.error("Error saving payment method:", paymentError);
+          // Continue with onboarding even if payment method fails
+          // User can set it up later in Payment Settings
         }
       }
 
@@ -1380,8 +1474,8 @@ export default function CompanyOnboarding() {
               <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertTitle className="text-blue-900 dark:text-blue-100">What happens next?</AlertTitle>
               <AlertDescription className="text-blue-800 dark:text-blue-200">
-                After submission, our team will review your profile (usually within 1-2 business days).
-                You'll receive an email notification once approved, and you can then start creating affiliate offers.
+                The user should immediately receive a confirmation email right after the account is activated,
+                with details on the approval timeline and when their account will be activated.
               </AlertDescription>
             </Alert>
           </div>

@@ -21,9 +21,9 @@ LOGIN_RESPONSE=$(curl -s -X POST "$BASE_URL/api/auth/login" \
 HTTP_CODE=$(echo "$LOGIN_RESPONSE" | tail -n1)
 
 if [ "$HTTP_CODE" = "200" ]; then
-  echo "✅ Login successful (HTTP 200)"
+  echo "\u2705 Login successful (HTTP 200)"
 else
-  echo "❌ Login failed (HTTP $HTTP_CODE)"
+  echo "\u274C Login failed (HTTP $HTTP_CODE)"
   rm -f test_cookies.txt
   exit 1
 fi
@@ -38,9 +38,9 @@ PROFILE=$(curl -s -X GET "$BASE_URL/api/profile" \
 
 NICHES=$(echo "$PROFILE" | jq -r '.creatorProfile.niches // [] | join(", ")')
 if [ -n "$NICHES" ] && [ "$NICHES" != "" ]; then
-  echo "✅ Creator niches: [$NICHES]"
+  echo "\u2705 Creator niches: [$NICHES]"
 else
-  echo "⚠️  No niches set for this creator"
+  echo "\u26A0\uFE0F  No niches set for this creator"
 fi
 
 echo ""
@@ -56,7 +56,7 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" = "200" ]; then
-  echo "✅ API call successful (HTTP 200)"
+  echo "\u2705 API call successful (HTTP 200)"
   echo ""
   
   # Parse response
@@ -70,17 +70,17 @@ if [ "$HTTP_CODE" = "200" ]; then
     "    Commission: \(.commissionType) - \(.commissionAmount // .commissionPercentage // "N/A")"
     ""'
     echo ""
-    echo "✅ Test completed successfully!"
+    echo "\u2705 Test completed successfully!"
   else
     echo "  (No recommendations available)"
     echo ""
-    echo "⚠️  This could mean:"
+    echo "\u26A0\uFE0F  This could mean:"
     echo "    - No approved offers in database"
     echo "    - Creator has already applied to all offers"
     echo "    - No offers match creator's niches"
   fi
 else
-  echo "❌ API call failed (HTTP $HTTP_CODE)"
+  echo "\u274C API call failed (HTTP $HTTP_CODE)"
   echo "$BODY" | jq '.' 2>/dev/null || echo "$BODY"
   rm -f test_cookies.txt
   exit 1
@@ -95,14 +95,14 @@ APPS=$(curl -s -X GET "$BASE_URL/api/applications" \
 
 APP_COUNT=$(echo "$APPS" | jq '. | length')
 if [ "$APP_COUNT" -gt 0 ]; then
-  echo "✅ Creator has $APP_COUNT existing applications (these are excluded from recommendations)"
+  echo "\u2705 Creator has $APP_COUNT existing applications (these are excluded from recommendations)"
 else
-  echo "ℹ️  Creator has no existing applications"
+  echo "\u2139\uFE0F  Creator has no existing applications"
 fi
 
 echo ""
 echo "================================"
-echo "✅ All tests completed!"
+echo "\u2705 All tests completed!"
 echo "================================"
 
 # Cleanup

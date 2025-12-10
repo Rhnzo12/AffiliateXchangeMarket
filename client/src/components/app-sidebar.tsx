@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { CompanyTourButtonSafe } from "./CompanyTourButton";
+import { CreatorTourButtonSafe } from "./CreatorTourButton";
 import {
   Sidebar,
   SidebarContent,
@@ -10,6 +13,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarHeader,
   SidebarFooter,
   useSidebar,
@@ -25,7 +31,7 @@ import {
   Star,
   Building2,
   Users,
-  Video,
+  Briefcase,
   CalendarClock,
   ScrollText,
   Sliders,
@@ -43,6 +49,7 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
   const currentYear = new Date().getFullYear();
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
   // Close sidebar on mobile when navigation link is clicked
   const handleNavClick = () => {
@@ -96,28 +103,24 @@ export function AppSidebar() {
       icon: Home,
     },
     {
-      title: "My Offers",
-      url: "/company/offers",
-      icon: TrendingUp,
+      title: "Work Management",
+      icon: Briefcase,
+      children: [
+        {
+          title: "Offers",
+          url: "/company/offers",
+          icon: TrendingUp,
+        },
+        {
+          title: "Monthly Retainers",
+          url: "/company/retainers",
+          icon: CalendarClock,
+        },
+      ],
     },
     {
-      title: "Videos",
-      url: "/company/videos",
-      icon: Video,
-    },
-    {
-      title: "Monthly Retainers",
-      url: "/company/retainers",
-      icon: CalendarClock,
-    },
-    {
-      title: "Applications",
-      url: "/company/applications",
-      icon: FileText,
-    },
-    {
-      title: "Creators",
-      url: "/company/creators",
+      title: "Creator Workflow",
+      url: "/company/creator-workflow",
       icon: Users,
     },
     {
@@ -154,24 +157,40 @@ export function AppSidebar() {
       icon: BarChart3,
     },
     {
-      title: "Company Management",
-      url: "/admin/companies",
-      icon: Building2,
-    },
-    {
-      title: "Offer Management",
-      url: "/admin/offers",
-      icon: TrendingUp,
-    },
-    {
-      title: "Creator Management",
-      url: "/admin/creators",
-      icon: Users,
-    },
-    {
-      title: "Review Management",
-      url: "/admin/reviews",
-      icon: Star,
+      title: "Administration Management",
+      icon: Sliders,
+      children: [
+        {
+          title: "Company Management",
+          url: "/admin/companies",
+          icon: Building2,
+        },
+        {
+          title: "Offer Management",
+          url: "/admin/offers",
+          icon: TrendingUp,
+        },
+        {
+          title: "Creator Management",
+          url: "/admin/creators",
+          icon: Users,
+        },
+        {
+          title: "Review Management",
+          url: "/admin/reviews",
+          icon: Star,
+        },
+        {
+          title: "Keyword Management",
+          url: "/admin/keyword-management",
+          icon: Ban,
+        },
+        {
+          title: "Niches Management",
+          url: "/admin/niches",
+          icon: Tags,
+        },
+      ],
     },
     {
       title: "Content Moderation",
@@ -179,29 +198,25 @@ export function AppSidebar() {
       icon: ShieldAlert,
     },
     {
-      title: "Keyword Management",
-      url: "/admin/keyword-management",
-      icon: Ban,
-    },
-    {
       title: "Message Monitoring",
       url: "/admin/messages",
       icon: MessageSquare,
     },
     {
-      title: "Payment Management",
-      url: "/admin/payment-settings",
+      title: "Payment Administration",
       icon: DollarSign,
-    },
-    {
-      title: "Payment Disputes",
-      url: "/admin/payment-disputes",
-      icon: AlertCircle,
-    },
-    {
-      title: "Niche Categories",
-      url: "/admin/niches",
-      icon: Tags,
+      children: [
+        {
+          title: "Payment Management",
+          url: "/admin/payment-settings",
+          icon: DollarSign,
+        },
+        {
+          title: "Payment Disputes",
+          url: "/admin/payment-disputes",
+          icon: AlertCircle,
+        },
+      ],
     },
     {
       title: "Email Templates",
@@ -228,6 +243,13 @@ export function AppSidebar() {
 
   const menuItems = getMenuItems();
 
+  const toggleSubmenu = (title: string) => {
+    setOpenMenus((prev) => ({
+      ...prev,
+      [title]: !(prev[title] ?? false),
+    }));
+  };
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2">
@@ -246,28 +268,83 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton
-                        asChild
-                        isActive={location === item.url}
+              {menuItems.map((item) => {
+                const hasChildren = "children" in item && Array.isArray(item.children)
+                const isActive = hasChildren
+                  ? item.children?.some((child) => child.url === location)
+                  : location === item.url
+                const isOpen = hasChildren ? openMenus[item.title] ?? isActive : false
+
+                if (hasChildren) {
+                  return (
+                    <SidebarMenuItem key={item.title} className="group/item">
+                      <SidebarMenuButton
                         tooltip={item.title}
-                        className="hover:bg-primary/15 hover:text-primary hover:font-bold hover:scale-105 transition-all duration-200"
+                        isActive={isActive}
+                        className="hover:bg-transparent hover:text-primary hover:font-bold data-[active=true]:bg-transparent data-[active=true]:text-primary transition-all duration-200"
                         data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
+                        onClick={() => toggleSubmenu(item.title)}
                       >
-                    <Link href={item.url} onClick={handleNavClick}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                      <SidebarMenuSub className={isOpen ? "flex" : "hidden"}>
+                        {item.children?.map((child) => (
+                          <SidebarMenuSubItem key={child.url}>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={location === child.url}
+                              className="hover:bg-transparent data-[active=true]:bg-transparent hover:text-primary data-[active=true]:text-primary hover:font-bold"
+                            >
+                              <Link href={child.url} onClick={handleNavClick}>
+                                <child.icon className="h-4 w-4" />
+                                <span>{child.title}</span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </SidebarMenuItem>
+                  )
+                }
+
+                return (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.title}
+                      className="hover:bg-transparent hover:text-primary hover:font-bold data-[active=true]:bg-transparent data-[active=true]:text-primary transition-all duration-200"
+                      data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
+                    >
+                      <Link href={item.url!} onClick={handleNavClick}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="p-4 group-data-[collapsible=icon]:hidden">
+        {/* Tour button for company users */}
+        {user?.role === 'company' && (
+          <div className="mb-3">
+            <CompanyTourButtonSafe />
+          </div>
+        )}
+
+        {/* Tour button for creator users */}
+        {user?.role === 'creator' && (
+          <div className="mb-3">
+            <CreatorTourButtonSafe />
+          </div>
+        )}
+
         <div className="rounded-lg bg-gradient-to-br from-primary/5 to-primary/10 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-primary" />
@@ -277,7 +354,7 @@ export function AppSidebar() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Professional affiliate marketing platform
             </p>
-            <p className="text-[10px] text-muted-foreground/80">
+            <p className="text-xs text-muted-foreground/80">
               © {currentYear} AffiliateXchange. All rights reserved.
             </p>
           </div>

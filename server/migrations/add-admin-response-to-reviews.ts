@@ -38,9 +38,9 @@ export async function addMissingReviewColumns() {
       END $$;
     `);
 
-    console.log("✅ Successfully added all missing columns to reviews table");
+    console.log("\u2705 Successfully added all missing columns to reviews table");
   } catch (error) {
-    console.error("❌ Error adding columns:", error);
+    console.error("\u274C Error adding columns:", error);
     throw error;
   }
 }
