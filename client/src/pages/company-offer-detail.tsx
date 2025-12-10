@@ -81,7 +81,8 @@ const generateThumbnail = async (videoUrl: string): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
-    const proxiedUrl = `/proxy/image?url=${encodeURIComponent(videoUrl)}`;
+    // Use video proxy endpoint which supports range requests needed for video playback
+    const proxiedUrl = `/proxy/video?url=${encodeURIComponent(videoUrl)}`;
     video.src = proxiedUrl;
     video.muted = true;
 
