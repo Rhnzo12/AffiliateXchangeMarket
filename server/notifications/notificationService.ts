@@ -135,8 +135,8 @@ interface NotificationData {
   riskLevel?: string;
   riskIndicators?: string[];
   // Deliverable fields
-  monthNumber?: string;
-  videoNumber?: string;
+  monthNumber?: number;
+  videoNumber?: number;
 }
 
 export class NotificationService {
