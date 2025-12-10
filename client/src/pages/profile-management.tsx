@@ -1289,6 +1289,10 @@ export default function Settings() {
       setIsProfileEditMode(false);
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      // Invalidate company stats to update navbar logo for company users
+      if (user?.role === 'company') {
+        queryClient.invalidateQueries({ queryKey: ["/api/company/stats"] });
+      }
       // Clear saved form data from localStorage since changes are now persisted
       localStorage.removeItem('settings-form-data');
       toast({
