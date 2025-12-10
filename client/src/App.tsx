@@ -374,7 +374,7 @@ function ProtectedRouter() {
               <Route path="/company/offers/create" component={CompanyOfferCreate} />
               <Route path="/company/offers/:id/edit" component={CompanyOfferCreate} />
               <Route path="/company/offers/:id" component={CompanyOfferDetail} />
-              <Route path="/company/creator-workflow" component={CompanyCreatorWorkflow} />
+              <Route path="/company/creator-workflow" component={() => <CompanyCreatorWorkflow />} />
               <Route path="/company/videos" component={() => <CompanyCreatorWorkflow defaultTab="videos" />} />
               <Route path="/company/retainers" component={CompanyRetainers} />
               <Route path="/company/retainers/:id" component={CompanyRetainerDetail} />

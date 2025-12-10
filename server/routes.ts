@@ -957,16 +957,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log('[Verification Document] Extracted public_id:', publicId);
             console.log('[Verification Document] Resource type:', resourceType);
 
-            // Generate a proper URL for the resource
-            // For public uploads (type: 'upload'), we can use cloudinary.url() without authentication
-            fetchUrl = cloudinary.url(publicId, {
-              resource_type: resourceType as any,
-              secure: true,
-              type: 'upload', // These are public uploads
-              sign_url: false, // No signing needed for public resources
-            });
-
-            console.log('[Verification Document] Generated fetch URL');
+            // Use the original Cloudinary URL directly since it's already a valid public URL
+            fetchUrl = documentUrl;
+            console.log('[Verification Document] Using original Cloudinary URL');
           }
         } else {
           // Non-Cloudinary URL, use as-is
@@ -3135,12 +3128,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await notificationService.sendNotification(
           companyProfile.userId,
           'review_received',
-          `New Review Received (${review.rating} stars)`,
-          `${creatorUser?.firstName || creatorUser?.username || 'A creator'} left you a ${review.rating}-star review${review.comment ? ': "' + review.comment.substring(0, 50) + (review.comment.length > 50 ? '..."' : '"') : '.'}`,
+          `New Review Received (${review.overallRating} stars)`,
+          `${creatorUser?.firstName || creatorUser?.username || 'A creator'} left you a ${review.overallRating}-star review${review.reviewText ? ': "' + review.reviewText.substring(0, 50) + (review.reviewText.length > 50 ? '..."' : '"') : '.'}`,
           {
             userName: companyProfile.legalName || companyProfile.tradeName || 'Company',
-            reviewRating: review.rating,
-            reviewText: review.comment,
+            reviewRating: review.overallRating,
+            reviewText: review.reviewText,
             linkUrl: '/company-reviews',
           }
         );
