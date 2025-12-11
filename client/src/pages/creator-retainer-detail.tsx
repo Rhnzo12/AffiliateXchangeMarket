@@ -981,7 +981,7 @@ export default function CreatorRetainerDetail() {
                     <TooltipTrigger asChild>
                       <Info className="h-3.5 w-3.5" />
                     </TooltipTrigger>
-                    <TooltipContent>AffiliateXchange charges a 7% platform fee.</TooltipContent>
+                    <TooltipContent>AffiliateXchange charges a {(DEFAULT_TOTAL_FEE * 100).toFixed(0)}% platform fee.</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -1261,7 +1261,7 @@ export default function CreatorRetainerDetail() {
                   <span className="font-semibold">{formatCurrency(contractMonthlyAmount, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Platform fee (7%)</span>
+                  <span>Platform fee ({(DEFAULT_TOTAL_FEE * 100).toFixed(0)}%)</span>
                   <span className="font-semibold">{formatCurrency(platformFee, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
