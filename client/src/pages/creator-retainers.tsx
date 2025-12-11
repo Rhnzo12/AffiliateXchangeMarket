@@ -149,6 +149,17 @@ export default function CreatorRetainers() {
     queryKey: ["/api/creator/retainer-applications"],
   });
 
+  // Fetch platform fee settings
+  const { data: feeSettings } = useQuery<{
+    totalFeePercentage: number;
+    totalFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const totalFeePercentage = feeSettings?.totalFeePercentage ?? 0.07;
+  const totalFeeDisplay = feeSettings?.totalFeeDisplay ?? "7%";
+
   const maxMonthlyAmount = useMemo(() => {
     if (!contracts?.length) return 10000;
 
@@ -409,10 +420,10 @@ export default function CreatorRetainers() {
   const totalActiveNet = useMemo(
     () =>
       activeContracts.reduce(
-        (sum, { contract }) => sum + Number(contract?.monthlyAmount || 0) * 0.93,
+        (sum, { contract }) => sum + Number(contract?.monthlyAmount || 0) * (1 - totalFeePercentage),
         0
       ),
-    [activeContracts]
+    [activeContracts, totalFeePercentage]
   );
 
   const totalActiveVideos = useMemo(
@@ -436,7 +447,7 @@ export default function CreatorRetainers() {
   const selectedTierId = form.watch("selectedTierId");
   const activeTier =
     selectedTierOptions.find((tier: any) => (tier.name || tier.id)?.toString() === selectedTierId) || selectedTierOptions[0];
-  const selectedTierNet = Number(activeTier?.monthlyAmount || 0) * 0.93;
+  const selectedTierNet = Number(activeTier?.monthlyAmount || 0) * (1 - totalFeePercentage);
   const selectedTierPerVideo =
     Number(activeTier?.monthlyAmount || 0) / Math.max(1, Number(activeTier?.videosPerMonth || 1));
 
@@ -734,7 +745,7 @@ export default function CreatorRetainers() {
                   const delivered = Number(contract?.submittedVideos || 0);
                   const totalVideos = Number(contract?.videosPerMonth || 1);
                   const progressValue = Math.min(100, Math.round((delivered / totalVideos) * 100));
-                  const netAmount = Number(contract?.monthlyAmount || 0) * 0.93;
+                  const netAmount = Number(contract?.monthlyAmount || 0) * (1 - totalFeePercentage);
                   const remainingVideos = Math.max(0, totalVideos - delivered);
 
                   return (
@@ -1073,7 +1084,7 @@ export default function CreatorRetainers() {
                               className="grid gap-3 md:grid-cols-2"
                             >
                               {selectedTierOptions.map((tier: any, index: number) => {
-                                const tierNet = Number(tier.monthlyAmount || 0) * 0.93;
+                                const tierNet = Number(tier.monthlyAmount || 0) * (1 - totalFeePercentage);
                                 const tierPerVideo =
                                   Number(tier.monthlyAmount || 0) / Math.max(1, Number(tier.videosPerMonth || 1));
                                 const tierId = (tier.name || tier.id || index).toString();
@@ -1097,7 +1108,7 @@ export default function CreatorRetainers() {
                                         ${Number(tier.monthlyAmount || 0).toLocaleString()} / mo • {tier.videosPerMonth} videos • {tier.durationMonths} months
                                       </p>
                                       <p className="text-xs text-muted-foreground">
-                                        ${tierPerVideo.toFixed(2)} per video • Net ${tierNet.toLocaleString()} after 7% fee
+                                        ${tierPerVideo.toFixed(2)} per video • Net ${tierNet.toLocaleString()} after ${totalFeeDisplay} fee
                                       </p>
                                     </div>
                                   </label>

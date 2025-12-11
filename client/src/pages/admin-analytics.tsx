@@ -378,6 +378,21 @@ export default function AdminAnalytics() {
     enabled: isAuthenticated && user?.role === "admin",
   });
 
+  // Fee Settings Query
+  const { data: feeSettings } = useQuery<{
+    platformFeePercentage: number;
+    platformFeeDisplay: string;
+    stripeFeePercentage: number;
+    stripeFeeDisplay: string;
+    totalFeePercentage: number;
+    totalFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const platformFeeDisplay = feeSettings?.platformFeeDisplay ?? "4%";
+  const stripeFeeDisplay = feeSettings?.stripeFeeDisplay ?? "3%";
+
   // Mutation to create health snapshot
   const createSnapshotMutation = useMutation({
     mutationFn: async () => {
@@ -727,7 +742,7 @@ export default function AdminAnalytics() {
                   <div className="text-2xl font-bold font-mono">
                     ${(analytics?.financial?.platformFees || 0).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">4% commission on payouts</p>
+                  <p className="text-xs text-muted-foreground mt-1">{platformFeeDisplay} commission on payouts</p>
                 </CardContent>
               </Card>
 
@@ -740,7 +755,7 @@ export default function AdminAnalytics() {
                   <div className="text-2xl font-bold font-mono">
                     ${(analytics?.financial?.processingFees || 0).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">3% payment processing</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stripeFeeDisplay} payment processing</p>
                 </CardContent>
               </Card>
             </div>
