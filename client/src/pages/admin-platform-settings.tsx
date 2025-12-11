@@ -253,8 +253,11 @@ export default function AdminPlatformSettings() {
     });
   };
 
+  // Filter out "fees" category - those settings are managed in Payment Settings
   const groupedSettings = settings?.reduce((acc, setting) => {
     const category = setting.category || "general";
+    // Skip fees category - managed in Payment Management > Payment Settings
+    if (category === "fees") return acc;
     if (!acc[category]) acc[category] = [];
     acc[category].push(setting);
     return acc;
