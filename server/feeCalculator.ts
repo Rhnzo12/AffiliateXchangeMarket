@@ -4,20 +4,85 @@
  * Handles platform fee calculations with support for per-company fee overrides.
  * Per Section 4.3.H of the specification, companies can have custom platform fees.
  *
- * Default fees:
+ * Default fees (configurable via platform_settings):
  * - Platform fee: 4% (0.04)
  * - Stripe processing fee: 3% (0.03)
  * - Total: 7%
  */
 
 import { db } from './db';
-import { companyProfiles } from '../shared/schema';
+import { companyProfiles, platformSettings } from '../shared/schema';
 import { eq } from 'drizzle-orm';
 
-// Default fee constants
+// Default fee constants (fallbacks if platform_settings not configured)
 export const DEFAULT_PLATFORM_FEE_PERCENTAGE = 0.04; // 4%
-export const STRIPE_PROCESSING_FEE_PERCENTAGE = 0.03; // 3%
-export const DEFAULT_TOTAL_FEE_PERCENTAGE = DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE; // 7%
+export const DEFAULT_STRIPE_PROCESSING_FEE_PERCENTAGE = 0.03; // 3%
+export const DEFAULT_TOTAL_FEE_PERCENTAGE = DEFAULT_PLATFORM_FEE_PERCENTAGE + DEFAULT_STRIPE_PROCESSING_FEE_PERCENTAGE; // 7%
+
+// Legacy export for backwards compatibility
+export const STRIPE_PROCESSING_FEE_PERCENTAGE = DEFAULT_STRIPE_PROCESSING_FEE_PERCENTAGE;
+
+// Cache for platform fee settings (refreshes every 5 minutes)
+let feeSettingsCache: { platformFee: number; stripeFee: number; lastFetched: number } | null = null;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Fetch fee settings from platform_settings table with caching
+ */
+export async function getPlatformFeeSettings(): Promise<{ platformFee: number; stripeFee: number }> {
+  const now = Date.now();
+
+  // Return cached values if still valid
+  if (feeSettingsCache && (now - feeSettingsCache.lastFetched) < CACHE_TTL_MS) {
+    return { platformFee: feeSettingsCache.platformFee, stripeFee: feeSettingsCache.stripeFee };
+  }
+
+  try {
+    const settings = await db
+      .select({ key: platformSettings.key, value: platformSettings.value })
+      .from(platformSettings)
+      .where(eq(platformSettings.category, 'fees'));
+
+    const settingsMap = new Map(settings.map(s => [s.key, s.value]));
+
+    const platformFeeValue = settingsMap.get('platform_fee_percentage');
+    const stripeFeeValue = settingsMap.get('stripe_processing_fee_percentage');
+
+    const platformFee = platformFeeValue ? parseFloat(platformFeeValue) / 100 : DEFAULT_PLATFORM_FEE_PERCENTAGE;
+    const stripeFee = stripeFeeValue ? parseFloat(stripeFeeValue) / 100 : DEFAULT_STRIPE_PROCESSING_FEE_PERCENTAGE;
+
+    // Update cache
+    feeSettingsCache = { platformFee, stripeFee, lastFetched: now };
+
+    return { platformFee, stripeFee };
+  } catch (error) {
+    console.error('[FeeCalculator] Error fetching platform fee settings:', error);
+    return { platformFee: DEFAULT_PLATFORM_FEE_PERCENTAGE, stripeFee: DEFAULT_STRIPE_PROCESSING_FEE_PERCENTAGE };
+  }
+}
+
+/**
+ * Clear the fee settings cache (useful when settings are updated)
+ */
+export function clearFeeSettingsCache(): void {
+  feeSettingsCache = null;
+}
+
+/**
+ * Get current stripe processing fee (from cache or default)
+ */
+export async function getStripeProcessingFee(): Promise<number> {
+  const { stripeFee } = await getPlatformFeeSettings();
+  return stripeFee;
+}
+
+/**
+ * Get current default platform fee (from cache or default)
+ */
+export async function getDefaultPlatformFee(): Promise<number> {
+  const { platformFee } = await getPlatformFeeSettings();
+  return platformFee;
+}
 
 export interface FeeCalculation {
   grossAmount: number;
@@ -39,7 +104,7 @@ export interface FeeCalculationFormatted {
 
 /**
  * Get the platform fee percentage for a company.
- * Returns the custom fee if set, otherwise returns the default.
+ * Returns the custom fee if set, otherwise returns the default from platform_settings.
  */
 export async function getCompanyPlatformFeePercentage(companyId: string): Promise<{ percentage: number; isCustom: boolean }> {
   try {
@@ -59,21 +124,24 @@ export async function getCompanyPlatformFeePercentage(companyId: string): Promis
     console.error(`[FeeCalculator] Error fetching company fee for ${companyId}:`, error);
   }
 
+  // Get default from platform settings
+  const { platformFee } = await getPlatformFeeSettings();
   return {
-    percentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
+    percentage: platformFee,
     isCustom: false,
   };
 }
 
 /**
  * Calculate fees for a given gross amount and company.
- * Supports per-company fee overrides.
+ * Supports per-company fee overrides and dynamic fee settings from platform_settings.
  */
 export async function calculateFees(grossAmount: number, companyId: string): Promise<FeeCalculation> {
   const { percentage: platformFeePercentage, isCustom } = await getCompanyPlatformFeePercentage(companyId);
+  const { stripeFee } = await getPlatformFeeSettings();
 
   const platformFeeAmount = grossAmount * platformFeePercentage;
-  const stripeFeeAmount = grossAmount * STRIPE_PROCESSING_FEE_PERCENTAGE;
+  const stripeFeeAmount = grossAmount * stripeFee;
   const netAmount = grossAmount - platformFeeAmount - stripeFeeAmount;
 
   return {
@@ -134,7 +202,8 @@ export function calculateFeesDefault(grossAmount: number): Omit<FeeCalculation, 
  */
 export async function getTotalFeePercentage(companyId: string): Promise<number> {
   const { percentage } = await getCompanyPlatformFeePercentage(companyId);
-  return percentage + STRIPE_PROCESSING_FEE_PERCENTAGE;
+  const { stripeFee } = await getPlatformFeeSettings();
+  return percentage + stripeFee;
 }
 
 /**

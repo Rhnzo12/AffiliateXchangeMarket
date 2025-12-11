@@ -28,7 +28,7 @@ import {
   generatePaymentInvoice,
   generateCompanyChargeInvoice,
 } from "./invoiceService";
-import { calculateFees, formatFeePercentage, DEFAULT_PLATFORM_FEE_PERCENTAGE, STRIPE_PROCESSING_FEE_PERCENTAGE, getCompanyPlatformFeePercentage } from "./feeCalculator";
+import { calculateFees, formatFeePercentage, DEFAULT_PLATFORM_FEE_PERCENTAGE, STRIPE_PROCESSING_FEE_PERCENTAGE, getCompanyPlatformFeePercentage, clearFeeSettingsCache, getPlatformFeeSettings } from "./feeCalculator";
 import { NotificationService } from "./notifications/notificationService";
 import bcrypt from "bcrypt";
 import { PriorityListingScheduler } from "./priorityListingScheduler";
@@ -6377,6 +6377,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const setting = await storage.updatePlatformSetting(req.params.key, value.toString(), userId);
 
+      // Clear fee settings cache if fee-related setting was updated
+      if (req.params.key.includes('fee') || req.params.key.includes('percentage')) {
+        clearFeeSettingsCache();
+      }
+
       // Log the settings change
       const { logAuditAction, AuditActions, EntityTypes } = await import('./auditLog');
       await logAuditAction(userId, {
@@ -6411,9 +6416,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedBy: userId,
       });
 
+      // Clear fee settings cache if fee-related setting was created
+      if (key.includes('fee') || key.includes('percentage')) {
+        clearFeeSettingsCache();
+      }
+
       res.json(setting);
     } catch (error: any) {
       console.error('[Platform Settings] Error creating setting:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Public endpoint to get current platform fee settings (for client display)
+  app.get("/api/platform/fees", async (req, res) => {
+    try {
+      const { platformFee, stripeFee } = await getPlatformFeeSettings();
+      const totalFee = platformFee + stripeFee;
+
+      res.json({
+        platformFeePercentage: platformFee,
+        platformFeeDisplay: `${(platformFee * 100).toFixed(0)}%`,
+        stripeFeePercentage: stripeFee,
+        stripeFeeDisplay: `${(stripeFee * 100).toFixed(0)}%`,
+        totalFeePercentage: totalFee,
+        totalFeeDisplay: `${(totalFee * 100).toFixed(0)}%`,
+      });
+    } catch (error: any) {
+      console.error('[Platform Fees] Error fetching fee settings:', error);
       res.status(500).send(error.message);
     }
   });

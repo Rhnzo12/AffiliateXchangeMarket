@@ -118,6 +118,16 @@ export default function CreatorRetainerDetail() {
     enabled: !!contractId && myApplication?.some((app: any) => app.contractId === contractId && app.status === "approved"),
   });
 
+  // Fetch platform fee settings
+  const { data: feeSettings } = useQuery<{
+    platformFeePercentage: number;
+    stripeFeePercentage: number;
+    totalFeePercentage: number;
+    totalFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
   const form = useForm<UploadDeliverableForm>({
     resolver: zodResolver(uploadDeliverableSchema),
     defaultValues: {
@@ -427,9 +437,10 @@ export default function CreatorRetainerDetail() {
   const contractMonthlyAmount = Number(contract.monthlyAmount) || 0;
   const contractVideosPerMonth = Math.max(1, Number(contract.videosPerMonth) || 1);
   const basePerVideo = contractMonthlyAmount / contractVideosPerMonth;
-  // Default total fee estimate (4% platform + 3% processing). Actual fees may vary for partnership companies.
-  const DEFAULT_TOTAL_FEE = 0.07;
-  const platformFee = contractMonthlyAmount * DEFAULT_TOTAL_FEE;
+  // Use dynamic fee from platform settings, fallback to 7% if not loaded
+  const totalFeePercentage = feeSettings?.totalFeePercentage ?? 0.07;
+  const totalFeeDisplay = feeSettings?.totalFeeDisplay ?? "7%";
+  const platformFee = contractMonthlyAmount * totalFeePercentage;
   const creatorTakeHome = Math.max(contractMonthlyAmount - platformFee, 0);
   const hasRetainerTiers = Array.isArray(contract.retainerTiers) && contract.retainerTiers.length > 0;
 
@@ -981,7 +992,7 @@ export default function CreatorRetainerDetail() {
                     <TooltipTrigger asChild>
                       <Info className="h-3.5 w-3.5" />
                     </TooltipTrigger>
-                    <TooltipContent>AffiliateXchange charges a {(DEFAULT_TOTAL_FEE * 100).toFixed(0)}% platform fee.</TooltipContent>
+                    <TooltipContent>AffiliateXchange charges a {totalFeeDisplay} platform fee.</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -1261,7 +1272,7 @@ export default function CreatorRetainerDetail() {
                   <span className="font-semibold">{formatCurrency(contractMonthlyAmount, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Platform fee ({(DEFAULT_TOTAL_FEE * 100).toFixed(0)}%)</span>
+                  <span>Platform fee ({totalFeeDisplay})</span>
                   <span className="font-semibold">{formatCurrency(platformFee, { maximumFractionDigits: 0 })}</span>
                 </div>
                 <div className="flex items-center justify-between">
