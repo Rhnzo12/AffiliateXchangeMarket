@@ -139,6 +139,16 @@ function StatusBadge({ status, isDisputed = false }: { status: PaymentStatus; is
 
 function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
   const { toast } = useToast();
+
+  // Fetch platform fee settings for display
+  const { data: feeSettings } = useQuery<{
+    stripeFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const stripeFeeDisplay = feeSettings?.stripeFeeDisplay ?? "3%";
+
   const { totalEarnings, pendingEarnings, completedEarnings, processingEarnings, disputedEarnings } = useMemo(() => {
     const totals = payments.reduce(
       (acc, payment) => {
@@ -297,7 +307,7 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
                     Platform Fee
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Processing (3%)
+                    Processing ({stripeFeeDisplay})
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Net Amount
@@ -410,6 +420,17 @@ function PaymentMethodSettings({
   emptyDescription?: string;
   showFeeBreakdown?: boolean;
 }) {
+  // Fetch platform fee settings for display
+  const { data: feeSettings } = useQuery<{
+    platformFeeDisplay: string;
+    stripeFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const platformFeeDisplay = feeSettings?.platformFeeDisplay ?? "4%";
+  const stripeFeeDisplay = feeSettings?.stripeFeeDisplay ?? "3%";
+
   const isAddDisabled =
     isSubmitting ||
     (payoutMethod === "etransfer" && !payoutEmail) ||
@@ -632,15 +653,15 @@ function PaymentMethodSettings({
           <div className="space-y-2 text-sm text-blue-800">
             <div className="flex justify-between">
               <span>Platform Fee:</span>
-              <span className="font-medium">Varies by company (default 4%)</span>
+              <span className="font-medium">Varies by company (default {platformFeeDisplay})</span>
             </div>
             <div className="flex justify-between">
               <span>Processing Fee:</span>
-              <span className="font-medium">3% of gross earnings</span>
+              <span className="font-medium">{stripeFeeDisplay} of gross earnings</span>
             </div>
             <div className="mt-2 flex justify-between border-t-2 border-blue-300 pt-2 font-bold">
               <span>Total Deduction:</span>
-              <span>Platform fee + 3% processing</span>
+              <span>Platform fee + {stripeFeeDisplay} processing</span>
             </div>
             <p className="mt-2 text-xs text-blue-600">
               Note: Platform fees may vary by company partnership agreements.
@@ -1141,6 +1162,16 @@ function AdminPaymentDashboard({
   payments: CreatorPayment[];
 }) {
   const { toast } = useToast();
+
+  // Fetch platform fee settings for display
+  const { data: feeSettings } = useQuery<{
+    totalFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const totalFeeDisplay = feeSettings?.totalFeeDisplay ?? "7%";
+
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -1366,7 +1397,7 @@ function AdminPaymentDashboard({
             <TrendingUp className="h-5 w-5 text-purple-100" />
           </div>
           <div className="text-3xl font-bold">${totalPlatformRevenue.toFixed(2)}</div>
-          <div className="mt-1 text-xs text-purple-100">7% of GMV</div>
+          <div className="mt-1 text-xs text-purple-100">{totalFeeDisplay} of GMV</div>
         </div>
 
         <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
@@ -2473,6 +2504,21 @@ export default function PaymentSettings() {
     queryKey: ["/api/payment-settings"],
     enabled: isAuthenticated,
   });
+
+  // Fetch platform fee settings
+  const { data: feeSettings } = useQuery<{
+    platformFeePercentage: number;
+    platformFeeDisplay: string;
+    stripeFeePercentage: number;
+    stripeFeeDisplay: string;
+    totalFeePercentage: number;
+    totalFeeDisplay: string;
+  }>({
+    queryKey: ["/api/platform/fees"],
+  });
+
+  const platformFeeDisplay = feeSettings?.platformFeeDisplay ?? "4%";
+  const stripeFeeDisplay = feeSettings?.stripeFeeDisplay ?? "3%";
 
   // Fetch payments based on user role
   const { data: creatorPayments = [] } = useQuery<CreatorPayment[]>({
