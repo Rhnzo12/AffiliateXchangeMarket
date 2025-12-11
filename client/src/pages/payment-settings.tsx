@@ -1918,91 +1918,11 @@ function AdminPaymentDashboard({
 
 function AdminPaymentSettings() {
   const { toast } = useToast();
-  const [settlementSchedule, setSettlementSchedule] = useState("weekly");
-  const [reservePercentage, setReservePercentage] = useState("10");
-  const [minimumBalance, setMinimumBalance] = useState("5000");
-  const [autoDisburse, setAutoDisburse] = useState(true);
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; description: string }>({
     open: false,
     title: "",
     description: "",
   });
-  const [notificationEmail, setNotificationEmail] = useState("finance@affiliatexchange.com");
-  const [escalationEmail, setEscalationEmail] = useState("compliance@affiliatexchange.com");
-  const [includeReports, setIncludeReports] = useState(true);
-  const [smsEscalation, setSmsEscalation] = useState(true);
-
-  // Fetch platform settings
-  const { data: platformSettings } = useQuery<Array<{key: string; value: string}>>({
-    queryKey: ["/api/admin/settings"],
-  });
-
-  // Load settings from backend
-  useEffect(() => {
-    if (platformSettings) {
-      const settingsMap = new Map(platformSettings.map(s => [s.key, s.value]));
-      if (settingsMap.has("payment.settlement_schedule")) setSettlementSchedule(settingsMap.get("payment.settlement_schedule")!);
-      if (settingsMap.has("payment.reserve_percentage")) setReservePercentage(settingsMap.get("payment.reserve_percentage")!);
-      if (settingsMap.has("payment.minimum_balance")) setMinimumBalance(settingsMap.get("payment.minimum_balance")!);
-      if (settingsMap.has("payment.auto_disburse")) setAutoDisburse(settingsMap.get("payment.auto_disburse") === "true");
-      if (settingsMap.has("payment.notification_email")) setNotificationEmail(settingsMap.get("payment.notification_email")!);
-      if (settingsMap.has("payment.escalation_email")) setEscalationEmail(settingsMap.get("payment.escalation_email")!);
-      if (settingsMap.has("payment.include_reports")) setIncludeReports(settingsMap.get("payment.include_reports") === "true");
-      if (settingsMap.has("payment.sms_escalation")) setSmsEscalation(settingsMap.get("payment.sms_escalation") === "true");
-    }
-  }, [platformSettings]);
-
-  // Mutation to update platform settings
-  const updateSettingMutation = useMutation({
-    mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      const res = await apiRequest("PUT", `/api/admin/settings/${key}`, { value });
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
-    },
-    onError: (error: Error) => {
-      setErrorDialog({
-        open: true,
-        title: "Error",
-        description: error.message || "Failed to update setting",
-      });
-    },
-  });
-
-  const saveDisbursementSettings = async () => {
-    try {
-      await Promise.all([
-        updateSettingMutation.mutateAsync({ key: "payment.settlement_schedule", value: settlementSchedule }),
-        updateSettingMutation.mutateAsync({ key: "payment.reserve_percentage", value: reservePercentage }),
-        updateSettingMutation.mutateAsync({ key: "payment.minimum_balance", value: minimumBalance }),
-        updateSettingMutation.mutateAsync({ key: "payment.auto_disburse", value: autoDisburse.toString() }),
-      ]);
-      toast({
-        title: "Success",
-        description: "Disbursement settings updated successfully",
-      });
-    } catch (error) {
-      // Error already handled by mutation
-    }
-  };
-
-  const saveNotificationSettings = async () => {
-    try {
-      await Promise.all([
-        updateSettingMutation.mutateAsync({ key: "payment.notification_email", value: notificationEmail }),
-        updateSettingMutation.mutateAsync({ key: "payment.escalation_email", value: escalationEmail }),
-        updateSettingMutation.mutateAsync({ key: "payment.include_reports", value: includeReports.toString() }),
-        updateSettingMutation.mutateAsync({ key: "payment.sms_escalation", value: smsEscalation.toString() }),
-      ]);
-      toast({
-        title: "Success",
-        description: "Notification preferences saved successfully",
-      });
-    } catch (error) {
-      // Error already handled by mutation
-    }
-  };
 
   // Fetch funding accounts
   const { data: fundingAccounts = [] } = useQuery<Array<{
@@ -2123,88 +2043,22 @@ function AdminPaymentSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-        <div className="mb-6">
-          <h3 className="text-lg font-bold text-gray-900">Disbursement Controls</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Configure how platform-wide payouts are released to creators and external partners.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="admin-settlement-schedule">Settlement Schedule</Label>
-            <Select value={settlementSchedule} onValueChange={setSettlementSchedule}>
-              <SelectTrigger id="admin-settlement-schedule">
-                <SelectValue placeholder="Select schedule" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="daily">Daily</SelectItem>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500">
-              Determines how frequently approved creator payments are bundled for release.
+      <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-6">
+        <div className="flex items-start gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
+            <Info className="h-5 w-5 text-blue-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900">Platform Fee Settings</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Configure platform fees, payout thresholds, and other payment-related settings in the Platform Settings page.
             </p>
+            <Link href="/admin/platform-settings">
+              <Button variant="outline" className="mt-4">
+                Go to Platform Settings
+              </Button>
+            </Link>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="admin-reserve-percentage">Platform Reserve %</Label>
-            <Input
-              id="admin-reserve-percentage"
-              type="number"
-              min={0}
-              max={50}
-              value={reservePercentage}
-              onChange={(event) => setReservePercentage(event.target.value)}
-            />
-            <p className="text-xs text-gray-500">
-              Holdback applied to every payout to maintain compliance and risk buffers.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="admin-minimum-balance">Minimum Operating Balance ($)</Label>
-            <Input
-              id="admin-minimum-balance"
-              type="number"
-              min={0}
-              step="100"
-              value={minimumBalance}
-              onChange={(event) => setMinimumBalance(event.target.value)}
-            />
-            <p className="text-xs text-gray-500">
-              Payouts pause automatically if platform funds fall below this threshold.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-700">Automatic Disbursement</Label>
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Enable auto-processing</p>
-                <p className="text-xs text-gray-500">
-                  When disabled, finance must manually trigger every payout batch.
-                </p>
-              </div>
-              <Switch checked={autoDisburse} onCheckedChange={setAutoDisburse} aria-label="Toggle automatic disbursement" />
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-          <Button
-            className="bg-blue-600 text-white hover:bg-blue-700"
-            onClick={saveDisbursementSettings}
-            disabled={updateSettingMutation.isPending}
-          >
-            {updateSettingMutation.isPending ? "Saving..." : "Update Disbursement Policy"}
-          </Button>
-          <span className="text-xs text-gray-500">
-            Last reviewed 2 days ago by Finance Ops.
-          </span>
         </div>
       </div>
 
@@ -2338,79 +2192,6 @@ function AdminPaymentSettings() {
               </div>
             ))
           )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
-        <div className="mb-6">
-          <h3 className="text-lg font-bold text-gray-900">Notifications & Escalation</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Control who is notified when payouts process, fail, or require manual review.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="admin-notification-email">Primary Finance Contact</Label>
-            <Input
-              id="admin-notification-email"
-              type="email"
-              value={notificationEmail}
-              onChange={(event) => setNotificationEmail(event.target.value)}
-            />
-            <p className="text-xs text-gray-500">Daily settlement summaries are delivered to this inbox.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="admin-escalation-email">Escalation Contact</Label>
-            <Input
-              id="admin-escalation-email"
-              type="email"
-              value={escalationEmail}
-              onChange={(event) => setEscalationEmail(event.target.value)}
-            />
-            <p className="text-xs text-gray-500">Disputes and compliance holds are routed here for fast action.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-700">Attach financial reports</Label>
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Include CSV exports in alerts</p>
-                <p className="text-xs text-gray-500">Automate weekly payout exports for accounting reconciliation.</p>
-              </div>
-              <Switch
-                checked={includeReports}
-                onCheckedChange={setIncludeReports}
-                aria-label="Toggle report attachments"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-700">SMS escalation</Label>
-            <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Trigger SMS on payout failures</p>
-                <p className="text-xs text-gray-500">Sends texts to the escalation contact when urgent action is required.</p>
-              </div>
-              <Switch
-                checked={smsEscalation}
-                onCheckedChange={setSmsEscalation}
-                aria-label="Toggle SMS escalation"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button
-            className="bg-blue-600 text-white hover:bg-blue-700"
-            onClick={saveNotificationSettings}
-            disabled={updateSettingMutation.isPending}
-          >
-            {updateSettingMutation.isPending ? "Saving..." : "Save Notification Preferences"}
-          </Button>
         </div>
       </div>
 
