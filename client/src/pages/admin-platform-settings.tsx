@@ -20,7 +20,7 @@ import { Switch } from "../components/ui/switch";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
-import { Settings, DollarSign, Gauge } from "lucide-react";
+import { Settings, DollarSign, Gauge, Tag, ToggleRight } from "lucide-react";
 
 interface PlatformSetting {
   id: string;
@@ -126,6 +126,8 @@ export default function AdminPlatformSettings() {
       general: "General Settings",
       fees: "Fee Configuration",
       limits: "Platform Limits",
+      pricing: "Pricing",
+      features: "Features",
     };
     return titles[category] || category.charAt(0).toUpperCase() + category.slice(1);
   };
@@ -135,6 +137,8 @@ export default function AdminPlatformSettings() {
       general: "General platform configuration and operational settings",
       fees: "Transaction fees, commission rates, and payout thresholds",
       limits: "Platform-wide limits and restrictions",
+      pricing: "Pricing configuration for premium features and services",
+      features: "Feature toggles and configuration options",
     };
     return descriptions[category] || "";
   };
@@ -151,6 +155,8 @@ export default function AdminPlatformSettings() {
       general: <Settings className="h-4 w-4" />,
       fees: <DollarSign className="h-4 w-4" />,
       limits: <Gauge className="h-4 w-4" />,
+      pricing: <Tag className="h-4 w-4" />,
+      features: <ToggleRight className="h-4 w-4" />,
     };
 
     return Object.keys(groupedSettings).map((category) => ({
