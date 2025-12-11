@@ -1924,6 +1924,64 @@ function AdminPaymentSettings() {
     description: "",
   });
 
+  // Fee configuration state (using correct database keys)
+  const [platformFeePercentage, setPlatformFeePercentage] = useState("4");
+  const [stripeFeePercentage, setStripeFeePercentage] = useState("3");
+  const [minimumPayoutThreshold, setMinimumPayoutThreshold] = useState("50");
+  const [payoutReservePercentage, setPayoutReservePercentage] = useState("10");
+
+  // Fetch platform settings
+  const { data: platformSettings } = useQuery<Array<{key: string; value: string}>>({
+    queryKey: ["/api/admin/settings"],
+  });
+
+  // Load fee settings from backend
+  useEffect(() => {
+    if (platformSettings) {
+      const settingsMap = new Map(platformSettings.map(s => [s.key, s.value]));
+      if (settingsMap.has("platform_fee_percentage")) setPlatformFeePercentage(settingsMap.get("platform_fee_percentage")!);
+      if (settingsMap.has("stripe_processing_fee_percentage")) setStripeFeePercentage(settingsMap.get("stripe_processing_fee_percentage")!);
+      if (settingsMap.has("minimum_payout_threshold")) setMinimumPayoutThreshold(settingsMap.get("minimum_payout_threshold")!);
+      if (settingsMap.has("payout_reserve_percentage")) setPayoutReservePercentage(settingsMap.get("payout_reserve_percentage")!);
+    }
+  }, [platformSettings]);
+
+  // Mutation to update platform settings
+  const updateSettingMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/settings/${key}`, { value });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform/fees"] });
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to update setting",
+      });
+    },
+  });
+
+  const saveFeeSettings = async () => {
+    try {
+      await Promise.all([
+        updateSettingMutation.mutateAsync({ key: "platform_fee_percentage", value: platformFeePercentage }),
+        updateSettingMutation.mutateAsync({ key: "stripe_processing_fee_percentage", value: stripeFeePercentage }),
+        updateSettingMutation.mutateAsync({ key: "minimum_payout_threshold", value: minimumPayoutThreshold }),
+        updateSettingMutation.mutateAsync({ key: "payout_reserve_percentage", value: payoutReservePercentage }),
+      ]);
+      toast({
+        title: "Success",
+        description: "Fee settings updated successfully",
+      });
+    } catch (error) {
+      // Error already handled by mutation
+    }
+  };
+
   // Fetch funding accounts
   const { data: fundingAccounts = [] } = useQuery<Array<{
     id: string;
@@ -2043,22 +2101,87 @@ function AdminPaymentSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border-2 border-blue-100 bg-blue-50 p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-            <Info className="h-5 w-5 text-blue-600" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">Platform Fee Settings</h3>
-            <p className="mt-1 text-sm text-gray-600">
-              Configure platform fees, payout thresholds, and other payment-related settings in the Platform Settings page.
+      <div className="rounded-xl border-2 border-gray-200 bg-white p-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-bold text-gray-900">Fee Configuration</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Configure platform fees and payout thresholds. These settings are synced across the entire platform.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="platform-fee">Platform Fee (%)</Label>
+            <Input
+              id="platform-fee"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={platformFeePercentage}
+              onChange={(e) => setPlatformFeePercentage(e.target.value)}
+            />
+            <p className="text-xs text-gray-500">
+              Percentage fee charged on each transaction (e.g., 4 for 4%).
             </p>
-            <Link href="/admin/platform-settings">
-              <Button variant="outline" className="mt-4">
-                Go to Platform Settings
-              </Button>
-            </Link>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="stripe-fee">Processing Fee (%)</Label>
+            <Input
+              id="stripe-fee"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              value={stripeFeePercentage}
+              onChange={(e) => setStripeFeePercentage(e.target.value)}
+            />
+            <p className="text-xs text-gray-500">
+              Stripe/payment processor fee percentage (e.g., 3 for 3%).
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="min-payout">Minimum Payout ($)</Label>
+            <Input
+              id="min-payout"
+              type="number"
+              min={0}
+              step="1"
+              value={minimumPayoutThreshold}
+              onChange={(e) => setMinimumPayoutThreshold(e.target.value)}
+            />
+            <p className="text-xs text-gray-500">
+              Minimum balance required before a payout can be processed.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="reserve-percentage">Reserve Percentage (%)</Label>
+            <Input
+              id="reserve-percentage"
+              type="number"
+              min={0}
+              max={100}
+              step="1"
+              value={payoutReservePercentage}
+              onChange={(e) => setPayoutReservePercentage(e.target.value)}
+            />
+            <p className="text-xs text-gray-500">
+              Percentage held in reserve for chargebacks and disputes.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <Button
+            className="bg-blue-600 text-white hover:bg-blue-700"
+            onClick={saveFeeSettings}
+            disabled={updateSettingMutation.isPending}
+          >
+            {updateSettingMutation.isPending ? "Saving..." : "Save Fee Settings"}
+          </Button>
         </div>
       </div>
 
