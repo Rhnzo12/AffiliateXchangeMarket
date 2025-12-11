@@ -1355,12 +1355,35 @@ export default function AdminAnalytics() {
                         <BarChart data={analytics.platform.offersByNiche} layout="vertical">
                           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                           <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                          <YAxis dataKey="niche" type="category" width={100} tick={{ fill: "hsl(var(--muted-foreground))" }} />
+                          <YAxis
+                            dataKey="niche"
+                            type="category"
+                            width={150}
+                            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                            tickFormatter={(value) => {
+                              // Format niche names: replace underscores with spaces and capitalize
+                              return value
+                                .replace(/_/g, ' ')
+                                .replace(/&/g, '&')
+                                .split(' ')
+                                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+                            }}
+                          />
                           <Tooltip
                             contentStyle={{
                               backgroundColor: "hsl(var(--popover))",
                               border: "1px solid hsl(var(--border))",
                               borderRadius: "6px",
+                            }}
+                            formatter={(value: any, name: any) => [value, 'Count']}
+                            labelFormatter={(label) => {
+                              return label
+                                .replace(/_/g, ' ')
+                                .replace(/&/g, '&')
+                                .split(' ')
+                                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
                             }}
                           />
                           <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
