@@ -777,14 +777,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { percentage: platformFeePercentage, isCustom } = await getCompanyPlatformFeePercentage(companyProfile.id);
-      const totalFeePercentage = platformFeePercentage + STRIPE_PROCESSING_FEE_PERCENTAGE;
+      const { stripeFee: stripeFeePercentage } = await getPlatformFeeSettings();
+      const totalFeePercentage = platformFeePercentage + stripeFeePercentage;
       const creatorPayoutPercentage = 1 - totalFeePercentage;
 
       return res.json({
         platformFeePercentage,
         platformFeeDisplay: formatFeePercentage(platformFeePercentage),
-        processingFeePercentage: STRIPE_PROCESSING_FEE_PERCENTAGE,
-        processingFeeDisplay: formatFeePercentage(STRIPE_PROCESSING_FEE_PERCENTAGE),
+        processingFeePercentage: stripeFeePercentage,
+        processingFeeDisplay: formatFeePercentage(stripeFeePercentage),
         totalFeePercentage,
         totalFeeDisplay: formatFeePercentage(totalFeePercentage),
         creatorPayoutPercentage,
@@ -5197,6 +5198,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Company not found" });
       }
 
+      const { platformFee: defaultPlatformFee, stripeFee: processingFee } = await getPlatformFeeSettings();
       const customFee = company.customPlatformFeePercentage;
       const hasCustomFee = customFee !== null && customFee !== undefined;
 
@@ -5205,12 +5207,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         companyName: company.legalName,
         customPlatformFeePercentage: hasCustomFee ? parseFloat(customFee.toString()) : null,
         customPlatformFeeDisplay: hasCustomFee ? `${(parseFloat(customFee.toString()) * 100).toFixed(2)}%` : null,
-        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
-        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
-        processingFeePercentage: STRIPE_PROCESSING_FEE_PERCENTAGE,
-        processingFeeDisplay: `${(STRIPE_PROCESSING_FEE_PERCENTAGE * 100)}%`,
-        effectivePlatformFee: hasCustomFee ? parseFloat(customFee.toString()) : DEFAULT_PLATFORM_FEE_PERCENTAGE,
-        effectiveTotalFee: (hasCustomFee ? parseFloat(customFee.toString()) : DEFAULT_PLATFORM_FEE_PERCENTAGE) + STRIPE_PROCESSING_FEE_PERCENTAGE,
+        defaultPlatformFeePercentage: defaultPlatformFee,
+        defaultPlatformFeeDisplay: `${(defaultPlatformFee * 100)}%`,
+        processingFeePercentage: processingFee,
+        processingFeeDisplay: `${(processingFee * 100)}%`,
+        effectivePlatformFee: hasCustomFee ? parseFloat(customFee.toString()) : defaultPlatformFee,
+        effectiveTotalFee: (hasCustomFee ? parseFloat(customFee.toString()) : defaultPlatformFee) + processingFee,
         isUsingCustomFee: hasCustomFee,
       });
     } catch (error: any) {
@@ -5267,13 +5269,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[Admin] Updated platform fee for company ${companyId} (${company.legalName}) to ${(feeValue * 100).toFixed(2)}%`);
 
+      const { stripeFee: processingFee } = await getPlatformFeeSettings();
+
       res.json({
         success: true,
         message: `Platform fee updated to ${(feeValue * 100).toFixed(2)}% for ${company.legalName}`,
         companyId: companyId,
         customPlatformFeePercentage: feeValue,
         customPlatformFeeDisplay: `${(feeValue * 100).toFixed(2)}%`,
-        effectiveTotalFee: feeValue + STRIPE_PROCESSING_FEE_PERCENTAGE,
+        effectiveTotalFee: feeValue + processingFee,
       });
     } catch (error: any) {
       console.error('[update-company-fee] Error:', error);
@@ -5292,6 +5296,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const previousFee = company.customPlatformFeePercentage;
+      const { platformFee: defaultPlatformFee, stripeFee: processingFee } = await getPlatformFeeSettings();
 
       // Update company profile to remove custom fee
       await storage.updateCompanyProfileById(companyId, {
@@ -5305,7 +5310,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: 'remove_company_fee',
         entityType: 'company',
         entityId: companyId,
-        reason: `Removed custom platform fee for ${company.legalName}, reverting to default ${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        reason: `Removed custom platform fee for ${company.legalName}, reverting to default ${(defaultPlatformFee * 100)}%`,
         changes: {
           previousFee: previousFee,
           companyName: company.legalName,
@@ -5316,11 +5321,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: `Custom platform fee removed for ${company.legalName}. Now using default ${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        message: `Custom platform fee removed for ${company.legalName}. Now using default ${(defaultPlatformFee * 100)}%`,
         companyId: companyId,
-        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
-        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
-        effectiveTotalFee: DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE,
+        defaultPlatformFeePercentage: defaultPlatformFee,
+        defaultPlatformFeeDisplay: `${(defaultPlatformFee * 100)}%`,
+        effectiveTotalFee: defaultPlatformFee + processingFee,
       });
     } catch (error: any) {
       console.error('[remove-company-fee] Error:', error);
@@ -5332,11 +5337,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/companies-with-custom-fees", requireAuth, requireRole('admin'), async (req, res) => {
     try {
       const companies = await storage.getCompaniesWithCustomFees();
+      const { platformFee: defaultPlatformFee, stripeFee: processingFee } = await getPlatformFeeSettings();
 
       res.json({
         count: companies.length,
-        defaultPlatformFeePercentage: DEFAULT_PLATFORM_FEE_PERCENTAGE,
-        defaultPlatformFeeDisplay: `${(DEFAULT_PLATFORM_FEE_PERCENTAGE * 100)}%`,
+        defaultPlatformFeePercentage: defaultPlatformFee,
+        defaultPlatformFeeDisplay: `${(defaultPlatformFee * 100)}%`,
         companies: companies.map(company => ({
           id: company.id,
           legalName: company.legalName,
@@ -5344,8 +5350,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           customPlatformFeePercentage: company.customPlatformFeePercentage ? parseFloat(company.customPlatformFeePercentage.toString()) : null,
           customPlatformFeeDisplay: company.customPlatformFeePercentage ? `${(parseFloat(company.customPlatformFeePercentage.toString()) * 100).toFixed(2)}%` : null,
           effectiveTotalFee: company.customPlatformFeePercentage
-            ? parseFloat(company.customPlatformFeePercentage.toString()) + STRIPE_PROCESSING_FEE_PERCENTAGE
-            : DEFAULT_PLATFORM_FEE_PERCENTAGE + STRIPE_PROCESSING_FEE_PERCENTAGE,
+            ? parseFloat(company.customPlatformFeePercentage.toString()) + processingFee
+            : defaultPlatformFee + processingFee,
         })),
       });
     } catch (error: any) {
