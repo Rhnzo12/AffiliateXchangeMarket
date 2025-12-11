@@ -156,24 +156,26 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
 
               {/* Right Side Navigation Icons */}
               <div className="flex items-center gap-2 sm:gap-3">
-                {/* Messages Icon */}
-                <Link href={user?.role === 'company' ? '/company/messages' : '/messages'}>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative h-8 w-8 sm:h-9 sm:w-9 hover:bg-primary/10"
-                  >
-                    <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
-                    {unreadCount > 0 && (
-                      <Badge
-                        variant="destructive"
-                        className="absolute -top-1 -right-1 h-4 min-w-4 px-1 flex items-center justify-center text-[9px] font-bold leading-none rounded-full border border-background"
-                      >
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </Link>
+                {/* Messages Icon - Hidden for admin users */}
+                {user?.role !== 'admin' && (
+                  <Link href={user?.role === 'company' ? '/company/messages' : '/messages'}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative h-8 w-8 sm:h-9 sm:w-9 hover:bg-primary/10"
+                    >
+                      <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5" />
+                      {unreadCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="absolute -top-1 -right-1 h-4 min-w-4 px-1 flex items-center justify-center text-[9px] font-bold leading-none rounded-full border border-background"
+                        >
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </Link>
+                )}
 
                 {/* Notification Center with Dropdown */}
                 <NotificationCenter />
