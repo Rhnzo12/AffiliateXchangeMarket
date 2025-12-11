@@ -236,7 +236,8 @@ export default function Settings() {
       // Load creator profile data
       if (user?.role === 'creator') {
         setBio(profile.bio || "");
-        setProfileImageUrl(profile.profileImageUrl || "");
+        // profileImageUrl is stored in user table, not creator_profiles table
+        setProfileImageUrl(user?.profileImageUrl || "");
         setSelectedNiches(profile.niches || []);
         setYoutubeUrl(profile.youtubeUrl || "");
         setTiktokUrl(profile.tiktokUrl || "");
@@ -267,7 +268,7 @@ export default function Settings() {
         setVerificationDocumentUrl(profile.verificationDocumentUrl || "");
       }
     }
-  }, [profile, user?.role]);
+  }, [profile, user?.role, user?.profileImageUrl]);
 
   // Save form state to localStorage whenever fields change
   useEffect(() => {
