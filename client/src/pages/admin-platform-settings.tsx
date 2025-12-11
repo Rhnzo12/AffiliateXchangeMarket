@@ -20,7 +20,7 @@ import { Switch } from "../components/ui/switch";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
-import { Settings, DollarSign, Gauge, Tag, ToggleRight, Check, X } from "lucide-react";
+import { Settings, DollarSign, Gauge, Tag, ToggleRight, Check, X, Plus, Trash2 } from "lucide-react";
 
 interface NicheItem {
   id: string;
@@ -125,6 +125,7 @@ export default function AdminPlatformSettings() {
   const [editingSetting, setEditingSetting] = useState<PlatformSetting | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editReason, setEditReason] = useState("");
+  const [editingNiches, setEditingNiches] = useState<NicheItem[]>([]);
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
     title?: string;
@@ -170,6 +171,41 @@ export default function AdminPlatformSettings() {
     setEditingSetting(setting);
     setEditValue(setting.value);
     setEditReason("");
+
+    // Parse niches for user-friendly editing
+    if (setting.key === "niches") {
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (Array.isArray(parsed)) {
+          setEditingNiches(parsed as NicheItem[]);
+        }
+      } catch {
+        setEditingNiches([]);
+      }
+    } else {
+      setEditingNiches([]);
+    }
+  };
+
+  // Niches editing helpers
+  const updateNiche = (id: string, field: keyof NicheItem, value: string | boolean) => {
+    setEditingNiches(prev =>
+      prev.map(niche =>
+        niche.id === id ? { ...niche, [field]: value } : niche
+      )
+    );
+  };
+
+  const addNiche = () => {
+    const newId = String(Math.max(...editingNiches.map(n => parseInt(n.id) || 0), 0) + 1);
+    setEditingNiches(prev => [
+      ...prev,
+      { id: newId, name: "", description: "", isActive: true }
+    ]);
+  };
+
+  const removeNiche = (id: string) => {
+    setEditingNiches(prev => prev.filter(niche => niche.id !== id));
   };
 
   const handleSave = () => {
@@ -183,9 +219,25 @@ export default function AdminPlatformSettings() {
       return;
     }
 
+    // For niches, convert the editingNiches array back to JSON
+    let valueToSave = editValue;
+    if (editingSetting.key === "niches") {
+      // Validate niches have required fields
+      const invalidNiches = editingNiches.filter(n => !n.name.trim());
+      if (invalidNiches.length > 0) {
+        setErrorDialog({
+          open: true,
+          title: "Error",
+          description: "All niches must have a name",
+        });
+        return;
+      }
+      valueToSave = JSON.stringify(editingNiches);
+    }
+
     updateMutation.mutate({
       key: editingSetting.key,
-      value: editValue,
+      value: valueToSave,
       reason: editReason,
     });
   };
@@ -360,7 +412,7 @@ export default function AdminPlatformSettings() {
 
         {/* Edit Dialog */}
       <Dialog open={!!editingSetting && !isBooleanSetting(editingSetting?.key || "")} onOpenChange={(open) => !open && setEditingSetting(null)}>
-        <DialogContent>
+        <DialogContent className={editingSetting?.key === "niches" ? "max-w-3xl max-h-[90vh] overflow-y-auto" : ""}>
           <DialogHeader>
             <DialogTitle>Edit Setting: {editingSetting?.key}</DialogTitle>
             <DialogDescription>
@@ -369,30 +421,97 @@ export default function AdminPlatformSettings() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="value">Value</Label>
-              {editingSetting && isJsonValue(editingSetting.value) ? (
-                <Textarea
-                  id="value"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  placeholder="Enter JSON value..."
-                  className="min-h-[200px] font-mono text-sm"
-                />
-              ) : (
-                <Input
-                  id="value"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  placeholder="Enter new value..."
-                />
-              )}
-              {editingSetting && isJsonValue(editingSetting.value) && (
-                <p className="text-xs text-muted-foreground">
-                  Editing JSON value. Make sure to maintain valid JSON format.
-                </p>
-              )}
-            </div>
+            {/* Niches Editor */}
+            {editingSetting?.key === "niches" ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label>Niches ({editingNiches.length})</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addNiche}
+                    className="gap-1"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Niche
+                  </Button>
+                </div>
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                  {editingNiches.map((niche) => (
+                    <div
+                      key={niche.id}
+                      className="flex items-start gap-3 p-3 border rounded-lg bg-gray-50"
+                    >
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={niche.name}
+                            onChange={(e) => updateNiche(niche.id, "name", e.target.value)}
+                            placeholder="Niche name..."
+                            className="font-medium"
+                          />
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Switch
+                              checked={niche.isActive}
+                              onCheckedChange={(checked) => updateNiche(niche.id, "isActive", checked)}
+                            />
+                            <span className={`text-xs ${niche.isActive ? "text-green-600" : "text-gray-400"}`}>
+                              {niche.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                        </div>
+                        <Input
+                          value={niche.description}
+                          onChange={(e) => updateNiche(niche.id, "description", e.target.value)}
+                          placeholder="Description..."
+                          className="text-sm"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeNiche(niche.id)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {editingNiches.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
+                      No niches configured. Click "Add Niche" to create one.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="value">Value</Label>
+                {editingSetting && isJsonValue(editingSetting.value) ? (
+                  <Textarea
+                    id="value"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    placeholder="Enter JSON value..."
+                    className="min-h-[200px] font-mono text-sm"
+                  />
+                ) : (
+                  <Input
+                    id="value"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    placeholder="Enter new value..."
+                  />
+                )}
+                {editingSetting && isJsonValue(editingSetting.value) && (
+                  <p className="text-xs text-muted-foreground">
+                    Editing JSON value. Make sure to maintain valid JSON format.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="reason">
