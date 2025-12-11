@@ -1770,7 +1770,7 @@ export default function AdminAnalytics() {
               <Card className="border-card-border">
                 <CardHeader>
                   <CardTitle>Recent Errors</CardTitle>
-                  <CardDescription>Latest API errors</CardDescription>
+                  <CardDescription>API errors from the last 24 hours (excludes normal auth checks)</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>

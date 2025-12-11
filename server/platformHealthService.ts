@@ -654,6 +654,7 @@ export async function getApiMetricsTimeSeries(
 
 /**
  * Get recent error logs
+ * Only returns errors from the last 24 hours and filters out expected auth errors
  */
 export async function getRecentErrorLogs(
   limit: number = 50
@@ -667,6 +668,9 @@ export async function getRecentErrorLogs(
   userId: string | null;
 }>> {
   try {
+    // Only get errors from the last 24 hours
+    const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
     const errors = await db
       .select({
         id: apiErrorLogs.id,
@@ -678,10 +682,20 @@ export async function getRecentErrorLogs(
         userId: apiErrorLogs.userId,
       })
       .from(apiErrorLogs)
+      .where(gte(apiErrorLogs.timestamp, cutoffTime))
       .orderBy(desc(apiErrorLogs.timestamp))
       .limit(limit);
 
-    return errors;
+    // Filter out expected 401 errors on auth endpoints (normal behavior for unauthenticated requests)
+    const filteredErrors = errors.filter(error => {
+      // Exclude 401 errors on auth endpoints - these are expected
+      if (error.statusCode === 401 && error.endpoint?.includes('/api/auth/')) {
+        return false;
+      }
+      return true;
+    });
+
+    return filteredErrors;
   } catch (error) {
     console.error('[Platform Health] Failed to get error logs:', error);
     return [];
