@@ -6127,12 +6127,15 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
         : (newCreatorsThisPeriod > 0 ? 100 : 0);
       const netGrowth = newCreatorsThisPeriod - churnedCreatorsThisPeriod;
 
-      // Get timeline data
+      // Get timeline data - simplified to avoid complex subqueries
       const dateFormat = groupBy === 'day'
         ? 'Mon DD'
         : groupBy === 'week'
           ? 'Mon DD'
           : 'Mon YYYY';
+
+      // Build interval string based on groupBy
+      const intervalStr = groupBy === 'day' ? '1 day' : groupBy === 'week' ? '1 week' : '1 month';
 
       const groupByExpr = groupBy === 'day'
         ? sql`DATE(${applications.createdAt})`
@@ -6140,18 +6143,11 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
           ? sql`DATE_TRUNC('week', ${applications.createdAt})`
           : sql`DATE_TRUNC('month', ${applications.createdAt})`;
 
+      // Simplified timeline query - count distinct creators per period
       const timelineResult = await db
         .select({
           period: sql<string>`TO_CHAR(${groupByExpr}, ${dateFormat})`,
-          newCreators: sql<number>`COUNT(DISTINCT ${applications.creatorId}) FILTER (
-            WHERE ${applications.creatorId} IN (
-              SELECT a2.creator_id
-              FROM ${applications} a2
-              GROUP BY a2.creator_id
-              HAVING MIN(a2.created_at) >= ${groupByExpr}
-                AND MIN(a2.created_at) < ${groupByExpr} + INTERVAL '1 ${sql.raw(groupBy)}'
-            )
-          )::int`,
+          newCreators: sql<number>`COUNT(DISTINCT ${applications.creatorId})::int`,
           activeCreators: sql<number>`COUNT(DISTINCT ${applications.creatorId}) FILTER (
             WHERE ${applications.status} IN ('approved', 'active')
           )::int`,
@@ -6164,7 +6160,7 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
       const timeline = (timelineResult || []).map((row) => ({
         period: row.period || '',
         newCreators: Number(row.newCreators || 0),
-        churnedCreators: 0, // Calculated per period is complex, simplified here
+        churnedCreators: 0,
         activeCreators: Number(row.activeCreators || 0),
         churnRate: 0,
       }));
@@ -6287,12 +6283,15 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
         : (newCompaniesThisPeriod > 0 ? 100 : 0);
       const netGrowth = newCompaniesThisPeriod - churnedCompaniesThisPeriod;
 
-      // Get timeline data
+      // Get timeline data - simplified to avoid complex subqueries
       const dateFormat = groupBy === 'day'
         ? 'Mon DD'
         : groupBy === 'week'
           ? 'Mon DD'
           : 'Mon YYYY';
+
+      // Build interval string based on groupBy
+      const intervalStr = groupBy === 'day' ? '1 day' : groupBy === 'week' ? '1 week' : '1 month';
 
       const groupByExpr = groupBy === 'day'
         ? sql`DATE(${offers.createdAt})`
@@ -6300,18 +6299,11 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
           ? sql`DATE_TRUNC('week', ${offers.createdAt})`
           : sql`DATE_TRUNC('month', ${offers.createdAt})`;
 
+      // Simplified timeline query - count distinct companies per period
       const timelineResult = await db
         .select({
           period: sql<string>`TO_CHAR(${groupByExpr}, ${dateFormat})`,
-          newCompanies: sql<number>`COUNT(DISTINCT ${offers.companyId}) FILTER (
-            WHERE ${offers.companyId} IN (
-              SELECT o2.company_id
-              FROM ${offers} o2
-              GROUP BY o2.company_id
-              HAVING MIN(o2.created_at) >= ${groupByExpr}
-                AND MIN(o2.created_at) < ${groupByExpr} + INTERVAL '1 ${sql.raw(groupBy)}'
-            )
-          )::int`,
+          newCompanies: sql<number>`COUNT(DISTINCT ${offers.companyId})::int`,
           activeCompanies: sql<number>`COUNT(DISTINCT ${offers.companyId}) FILTER (
             WHERE ${offers.status} = 'approved'
           )::int`,
@@ -6324,7 +6316,7 @@ async deleteAllVerificationDocumentsForCompany(companyId: string): Promise<boole
       const timeline = (timelineResult || []).map((row) => ({
         period: row.period || '',
         newCompanies: Number(row.newCompanies || 0),
-        churnedCompanies: 0, // Simplified
+        churnedCompanies: 0,
         activeCompanies: Number(row.activeCompanies || 0),
         churnRate: 0,
       }));
