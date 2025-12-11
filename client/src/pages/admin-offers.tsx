@@ -265,7 +265,7 @@ export default function AdminOffers() {
                   <TableHead className="text-center">Active</TableHead>
                   <TableHead className="text-center">Clicks</TableHead>
                   <TableHead className="text-center">Featured</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right sticky right-0 bg-background shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.1)]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -328,7 +328,7 @@ export default function AdminOffers() {
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right sticky right-0 bg-background shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.1)]">
                       <Button
                         variant="ghost"
                         size="sm"
