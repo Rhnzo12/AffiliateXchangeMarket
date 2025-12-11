@@ -20,7 +20,94 @@ import { Switch } from "../components/ui/switch";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { SettingsNavigation, SettingsSection } from "../components/SettingsNavigation";
-import { Settings, DollarSign, Gauge, Tag, ToggleRight } from "lucide-react";
+import { Settings, DollarSign, Gauge, Tag, ToggleRight, Check, X } from "lucide-react";
+
+interface NicheItem {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+}
+
+// Helper to check if a value is JSON
+const isJsonValue = (value: string): boolean => {
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null;
+  } catch {
+    return false;
+  }
+};
+
+// Helper to render JSON values in a user-friendly way
+const renderJsonValue = (key: string, value: string): React.ReactNode => {
+  try {
+    const parsed = JSON.parse(value);
+
+    // Special handling for niches
+    if (key === "niches" && Array.isArray(parsed)) {
+      const niches = parsed as NicheItem[];
+      return (
+        <div className="mt-2 space-y-2">
+          <div className="text-sm text-muted-foreground mb-2">
+            {niches.length} niches configured
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {niches.map((niche) => (
+              <div
+                key={niche.id}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border ${
+                  niche.isActive
+                    ? "bg-green-50 border-green-200 text-green-700"
+                    : "bg-gray-50 border-gray-200 text-gray-500"
+                }`}
+                title={niche.description}
+              >
+                {niche.isActive ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  <X className="h-3 w-3" />
+                )}
+                {niche.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Generic array handling
+    if (Array.isArray(parsed)) {
+      return (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {parsed.map((item, index) => (
+            <Badge key={index} variant="secondary" className="text-xs">
+              {typeof item === "object" ? item.name || JSON.stringify(item) : String(item)}
+            </Badge>
+          ))}
+        </div>
+      );
+    }
+
+    // Generic object handling
+    if (typeof parsed === "object") {
+      return (
+        <div className="mt-2 space-y-1 text-sm">
+          {Object.entries(parsed).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2">
+              <span className="font-medium text-muted-foreground">{k}:</span>
+              <span className="font-mono bg-gray-100 px-1 rounded">{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 interface PlatformSetting {
   id: string;
@@ -215,26 +302,40 @@ export default function AdminPlatformSettings() {
                             {setting.description}
                           </p>
                         )}
-                        <div className="flex items-center gap-4 mt-2">
+                        <div className="mt-2">
                           {isBooleanSetting(setting.key) ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">
-                                Current: {setting.value === "true" ? "Enabled" : "Disabled"}
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">
+                                  Current: {setting.value === "true" ? "Enabled" : "Disabled"}
+                                </span>
+                                <Switch
+                                  checked={setting.value === "true"}
+                                  onCheckedChange={(checked) => handleToggle(setting, checked)}
+                                  disabled={updateMutation.isPending}
+                                />
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                Updated: {new Date(setting.updatedAt).toLocaleString()}
                               </span>
-                              <Switch
-                                checked={setting.value === "true"}
-                                onCheckedChange={(checked) => handleToggle(setting, checked)}
-                                disabled={updateMutation.isPending}
-                              />
+                            </div>
+                          ) : isJsonValue(setting.value) ? (
+                            <div>
+                              {renderJsonValue(setting.key, setting.value)}
+                              <span className="text-xs text-muted-foreground block mt-2">
+                                Updated: {new Date(setting.updatedAt).toLocaleString()}
+                              </span>
                             </div>
                           ) : (
-                            <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                              {setting.value}
-                            </span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                                {setting.value}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Updated: {new Date(setting.updatedAt).toLocaleString()}
+                              </span>
+                            </div>
                           )}
-                          <span className="text-xs text-muted-foreground">
-                            Updated: {new Date(setting.updatedAt).toLocaleString()}
-                          </span>
                         </div>
                       </div>
                       {!isBooleanSetting(setting.key) && (
@@ -270,15 +371,27 @@ export default function AdminPlatformSettings() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="value">Value</Label>
-              <Input
-                id="value"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                placeholder="Enter new value..."
-              />
-              <p className="text-xs text-muted-foreground">
-                Current value: <span className="font-mono">{editingSetting?.value}</span>
-              </p>
+              {editingSetting && isJsonValue(editingSetting.value) ? (
+                <Textarea
+                  id="value"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  placeholder="Enter JSON value..."
+                  className="min-h-[200px] font-mono text-sm"
+                />
+              ) : (
+                <Input
+                  id="value"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  placeholder="Enter new value..."
+                />
+              )}
+              {editingSetting && isJsonValue(editingSetting.value) && (
+                <p className="text-xs text-muted-foreground">
+                  Editing JSON value. Make sure to maintain valid JSON format.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
