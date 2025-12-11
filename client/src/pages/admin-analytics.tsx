@@ -337,6 +337,8 @@ export default function AdminAnalytics() {
       return res.json();
     },
     enabled: isAuthenticated && user?.role === "admin",
+    staleTime: 0, // Always consider data stale to ensure fresh data on refetch
+    refetchOnMount: "always", // Always refetch when component mounts
   });
 
   // Platform Health Query
@@ -356,6 +358,8 @@ export default function AdminAnalytics() {
       return res.json();
     },
     enabled: isAuthenticated && user?.role === "admin",
+    staleTime: 0, // Always consider data stale for real-time health monitoring
+    refetchOnMount: "always",
     refetchInterval: 60000, // Refresh every minute
   });
 
@@ -376,6 +380,8 @@ export default function AdminAnalytics() {
       return res.json();
     },
     enabled: isAuthenticated && user?.role === "admin",
+    staleTime: 0, // Always consider data stale for accurate churn metrics
+    refetchOnMount: "always",
   });
 
   // Fee Settings Query
@@ -639,10 +645,15 @@ export default function AdminAnalytics() {
           <Button
             variant="outline"
             className="gap-2"
-            onClick={() => refetch()}
-            disabled={analyticsLoading}
+            onClick={() => {
+              // Refresh all analytics data
+              refetch();
+              refetchHealth();
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/churn-analytics"] });
+            }}
+            disabled={analyticsLoading || healthLoading || churnLoading}
           >
-            <RefreshCw className={`h-4 w-4 ${analyticsLoading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${(analyticsLoading || healthLoading || churnLoading) ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
