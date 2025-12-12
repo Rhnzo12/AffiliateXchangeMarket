@@ -224,6 +224,7 @@ export default function CreatorRetainerDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/deliverables`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts"] });
       toast({
         title: "Deliverable Submitted",
         description: "Your video has been submitted for review.",
@@ -356,6 +357,7 @@ export default function CreatorRetainerDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}/deliverables`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/retainer-contracts"] });
       toast({
         title: "Revision Submitted",
         description: "Your revised video has been submitted for review.",
