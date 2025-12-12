@@ -289,16 +289,14 @@ export function AppSidebar() {
                       <SidebarMenuItem key={item.title}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <SidebarMenuButton
-                              isActive={isActive}
-                              className="hover:bg-transparent hover:text-primary hover:font-bold data-[active=true]:bg-transparent data-[active=true]:text-primary transition-all duration-200"
+                            <button
+                              className={`flex w-8 h-8 items-center justify-center rounded-md p-2 transition-all duration-200 hover:text-primary ${isActive ? "text-primary" : ""}`}
                               data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                             >
                               <item.icon className="h-4 w-4" />
-                              <span>{item.title}</span>
-                            </SidebarMenuButton>
+                            </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent side="right" align="start" className="min-w-[200px]">
+                          <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-[200px] z-[100]">
                             {item.children?.map((child) => (
                               <DropdownMenuItem key={child.url} asChild>
                                 <Link
