@@ -10,11 +10,7 @@ import { useToast } from "../hooks/use-toast";
 import { Mail, Eye, EyeOff, Shield, ArrowLeft, Key } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
-
-const loginSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-});
+import { loginSchema } from "../../../shared/validation";
 
 type LoginForm = z.infer<typeof loginSchema>;
 
