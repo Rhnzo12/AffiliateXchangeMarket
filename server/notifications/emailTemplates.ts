@@ -228,7 +228,7 @@ export function paymentReceivedEmail(data: EmailTemplateData): { subject: string
     <body>
       <div class="container">
         <div class="header" style="background-color: #10B981;">
-          <h1>\u1F4B0 Payment Received!</h1>
+          <h1>💰 Payment Received!</h1>
         </div>
         <div class="content">
           <p>Hi ${data.userName},</p>
@@ -266,7 +266,7 @@ export function paymentReceivedEmail(data: EmailTemplateData): { subject: string
 
             <div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
               <p style="margin: 0; font-size: 14px; color: #1E40AF;">
-                \u1F4A1 <strong>How fees are calculated:</strong><br>
+                💡 <strong>How fees are calculated:</strong><br>
                 Platform fee (${data.platformFeePercentage || '4%'}) and processing fee (${data.processingFeePercentage || '3%'}) are automatically deducted from your gross earnings. The remaining amount is what you receive.
               </p>
             </div>
@@ -308,7 +308,7 @@ export function paymentApprovedEmail(data: EmailTemplateData): { subject: string
     <body>
       <div class="container">
         <div class="header" style="background-color: #10B981;">
-          <h1>\u2713 Payment Sent Successfully!</h1>
+          <h1>✅ Payment Sent Successfully!</h1>
         </div>
         <div class="content">
           <p>Hi ${data.userName},</p>
@@ -346,14 +346,14 @@ export function paymentApprovedEmail(data: EmailTemplateData): { subject: string
 
             <div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
               <p style="margin: 0; font-size: 14px; color: #1E40AF;">
-                \u1F4A1 <strong>Payment Structure:</strong><br>
+                💡 <strong>Payment Structure:</strong><br>
                 The platform and processing fees (7% total) are deducted from the gross amount. The creator receives the net amount after fees.
               </p>
             </div>
           ` : ''}
 
           <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; color: #065F46;">\u2713 Payment processed successfully</p>
+            <p style="margin: 0; color: #065F46;">✅ Payment processed successfully</p>
             <p style="margin: 5px 0 0 0; color: #047857; font-size: 14px;">The creator will receive the funds according to their payment method settings.</p>
           </div>
 
@@ -886,7 +886,7 @@ export function accountDeletionOtpEmail(data: EmailTemplateData): { subject: str
           </div>
 
           <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; font-weight: 600; color: #92400E;">\u26A0\uFE0F Important:</p>
+            <p style="margin: 0; font-weight: 600; color: #92400E;">⚠️ Important:</p>
             <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #78350F;">
               <li style="margin-bottom: 8px;">This code will expire in <strong>15 minutes</strong></li>
               <li style="margin-bottom: 8px;">Account deletion is permanent and cannot be undone</li>
@@ -936,7 +936,7 @@ export function passwordChangeOtpEmail(data: EmailTemplateData): { subject: stri
           </div>
 
           <div style="background-color: #DBEAFE; border-left: 4px solid #3B82F6; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; font-weight: 600; color: #1E40AF;">\u2139\uFE0F Important:</p>
+            <p style="margin: 0; font-weight: 600; color: #1E40AF;">ℹ️ Important:</p>
             <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1E3A8A;">
               <li style="margin-bottom: 8px;">This code will expire in <strong>15 minutes</strong></li>
               <li style="margin-bottom: 8px;">Enter this code to complete your password change</li>
@@ -988,7 +988,7 @@ export function contentFlaggedEmail(data: ContentFlaggedEmailData): { subject: s
         bodyContent = `
           <p>Good news! Your ${contentType} has been reviewed by our moderation team and <strong>no issues were found</strong>.</p>
           <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;">
-            <p style="margin: 0; color: #065F46;">\u2713 The flag on your content has been dismissed. No further action is required.</p>
+            <p style="margin: 0; color: #065F46;">✅ The flag on your content has been dismissed. No further action is required.</p>
           </div>
         `;
         break;
