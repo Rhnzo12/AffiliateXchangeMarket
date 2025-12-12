@@ -9,10 +9,7 @@ import { Input } from "../components/ui/input";
 import { useToast } from "../hooks/use-toast";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import { Link } from "wouter";
-
-const forgotPasswordSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
-});
+import { forgotPasswordSchema } from "../../../shared/validation";
 
 type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 

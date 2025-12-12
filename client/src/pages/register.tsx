@@ -9,27 +9,12 @@ import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Checkbox } from "../components/ui/checkbox";
 import { useToast } from "../hooks/use-toast";
-import { Zap, Mail } from "lucide-react";
+import { Zap, Mail, Check, X } from "lucide-react";
 import { Link } from "wouter";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { registrationSchema, validatePasswordComplexity } from "../../../shared/validation";
 
-const registerSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  role: z.enum(["creator", "company"]),
-  acceptTerms: z.boolean().refine((val) => val === true, {
-    message: "You must accept the Terms of Service and Privacy Policy",
-  }),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
-
-type RegisterForm = z.infer<typeof registerSchema>;
+type RegisterForm = z.infer<typeof registrationSchema>;
 
 export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
@@ -41,8 +26,11 @@ export default function Register() {
     errorDetails: "",
   });
 
+  const [passwordValue, setPasswordValue] = useState("");
+  const passwordRequirements = validatePasswordComplexity(passwordValue);
+
   const form = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
+    resolver: zodResolver(registrationSchema),
     defaultValues: {
       username: "",
       email: "",
@@ -231,8 +219,40 @@ export default function Register() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} data-testid="input-password" />
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          {...field}
+                          data-testid="input-password"
+                          onChange={(e) => {
+                            field.onChange(e);
+                            setPasswordValue(e.target.value);
+                          }}
+                        />
                       </FormControl>
+                      {passwordValue && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          <p className="text-muted-foreground font-medium">Password requirements:</p>
+                          {[
+                            { label: "At least 8 characters", met: passwordValue.length >= 8 },
+                            { label: "One uppercase letter", met: /[A-Z]/.test(passwordValue) },
+                            { label: "One lowercase letter", met: /[a-z]/.test(passwordValue) },
+                            { label: "One number", met: /[0-9]/.test(passwordValue) },
+                            { label: "One special character (!@#$%^&*...)", met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordValue) },
+                          ].map((req) => (
+                            <div key={req.label} className="flex items-center gap-1.5">
+                              {req.met ? (
+                                <Check className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <X className="h-3 w-3 text-muted-foreground" />
+                              )}
+                              <span className={req.met ? "text-green-600" : "text-muted-foreground"}>
+                                {req.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

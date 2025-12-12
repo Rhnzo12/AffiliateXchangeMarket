@@ -1120,15 +1120,57 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 // Insert schemas
+// URL validation regex for http/https URLs
+const urlRegex = /^https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&\/=]*)$/;
+
+// Phone number validation regex - flexible format supporting international numbers
+const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,3}[)]?[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,4}[-\s\.]?[0-9]{1,9}$/;
+
+// Social URL validation regexes
+const youtubeUrlRegex = /^https?:\/\/(www\.)?(youtube\.com\/(c\/|channel\/|user\/|@)?|youtu\.be\/)[a-zA-Z0-9_-]+\/?$/;
+const tiktokUrlRegex = /^https?:\/\/(www\.)?tiktok\.com\/@[a-zA-Z0-9_.]+\/?$/;
+const instagramUrlRegex = /^https?:\/\/(www\.)?instagram\.com\/[a-zA-Z0-9_.]+\/?$/;
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCreatorProfileSchema = createInsertSchema(creatorProfiles).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertCompanyProfileSchema = createInsertSchema(companyProfiles).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true });
+export const insertCreatorProfileSchema = createInsertSchema(creatorProfiles).omit({ id: true, createdAt: true, updatedAt: true }).extend({
+  bio: z.string().max(1000, "Bio must be less than 1000 characters").optional().nullable(),
+  youtubeUrl: z.string().regex(youtubeUrlRegex, "Please enter a valid YouTube channel URL").optional().nullable().or(z.literal("")),
+  tiktokUrl: z.string().regex(tiktokUrlRegex, "Please enter a valid TikTok profile URL").optional().nullable().or(z.literal("")),
+  instagramUrl: z.string().regex(instagramUrlRegex, "Please enter a valid Instagram profile URL").optional().nullable().or(z.literal("")),
+  youtubeFollowers: z.number().min(0, "Followers cannot be negative").max(1000000000, "Follower count seems unrealistic").optional().nullable(),
+  tiktokFollowers: z.number().min(0, "Followers cannot be negative").max(1000000000, "Follower count seems unrealistic").optional().nullable(),
+  instagramFollowers: z.number().min(0, "Followers cannot be negative").max(1000000000, "Follower count seems unrealistic").optional().nullable(),
+});
+export const insertCompanyProfileSchema = createInsertSchema(companyProfiles).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true }).extend({
+  description: z.string().max(5000, "Description must be less than 5000 characters").optional().nullable(),
+  phoneNumber: z.string().min(7, "Phone number must be at least 7 digits").max(20, "Phone number must be less than 20 characters").regex(phoneRegex, "Please enter a valid phone number").optional().nullable().or(z.literal("")),
+  websiteUrl: z.string().regex(urlRegex, "Please enter a valid URL starting with http:// or https://").optional().nullable().or(z.literal("")),
+  businessAddress: z.string().max(500, "Business address must be less than 500 characters").optional().nullable(),
+});
 export const insertOfferSchema = createInsertSchema(offers).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true, applicationCount: true, approvedAt: true });
-export const createOfferSchema = createInsertSchema(offers).omit({ id: true, companyId: true, createdAt: true, updatedAt: true, viewCount: true, applicationCount: true, approvedAt: true, status: true });
+
+export const createOfferSchema = createInsertSchema(offers).omit({ id: true, companyId: true, createdAt: true, updatedAt: true, viewCount: true, applicationCount: true, approvedAt: true, status: true }).extend({
+  productUrl: z.string().min(1, "Product URL is required").regex(urlRegex, "Please enter a valid URL starting with http:// or https://"),
+  fullDescription: z.string().min(50, "Description must be at least 50 characters").max(5000, "Description must be less than 5000 characters"),
+  shortDescription: z.string().min(10, "Short description must be at least 10 characters").max(200, "Short description must be less than 200 characters"),
+  contentStyleRequirements: z.string().max(2000, "Content style requirements must be less than 2000 characters").optional().nullable(),
+  brandSafetyRequirements: z.string().max(2000, "Brand safety requirements must be less than 2000 characters").optional().nullable(),
+  customTerms: z.string().max(5000, "Custom terms must be less than 5000 characters").optional().nullable(),
+  creatorRequirements: z.string().max(2000, "Creator requirements must be less than 2000 characters").optional().nullable(),
+});
 export const insertOfferVideoSchema = createInsertSchema(offerVideos).omit({ id: true, createdAt: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true, createdAt: true, updatedAt: true, approvedAt: true, trackingLink: true, trackingCode: true, autoApprovalScheduledAt: true });
-export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
-export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true, updatedAt: true, companyResponse: true, companyRespondedAt: true, adminResponse: true, respondedAt: true, respondedBy: true, isEdited: true, adminNote: true, isApproved: true, approvedBy: true, approvedAt: true, isHidden: true });
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true }).extend({
+  content: z.string().min(1, "Message cannot be empty").max(5000, "Message must be less than 5000 characters"),
+});
+export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true, updatedAt: true, companyResponse: true, companyRespondedAt: true, adminResponse: true, respondedAt: true, respondedBy: true, isEdited: true, adminNote: true, isApproved: true, approvedBy: true, approvedAt: true, isHidden: true }).extend({
+  reviewText: z.string().max(2000, "Review must be less than 2000 characters").optional().nullable(),
+  overallRating: z.number().min(1, "Rating must be at least 1").max(5, "Rating must be at most 5"),
+  paymentSpeedRating: z.number().min(1).max(5).optional().nullable(),
+  communicationRating: z.number().min(1).max(5).optional().nullable(),
+  offerQualityRating: z.number().min(1).max(5).optional().nullable(),
+  supportRating: z.number().min(1).max(5).optional().nullable(),
+});
 export const adminReviewUpdateSchema = createInsertSchema(reviews).pick({ reviewText: true, overallRating: true, paymentSpeedRating: true, communicationRating: true, offerQualityRating: true, supportRating: true }).partial();
 export const adminNoteSchema = z.object({ note: z.string() });
 export const adminResponseSchema = z.object({ response: z.string().min(1, "Response text is required") });

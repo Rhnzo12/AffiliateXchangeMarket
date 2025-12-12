@@ -251,10 +251,51 @@ export async function setupAuth(app: Express) {
 
       }
 
-      if (password.length < 6) {
+      // Username validation
+      const usernameRegex = /^[a-zA-Z0-9_]+$/;
+      if (username.length < 3 || username.length > 30) {
+        return res.status(400).json({ error: "Username must be between 3 and 30 characters" });
+      }
+      if (!usernameRegex.test(username)) {
+        return res.status(400).json({ error: "Username can only contain letters, numbers, and underscores" });
+      }
 
-        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      // Email validation (stricter regex)
+      const emailRegex = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ error: "Please enter a valid email address" });
+      }
 
+      // Password complexity validation
+      if (password.length < 8) {
+        return res.status(400).json({ error: "Password must be at least 8 characters" });
+      }
+      if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ error: "Password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ error: "Password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ error: "Password must contain at least one number" });
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+        return res.status(400).json({ error: "Password must contain at least one special character" });
+      }
+
+      // Name validation (if provided)
+      const nameRegex = /^[a-zA-Z\s'-]*$/;
+      if (firstName && firstName.length > 50) {
+        return res.status(400).json({ error: "First name must be less than 50 characters" });
+      }
+      if (firstName && !nameRegex.test(firstName)) {
+        return res.status(400).json({ error: "First name can only contain letters, spaces, hyphens, and apostrophes" });
+      }
+      if (lastName && lastName.length > 50) {
+        return res.status(400).json({ error: "Last name must be less than 50 characters" });
+      }
+      if (lastName && !nameRegex.test(lastName)) {
+        return res.status(400).json({ error: "Last name can only contain letters, spaces, hyphens, and apostrophes" });
       }
 
       if (!["creator", "company"].includes(role)) {
@@ -689,10 +730,21 @@ export async function setupAuth(app: Express) {
 
       }
 
+      // Password complexity validation
       if (newPassword.length < 8) {
-
         return res.status(400).json({ error: "New password must be at least 8 characters" });
-
+      }
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one number" });
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one special character" });
       }
 
       // Get user
@@ -818,8 +870,21 @@ export async function setupAuth(app: Express) {
         return res.status(400).json({ error: "New password is required" });
       }
 
+      // Password complexity validation
       if (newPassword.length < 8) {
         return res.status(400).json({ error: "New password must be at least 8 characters" });
+      }
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one number" });
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+        return res.status(400).json({ error: "New password must contain at least one special character" });
       }
 
       const user = await storage.getUser(userId);
@@ -1014,20 +1079,20 @@ export async function setupAuth(app: Express) {
 
       const user = await storage.getUserByEmail(email);
 
-      // Return error if email is not found in database
+      // Always return success message to prevent account enumeration
+      // Even if email doesn't exist or is an OAuth account
+      const successMessage = "If an account exists with this email, you will receive a password reset link shortly.";
 
       if (!user) {
-
-        return res.status(404).json({ error: "No account found with this email address." });
-
+        // Log for debugging but don't reveal to user
+        console.log(`[Auth] Forgot password requested for non-existent email: ${email}`);
+        return res.json({ success: true, message: successMessage });
       }
 
       // Check if user has a password (OAuth users don't have local passwords)
-
       if (!user.password) {
-
-        return res.status(400).json({ error: "This account uses Google Sign-In. Please log in with Google instead." });
-
+        console.log(`[Auth] Forgot password requested for OAuth-only account: ${email}`);
+        return res.json({ success: true, message: successMessage });
       }
 
       // Generate password reset token
@@ -1070,7 +1135,7 @@ export async function setupAuth(app: Express) {
 
       );
 
-      res.json({ success: true, message: "Password reset link has been sent to your email." });
+      res.json({ success: true, message: successMessage });
 
     } catch (error: any) {
 
@@ -1096,10 +1161,21 @@ export async function setupAuth(app: Express) {
 
       }
 
+      // Password complexity validation
       if (newPassword.length < 8) {
-
         return res.status(400).json({ error: "Password must be at least 8 characters" });
-
+      }
+      if (!/[A-Z]/.test(newPassword)) {
+        return res.status(400).json({ error: "Password must contain at least one uppercase letter" });
+      }
+      if (!/[a-z]/.test(newPassword)) {
+        return res.status(400).json({ error: "Password must contain at least one lowercase letter" });
+      }
+      if (!/[0-9]/.test(newPassword)) {
+        return res.status(400).json({ error: "Password must contain at least one number" });
+      }
+      if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+        return res.status(400).json({ error: "Password must contain at least one special character" });
       }
 
       // Find user by reset token

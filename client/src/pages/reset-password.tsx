@@ -7,16 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../components/ui/form";
 import { Input } from "../components/ui/input";
 import { useToast } from "../hooks/use-toast";
-import { Lock, Eye, EyeOff, CheckCircle, XCircle, ArrowLeft } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle, XCircle, ArrowLeft, Check, X } from "lucide-react";
 import { Link, useSearch } from "wouter";
-
-const resetPasswordSchema = z.object({
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string().min(1, "Please confirm your password"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
+import { resetPasswordSchema, validatePasswordComplexity } from "../../../shared/validation";
 
 type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
@@ -27,6 +20,7 @@ export default function ResetPassword() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [passwordValue, setPasswordValue] = useState("");
   const { toast } = useToast();
   const searchString = useSearch();
 
@@ -184,6 +178,10 @@ export default function ResetPassword() {
                             autoComplete="new-password"
                             data-testid="input-password"
                             {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                              setPasswordValue(e.target.value);
+                            }}
                           />
                           <button
                             type="button"
@@ -198,6 +196,29 @@ export default function ResetPassword() {
                           </button>
                         </div>
                       </FormControl>
+                      {passwordValue && (
+                        <div className="mt-2 space-y-1 text-xs">
+                          <p className="text-muted-foreground font-medium">Password requirements:</p>
+                          {[
+                            { label: "At least 8 characters", met: passwordValue.length >= 8 },
+                            { label: "One uppercase letter", met: /[A-Z]/.test(passwordValue) },
+                            { label: "One lowercase letter", met: /[a-z]/.test(passwordValue) },
+                            { label: "One number", met: /[0-9]/.test(passwordValue) },
+                            { label: "One special character (!@#$%^&*...)", met: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(passwordValue) },
+                          ].map((req) => (
+                            <div key={req.label} className="flex items-center gap-1.5">
+                              {req.met ? (
+                                <Check className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <X className="h-3 w-3 text-muted-foreground" />
+                              )}
+                              <span className={req.met ? "text-green-600" : "text-muted-foreground"}>
+                                {req.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
