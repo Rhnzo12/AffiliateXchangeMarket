@@ -20,6 +20,12 @@ import {
   SidebarFooter,
   useSidebar,
 } from "./ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { Badge } from "./ui/badge";
 import {
   Home,
@@ -47,7 +53,8 @@ import {
 export function AppSidebar() {
   const { user } = useAuth();
   const [location] = useLocation();
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, state } = useSidebar();
+  const isCollapsed = state === "collapsed";
   const currentYear = new Date().getFullYear();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
@@ -276,6 +283,41 @@ export function AppSidebar() {
                 const isOpen = hasChildren ? openMenus[item.title] ?? isActive : false
 
                 if (hasChildren) {
+                  // When collapsed, use dropdown menu for items with children
+                  if (isCollapsed) {
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <SidebarMenuButton
+                              isActive={isActive}
+                              className="hover:bg-transparent hover:text-primary hover:font-bold data-[active=true]:bg-transparent data-[active=true]:text-primary transition-all duration-200"
+                              data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
+                            >
+                              <item.icon className="h-4 w-4" />
+                              <span>{item.title}</span>
+                            </SidebarMenuButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent side="right" align="start" className="min-w-[200px]">
+                            {item.children?.map((child) => (
+                              <DropdownMenuItem key={child.url} asChild>
+                                <Link
+                                  href={child.url}
+                                  onClick={handleNavClick}
+                                  className={location === child.url ? "text-primary font-bold" : ""}
+                                >
+                                  <child.icon className="h-4 w-4 mr-2" />
+                                  <span>{child.title}</span>
+                                </Link>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </SidebarMenuItem>
+                    )
+                  }
+
+                  // When expanded, use inline submenu
                   return (
                     <SidebarMenuItem key={item.title} className="group/item">
                       <SidebarMenuButton
