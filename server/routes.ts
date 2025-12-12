@@ -8784,20 +8784,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!contract || contract.assignedCreatorId !== userId) return res.status(403).send("Forbidden");
       const deliverable = await storage.createRetainerDeliverable({ ...validated, creatorId: userId });
 
-      // Send notification to company user
+      // Send notification to company user about new video upload
       const companyProfile = await storage.getCompanyProfileById(contract.companyId);
       if (companyProfile) {
         const creatorUser = await storage.getUserById(userId);
+        const creatorName = creatorUser?.firstName || creatorUser?.username || 'A creator';
         await notificationService.sendNotification(
           companyProfile.userId,
           'deliverable_submitted',
-          'New Deliverable Submitted for Review',
-          `${creatorUser?.firstName || creatorUser?.username || 'A creator'} submitted a new deliverable for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}).`,
+          'New Video Uploaded for Review',
+          `${creatorName} uploaded a new video for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}). Please review the deliverable.`,
           {
-            userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
+            creatorName,
             contractTitle: contract.title,
             monthNumber: deliverable.monthNumber,
             videoNumber: deliverable.videoNumber,
+            contractId: contract.id,
+            deliverableId: deliverable.id,
             linkUrl: `/company/retainers/${contract.id}`,
           }
         );
@@ -8850,22 +8853,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         reviewNotes: null,
       } as any);
 
-      // Send notification to company user
+      // Send notification to company user about resubmitted video
       const contract = await storage.getRetainerContract(deliverable.contractId);
       if (contract) {
         const companyProfile = await storage.getCompanyProfileById(contract.companyId);
         if (companyProfile) {
           const creatorUser = await storage.getUserById(userId);
+          const creatorName = creatorUser?.firstName || creatorUser?.username || 'A creator';
           await notificationService.sendNotification(
             companyProfile.userId,
             'deliverable_resubmitted',
-            'Deliverable Resubmitted After Revision',
-            `${creatorUser?.firstName || creatorUser?.username || 'A creator'} has resubmitted the deliverable for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}) after making revisions.`,
+            'Video Resubmitted After Revision',
+            `${creatorName} has resubmitted the video for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}) after making requested revisions. Please review the updated deliverable.`,
             {
-              userName: creatorUser?.firstName || creatorUser?.username || 'Creator',
+              creatorName,
               contractTitle: contract.title,
               monthNumber: deliverable.monthNumber,
               videoNumber: deliverable.videoNumber,
+              contractId: contract.id,
+              deliverableId: deliverable.id,
               linkUrl: `/company/retainers/${contract.id}`,
             }
           );
