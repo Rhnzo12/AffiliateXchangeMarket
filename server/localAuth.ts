@@ -1014,19 +1014,19 @@ export async function setupAuth(app: Express) {
 
       const user = await storage.getUserByEmail(email);
 
-      // Don't reveal if email exists or not for security
+      // Return error if email is not found in database
 
       if (!user) {
 
-        return res.json({ success: true, message: "If an account exists with that email, a password reset link has been sent." });
+        return res.status(404).json({ error: "No account found with this email address." });
 
       }
 
-      // Check if user has a password (OAuth users don't)
+      // Check if user has a password (OAuth users don't have local passwords)
 
       if (!user.password) {
 
-        return res.json({ success: true, message: "If an account exists with that email, a password reset link has been sent." });
+        return res.status(400).json({ error: "This account uses Google Sign-In. Please log in with Google instead." });
 
       }
 
@@ -1070,7 +1070,7 @@ export async function setupAuth(app: Express) {
 
       );
 
-      res.json({ success: true, message: "If an account exists with that email, a password reset link has been sent." });
+      res.json({ success: true, message: "Password reset link has been sent to your email." });
 
     } catch (error: any) {
 

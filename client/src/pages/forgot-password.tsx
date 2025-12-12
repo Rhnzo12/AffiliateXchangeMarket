@@ -19,6 +19,7 @@ type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 export default function ForgotPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const form = useForm<ForgotPasswordForm>({
@@ -30,6 +31,7 @@ export default function ForgotPassword() {
 
   const onSubmit = async (data: ForgotPasswordForm) => {
     setIsLoading(true);
+    setError(null);
     try {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
@@ -39,19 +41,21 @@ export default function ForgotPassword() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to send reset email");
+        const errorData = await response.json();
+        setError(errorData.error || "Failed to send reset email");
+        return;
       }
 
       setIsSubmitted(true);
       toast({
         title: "Check your email",
-        description: "If an account exists with that email, you will receive a password reset link.",
+        description: "Password reset link has been sent to your email.",
       });
-    } catch (error: any) {
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
       toast({
         title: "Error",
-        description: error.message || "Something went wrong. Please try again.",
+        description: err.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -69,7 +73,7 @@ export default function ForgotPassword() {
             </CardTitle>
             <CardDescription>
               {isSubmitted
-                ? "We've sent you a password reset link if an account exists with that email."
+                ? "We've sent a password reset link to your email address."
                 : "Enter your email address and we'll send you a link to reset your password."}
             </CardDescription>
           </CardHeader>
@@ -104,6 +108,11 @@ export default function ForgotPassword() {
             ) : (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  {error && (
+                    <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                      {error}
+                    </div>
+                  )}
                   <FormField
                     control={form.control}
                     name="email"
