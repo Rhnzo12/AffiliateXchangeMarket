@@ -4673,7 +4673,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         companySpend.set(offer.companyId, existing);
       }
 
-      for (const payment of filteredPayments) {
+      // Add affiliate payment spend
+      for (const payment of filteredAffiliatePayments) {
+        if (!payment.companyId) continue;
+        const existing = companySpend.get(payment.companyId) || { spend: 0, offers: 0, creators: 0 };
+        existing.spend += Number(payment.grossAmount || 0);
+        companySpend.set(payment.companyId, existing);
+      }
+
+      // Add retainer payment spend
+      for (const payment of filteredRetainerPayments) {
         if (!payment.companyId) continue;
         const existing = companySpend.get(payment.companyId) || { spend: 0, offers: 0, creators: 0 };
         existing.spend += Number(payment.grossAmount || 0);
