@@ -10,9 +10,10 @@ declare module 'jspdf' {
   }
 }
 
-// PDF Document Styles
+// PDF Document Styles - Using app theme colors
+// Primary color: HSL(183, 57%, 41%) = RGB(45, 158, 164) - Teal
 const COLORS = {
-  primary: [37, 99, 235] as [number, number, number], // Blue
+  primary: [45, 158, 164] as [number, number, number], // Teal (matches app theme)
   secondary: [107, 114, 128] as [number, number, number], // Gray
   success: [16, 185, 129] as [number, number, number], // Green
   warning: [245, 158, 11] as [number, number, number], // Yellow
