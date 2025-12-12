@@ -137,6 +137,7 @@ interface NotificationData {
   // Deliverable fields
   monthNumber?: number;
   videoNumber?: number;
+  creatorName?: string;
 }
 
 export class NotificationService {

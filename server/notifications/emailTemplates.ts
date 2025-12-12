@@ -31,6 +31,7 @@ interface EmailTemplateData {
   videoNumber?: number;
   reason?: string;
   revisionInstructions?: string;
+  creatorName?: string;
 }
 
 const baseStyles = `
@@ -1145,7 +1146,7 @@ export function highRiskCompanyEmail(data: EmailTemplateData): { subject: string
 }
 
 export function deliverableSubmittedEmail(data: EmailTemplateData): { subject: string; html: string } {
-  const subject = `New Deliverable Submitted for Review`;
+  const subject = `New Video Uploaded for Review - ${data.contractTitle}`;
 
   const html = `
     <!DOCTYPE html>
@@ -1156,20 +1157,21 @@ export function deliverableSubmittedEmail(data: EmailTemplateData): { subject: s
     <body>
       <div class="container">
         <div class="header" style="background-color: #3B82F6;">
-          <h1>📹 New Deliverable Submitted</h1>
+          <h1>📹 New Video Uploaded</h1>
         </div>
         <div class="content">
           <p>Hi ${data.userName},</p>
-          <p>${data.companyName || 'A creator'} has submitted a new deliverable for your retainer contract.</p>
+          <p><strong>${data.creatorName || 'A creator'}</strong> has uploaded a new video for your retainer contract.</p>
 
           <div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; margin: 20px 0; border-radius: 4px;">
             <h3 style="margin: 0 0 10px 0; color: #1E40AF;">Contract: ${data.contractTitle}</h3>
             <p style="margin: 0; color: #1E3A8A;"><strong>Month ${data.monthNumber}, Video #${data.videoNumber}</strong></p>
+            <p style="margin: 10px 0 0 0; color: #3B82F6;">Submitted by: ${data.creatorName || 'Creator'}</p>
           </div>
 
-          <p>Please review the submitted deliverable and either approve it, request revisions, or reject it.</p>
+          <p>Please review the submitted video and either approve it, request revisions, or reject it.</p>
 
-          <a href="${data.linkUrl || toAbsoluteUrl('/company/retainers')}" class="button" style="background-color: #3B82F6;">Review Deliverable</a>
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/retainers')}" class="button" style="background-color: #3B82F6;">Review Video Now</a>
         </div>
         <div class="footer">
           <p>This is an automated notification from Affiliate Marketplace.</p>
@@ -1184,7 +1186,7 @@ export function deliverableSubmittedEmail(data: EmailTemplateData): { subject: s
 }
 
 export function deliverableResubmittedEmail(data: EmailTemplateData): { subject: string; html: string } {
-  const subject = `Deliverable Resubmitted After Revision`;
+  const subject = `Video Resubmitted After Revision - ${data.contractTitle}`;
 
   const html = `
     <!DOCTYPE html>
@@ -1195,20 +1197,21 @@ export function deliverableResubmittedEmail(data: EmailTemplateData): { subject:
     <body>
       <div class="container">
         <div class="header" style="background-color: #8B5CF6;">
-          <h1>🔄 Deliverable Resubmitted</h1>
+          <h1>🔄 Video Resubmitted</h1>
         </div>
         <div class="content">
           <p>Hi ${data.userName},</p>
-          <p>${data.companyName || 'A creator'} has resubmitted their deliverable after making the requested revisions.</p>
+          <p><strong>${data.creatorName || 'A creator'}</strong> has resubmitted their video after making the requested revisions.</p>
 
           <div style="background-color: #F5F3FF; border-left: 4px solid #8B5CF6; padding: 20px; margin: 20px 0; border-radius: 4px;">
             <h3 style="margin: 0 0 10px 0; color: #6D28D9;">Contract: ${data.contractTitle}</h3>
             <p style="margin: 0; color: #5B21B6;"><strong>Month ${data.monthNumber}, Video #${data.videoNumber}</strong></p>
+            <p style="margin: 10px 0 0 0; color: #8B5CF6;">Resubmitted by: ${data.creatorName || 'Creator'}</p>
           </div>
 
-          <p>Please review the updated deliverable to ensure the revisions meet your requirements.</p>
+          <p>Please review the updated video to ensure the revisions meet your requirements.</p>
 
-          <a href="${data.linkUrl || toAbsoluteUrl('/company/retainers')}" class="button" style="background-color: #8B5CF6;">Review Updated Deliverable</a>
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/retainers')}" class="button" style="background-color: #8B5CF6;">Review Updated Video</a>
         </div>
         <div class="footer">
           <p>This is an automated notification from Affiliate Marketplace.</p>
