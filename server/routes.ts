@@ -8560,10 +8560,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      // Convert map back to array
+      // Convert map back to array and add submitted video counts
       const allContracts = Array.from(contractMap.values());
 
-      res.json(allContracts);
+      // Add submittedVideos count to each contract
+      const contractsWithCounts = await Promise.all(
+        allContracts.map(async (contract) => {
+          const submittedVideos = await storage.getRetainerDeliverableCountByContract(contract.id);
+          return {
+            ...contract,
+            submittedVideos,
+          };
+        })
+      );
+
+      res.json(contractsWithCounts);
     } catch (error: any) {
       res.status(500).send(error.message);
     }

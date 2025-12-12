@@ -779,6 +779,7 @@ export interface IStorage {
   getRetainerDeliverablesByContract(contractId: string): Promise<any[]>;
   getRetainerDeliverablesByCreator(creatorId: string): Promise<any[]>;
   getRetainerDeliverablesForMonth(contractId: string, monthNumber: number): Promise<any[]>;
+  getRetainerDeliverableCountByContract(contractId: string): Promise<number>;
   createRetainerDeliverable(deliverable: any): Promise<any>;
   updateRetainerDeliverable(id: string, updates: any): Promise<any>;
   approveRetainerDeliverable(id: string, reviewNotes?: string): Promise<any>;
@@ -4533,6 +4534,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(retainerDeliverables.contractId, contractId))
       .orderBy(desc(retainerDeliverables.submittedAt));
     return results;
+  }
+
+  async getRetainerDeliverableCountByContract(contractId: string): Promise<number> {
+    const results = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(retainerDeliverables)
+      .where(eq(retainerDeliverables.contractId, contractId));
+    return results[0]?.count || 0;
   }
 
   async getRetainerDeliverablesByCreator(creatorId: string): Promise<any[]> {
