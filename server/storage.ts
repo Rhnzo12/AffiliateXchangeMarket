@@ -758,6 +758,7 @@ export interface IStorage {
   getRetainerContracts(filters?: any): Promise<any[]>;
   getRetainerContractsByCompany(companyId: string): Promise<any[]>;
   getRetainerContractsByCreator(creatorId: string): Promise<any[]>;
+  getContractsWithApprovedApplicationsByCreator(creatorId: string): Promise<any[]>;
   getOpenRetainerContracts(): Promise<any[]>;
   getActiveRetainerCreatorsCount(contractId: string): Promise<number>;
   createRetainerContract(contract: any): Promise<any>;
@@ -4293,6 +4294,41 @@ export class DatabaseStorage implements IStorage {
       if (isMissingRelationError(error, "retainer_contracts")) {
         console.warn(
           "[Storage] retainer_contracts relation missing while fetching creator retainer contracts - returning empty array.",
+        );
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  async getContractsWithApprovedApplicationsByCreator(creatorId: string): Promise<any[]> {
+    try {
+      const results = await db
+        .select()
+        .from(retainerContracts)
+        .innerJoin(retainerApplications, eq(retainerContracts.id, retainerApplications.contractId))
+        .leftJoin(companyProfiles, eq(retainerContracts.companyId, companyProfiles.id))
+        .leftJoin(users, eq(companyProfiles.userId, users.id))
+        .where(
+          and(
+            eq(retainerApplications.creatorId, creatorId),
+            eq(retainerApplications.status, "approved")
+          )
+        )
+        .orderBy(desc(retainerContracts.createdAt));
+
+      return Promise.all(
+        results.map(async (r: any) => ({
+          ...r.retainer_contracts,
+          company: r.company_profiles,
+          companyUser: r.users,
+          activeCreators: await this.getActiveRetainerCreatorsCount(r.retainer_contracts.id),
+        }))
+      );
+    } catch (error) {
+      if (isMissingRelationError(error, "retainer_contracts")) {
+        console.warn(
+          "[Storage] retainer_contracts relation missing while fetching contracts with approved applications - returning empty array.",
         );
         return [];
       }
