@@ -13,8 +13,10 @@ import {
   DollarSign,
   TrendingUp,
   Building,
-  FileText
+  FileText,
+  User
 } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
 
 interface Payment {
   id: string;
@@ -102,12 +104,16 @@ function isDisputedPayment(payment: Payment): boolean {
 export default function PaymentDetail() {
   const [, params] = useRoute("/payments/:id");
   const id = params?.id as string | undefined;
+  const { user } = useAuth();
 
   const { data: payment, isLoading, error } = useQuery<Payment | null>({
     queryKey: ["/api/payments", id],
     queryFn: () => fetchPaymentById(id),
     enabled: !!id,
   });
+
+  // Determine if viewer is a company (payer) or creator (receiver)
+  const isCompanyViewer = user?.role === 'company';
 
   if (isLoading) {
     return (
@@ -184,8 +190,9 @@ export default function PaymentDetail() {
             <div>
               <h3 className="font-semibold text-orange-900">Payment Disputed</h3>
               <p className="text-sm text-orange-800 mt-1">
-                This payment has been disputed by the company and is currently under review by admin.
-                The disputed amount is not included in your total earnings until resolved.
+                {isCompanyViewer
+                  ? "You have disputed this payment. It is currently under review by admin."
+                  : "This payment has been disputed by the company and is currently under review by admin. The disputed amount is not included in your total earnings until resolved."}
               </p>
               {payment.description && (
                 <p className="text-sm text-orange-700 mt-2">
@@ -212,13 +219,17 @@ export default function PaymentDetail() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-green-700 font-medium mb-1">
-                    Amount You Received
+                    {isCompanyViewer ? "Amount Creator Receives" : "Amount You Received"}
                   </p>
                   <p className="text-4xl font-bold text-green-900">
                     ${netAmount.toFixed(2)}
                   </p>
                 </div>
-                <CheckCircle className="h-12 w-12 text-green-500" />
+                {isCompanyViewer ? (
+                  <User className="h-12 w-12 text-green-500" />
+                ) : (
+                  <CheckCircle className="h-12 w-12 text-green-500" />
+                )}
               </div>
             </div>
 
@@ -247,7 +258,7 @@ export default function PaymentDetail() {
             {/* Fee Calculation */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-900 font-medium mb-2">
-                \u1F4A1 How fees are calculated
+                💡 How fees are calculated
               </p>
               <div className="text-sm text-blue-800 space-y-1">
                 <div className="flex justify-between">
@@ -263,7 +274,7 @@ export default function PaymentDetail() {
                   <span className="font-medium">-${processingFee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between pt-2 border-t border-blue-300">
-                  <span className="font-bold">You receive:</span>
+                  <span className="font-bold">{isCompanyViewer ? "Creator receives:" : "You receive:"}</span>
                   <span className="font-bold">${netAmount.toFixed(2)}</span>
                 </div>
               </div>
@@ -363,7 +374,9 @@ export default function PaymentDetail() {
               <div>
                 <p className="font-semibold text-yellow-900">Payment Pending Approval</p>
                 <p className="text-sm text-yellow-800 mt-1">
-                  The company is reviewing this payment. You'll receive a notification once it's approved and processed.
+                  {isCompanyViewer
+                    ? "This payment is pending your approval. Review and approve to process the payment to the creator."
+                    : "The company is reviewing this payment. You'll receive a notification once it's approved and processed."}
                 </p>
               </div>
             </div>
@@ -379,7 +392,9 @@ export default function PaymentDetail() {
               <div>
                 <p className="font-semibold text-blue-900">Payment Processing</p>
                 <p className="text-sm text-blue-800 mt-1">
-                  Your payment is being processed and will be sent to your payment method shortly.
+                  {isCompanyViewer
+                    ? "This payment is being processed and will be sent to the creator shortly."
+                    : "Your payment is being processed and will be sent to your payment method shortly."}
                 </p>
               </div>
             </div>
@@ -395,8 +410,10 @@ export default function PaymentDetail() {
               <div>
                 <p className="font-semibold text-green-900">Payment Completed</p>
                 <p className="text-sm text-green-800 mt-1">
-                  This payment has been successfully sent to your payment method on{" "}
-                  {payment.completedAt && format(new Date(payment.completedAt), "PPP")}.
+                  {isCompanyViewer
+                    ? `This payment has been successfully sent to the creator on ${payment.completedAt ? format(new Date(payment.completedAt), "PPP") : ""}.`
+                    : <>This payment has been successfully sent to your payment method on{" "}
+                      {payment.completedAt && format(new Date(payment.completedAt), "PPP")}.</>}
                 </p>
               </div>
             </div>
