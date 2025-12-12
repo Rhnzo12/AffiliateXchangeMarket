@@ -8,7 +8,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./localAuth";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { db } from "./db";
-import { offerVideos, applications, analytics, offers, companyProfiles, payments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
+import { offerVideos, applications, analytics, offers, companyProfiles, payments, retainerPayments, conversations, messages, bannedKeywords, contentFlags } from "../shared/schema";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { checkClickFraud, logFraudDetection } from "./fraudDetection";
@@ -4428,40 +4428,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user.createdAt && new Date(user.createdAt) >= oneWeekAgo
       ).length;
 
-      // Get all payments for financial data
-      const allPayments = await db
+      // Get all affiliate payments (from offers/commissions)
+      const allAffiliatePayments = await db
         .select()
         .from(payments);
 
-      const filteredPayments = allPayments.filter(p =>
+      const filteredAffiliatePayments = allAffiliatePayments.filter(p =>
         !p.initiatedAt || new Date(p.initiatedAt) >= startDate
       );
 
-      // Calculate financial metrics
-      let totalPayouts = 0;
-      let pendingPayouts = 0;
-      let completedPayouts = 0;
-      let disputedPaymentsAmt = 0;
-      let platformFees = 0;
-      let processingFees = 0;
+      // Get all retainer payments (from contracts/deliverables)
+      const allRetainerPayments = await db
+        .select()
+        .from(retainerPayments);
 
-      for (const payment of filteredPayments) {
+      const filteredRetainerPayments = allRetainerPayments.filter(p =>
+        !p.initiatedAt || new Date(p.initiatedAt) >= startDate
+      );
+
+      // Calculate financial metrics - Affiliate payments
+      let affiliatePayouts = 0;
+      let affiliatePendingPayouts = 0;
+      let affiliateCompletedPayouts = 0;
+      let affiliateDisputedPayouts = 0;
+      let affiliatePlatformFees = 0;
+      let affiliateProcessingFees = 0;
+
+      for (const payment of filteredAffiliatePayments) {
         const platform = Number(payment.platformFeeAmount || 0);
         const processing = Number(payment.stripeFeeAmount || 0);
         const net = Number(payment.netAmount || 0);
 
-        totalPayouts += net;
-        platformFees += platform;
-        processingFees += processing;
+        affiliatePayouts += net;
+        affiliatePlatformFees += platform;
+        affiliateProcessingFees += processing;
 
         if (payment.status === 'pending' || payment.status === 'processing') {
-          pendingPayouts += net;
+          affiliatePendingPayouts += net;
         } else if (payment.status === 'completed') {
-          completedPayouts += net;
+          affiliateCompletedPayouts += net;
         } else if (payment.status === 'failed') {
-          disputedPaymentsAmt += net;
+          affiliateDisputedPayouts += net;
         }
       }
+
+      // Calculate financial metrics - Retainer payments
+      let retainerPayouts = 0;
+      let retainerPendingPayouts = 0;
+      let retainerCompletedPayouts = 0;
+      let retainerDisputedPayouts = 0;
+      let retainerPlatformFees = 0;
+      let retainerProcessingFees = 0;
+
+      for (const payment of filteredRetainerPayments) {
+        const platform = Number(payment.platformFeeAmount || 0);
+        const processing = Number(payment.processingFeeAmount || 0);
+        const net = Number(payment.netAmount || 0);
+
+        retainerPayouts += net;
+        retainerPlatformFees += platform;
+        retainerProcessingFees += processing;
+
+        if (payment.status === 'pending' || payment.status === 'processing') {
+          retainerPendingPayouts += net;
+        } else if (payment.status === 'completed') {
+          retainerCompletedPayouts += net;
+        } else if (payment.status === 'failed') {
+          retainerDisputedPayouts += net;
+        }
+      }
+
+      // Combined totals
+      const totalPayouts = affiliatePayouts + retainerPayouts;
+      const pendingPayouts = affiliatePendingPayouts + retainerPendingPayouts;
+      const completedPayouts = affiliateCompletedPayouts + retainerCompletedPayouts;
+      const disputedPaymentsAmt = affiliateDisputedPayouts + retainerDisputedPayouts;
+      const platformFees = affiliatePlatformFees + retainerPlatformFees;
+      const processingFees = affiliateProcessingFees + retainerProcessingFees;
 
       // Get offers for listing fees
       const allOffers = await storage.getOffers({});
@@ -4472,13 +4515,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const totalRevenue = listingFees + platformFees + processingFees;
 
-      // Calculate growth (compare to previous period)
+      // Calculate growth (compare to previous period) - include both affiliate and retainer
       const previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()));
-      const previousPayments = allPayments.filter(p =>
+      const previousAffiliatePayments = allAffiliatePayments.filter(p =>
         p.initiatedAt && new Date(p.initiatedAt) >= previousStartDate && new Date(p.initiatedAt) < startDate
       );
-      const previousRevenue = previousPayments.reduce((sum, p) =>
+      const previousRetainerPaymentsFiltered = allRetainerPayments.filter(p =>
+        p.initiatedAt && new Date(p.initiatedAt) >= previousStartDate && new Date(p.initiatedAt) < startDate
+      );
+      const previousAffiliateRevenue = previousAffiliatePayments.reduce((sum, p) =>
         sum + Number(p.platformFeeAmount || 0) + Number(p.stripeFeeAmount || 0), 0);
+      const previousRetainerRevenue = previousRetainerPaymentsFiltered.reduce((sum, p) =>
+        sum + Number(p.platformFeeAmount || 0) + Number(p.processingFeeAmount || 0), 0);
+      const previousRevenue = previousAffiliateRevenue + previousRetainerRevenue;
       const revenueGrowth = previousRevenue > 0
         ? ((totalRevenue - previousRevenue) / previousRevenue) * 100
         : 0;
@@ -4517,23 +4566,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
 
-      // Calculate revenue by period (group by week/day)
-      const revenueByPeriod: Array<{ period: string; listingFees: number; platformFees: number; processingFees: number; total: number }> = [];
-      const periodMap = new Map<string, { listingFees: number; platformFees: number; processingFees: number }>();
+      // Calculate revenue by period (group by week/day) - include both affiliate and retainer
+      const revenueByPeriod: Array<{ period: string; listingFees: number; platformFees: number; processingFees: number; affiliateFees: number; retainerFees: number; total: number }> = [];
+      const periodMap = new Map<string, { listingFees: number; platformFees: number; processingFees: number; affiliateFees: number; retainerFees: number }>();
 
-      for (const payment of filteredPayments) {
+      // Add affiliate payments to period map
+      for (const payment of filteredAffiliatePayments) {
         const date = payment.initiatedAt ? new Date(payment.initiatedAt) : new Date();
         const periodKey = date.toISOString().split('T')[0];
-        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0 };
+        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0, affiliateFees: 0, retainerFees: 0 };
+        const fees = Number(payment.platformFeeAmount || 0) + Number(payment.stripeFeeAmount || 0);
         existing.platformFees += Number(payment.platformFeeAmount || 0);
         existing.processingFees += Number(payment.stripeFeeAmount || 0);
+        existing.affiliateFees += fees;
+        periodMap.set(periodKey, existing);
+      }
+
+      // Add retainer payments to period map
+      for (const payment of filteredRetainerPayments) {
+        const date = payment.initiatedAt ? new Date(payment.initiatedAt) : new Date();
+        const periodKey = date.toISOString().split('T')[0];
+        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0, affiliateFees: 0, retainerFees: 0 };
+        const fees = Number(payment.platformFeeAmount || 0) + Number(payment.processingFeeAmount || 0);
+        existing.platformFees += Number(payment.platformFeeAmount || 0);
+        existing.processingFees += Number(payment.processingFeeAmount || 0);
+        existing.retainerFees += fees;
         periodMap.set(periodKey, existing);
       }
 
       for (const offer of filteredOffers) {
         const date = offer.createdAt ? new Date(offer.createdAt) : new Date();
         const periodKey = date.toISOString().split('T')[0];
-        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0 };
+        const existing = periodMap.get(periodKey) || { listingFees: 0, platformFees: 0, processingFees: 0, affiliateFees: 0, retainerFees: 0 };
         existing.listingFees += Number(offer.listingFee || 0);
         periodMap.set(periodKey, existing);
       }
@@ -4545,6 +4609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           listingFees: data.listingFees,
           platformFees: data.platformFees,
           processingFees: data.processingFees,
+          affiliateFees: data.affiliateFees,
+          retainerFees: data.retainerFees,
           total: data.listingFees + data.platformFees + data.processingFees,
         });
       }
@@ -4651,12 +4717,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get suspended users (those without active status)
       const suspendedUsersCount = allUsers.filter((u: any) => u.isSuspended).length;
 
+      // Calculate total fees by type for revenue breakdown
+      const totalAffiliateFees = affiliatePlatformFees + affiliateProcessingFees;
+      const totalRetainerFees = retainerPlatformFees + retainerProcessingFees;
+
       const response = {
         financial: {
           totalRevenue,
           listingFees,
           platformFees,
           processingFees,
+          // Affiliate breakdown
+          affiliatePlatformFees,
+          affiliateProcessingFees,
+          affiliatePayouts,
+          affiliatePendingPayouts,
+          affiliateCompletedPayouts,
+          // Retainer breakdown
+          retainerPlatformFees,
+          retainerProcessingFees,
+          retainerPayouts,
+          retainerPendingPayouts,
+          retainerCompletedPayouts,
+          // Combined totals
           totalPayouts,
           pendingPayouts,
           completedPayouts,
@@ -4666,10 +4749,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           revenueByPeriod,
           payoutsByPeriod: [],
           revenueBySource: [
-            { source: 'Listing Fees', amount: listingFees },
-            { source: 'Platform Fees (4%)', amount: platformFees },
-            { source: 'Processing Fees (3%)', amount: processingFees },
+            { source: 'Listing Fees', amount: listingFees, type: 'listing' },
+            { source: 'Affiliate Fees', amount: totalAffiliateFees, type: 'affiliate' },
+            { source: 'Retainer Fees', amount: totalRetainerFees, type: 'retainer' },
           ].filter(s => s.amount > 0),
+          // Transaction counts
+          affiliateTransactionCount: filteredAffiliatePayments.length,
+          retainerTransactionCount: filteredRetainerPayments.length,
+          totalTransactionCount: filteredAffiliatePayments.length + filteredRetainerPayments.length,
         },
         users: {
           totalUsers: allUsers.length,

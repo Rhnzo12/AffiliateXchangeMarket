@@ -91,6 +91,19 @@ type AdminAnalytics = {
     listingFees: number;
     platformFees: number;
     processingFees: number;
+    // Affiliate breakdown
+    affiliatePlatformFees: number;
+    affiliateProcessingFees: number;
+    affiliatePayouts: number;
+    affiliatePendingPayouts: number;
+    affiliateCompletedPayouts: number;
+    // Retainer breakdown
+    retainerPlatformFees: number;
+    retainerProcessingFees: number;
+    retainerPayouts: number;
+    retainerPendingPayouts: number;
+    retainerCompletedPayouts: number;
+    // Combined totals
     totalPayouts: number;
     pendingPayouts: number;
     completedPayouts: number;
@@ -102,6 +115,8 @@ type AdminAnalytics = {
       listingFees: number;
       platformFees: number;
       processingFees: number;
+      affiliateFees: number;
+      retainerFees: number;
       total: number;
     }>;
     payoutsByPeriod: Array<{
@@ -112,7 +127,12 @@ type AdminAnalytics = {
     revenueBySource: Array<{
       source: string;
       amount: number;
+      type: string;
     }>;
+    // Transaction counts
+    affiliateTransactionCount: number;
+    retainerTransactionCount: number;
+    totalTransactionCount: number;
   };
   users: {
     totalUsers: number;
@@ -744,29 +764,33 @@ export default function AdminAnalytics() {
                 </CardContent>
               </Card>
 
-              <Card className="border-card-border">
+              <Card className="border-card-border bg-blue-50/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Platform Fees</CardTitle>
-                  <PieChart className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Affiliate Fees</CardTitle>
+                  <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">Offers</Badge>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-mono">
-                    ${(analytics?.financial?.platformFees || 0).toFixed(2)}
+                  <div className="text-2xl font-bold font-mono text-blue-600">
+                    ${((analytics?.financial?.affiliatePlatformFees || 0) + (analytics?.financial?.affiliateProcessingFees || 0)).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{platformFeeDisplay} commission on payouts</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {analytics?.financial?.affiliateTransactionCount || 0} transactions
+                  </p>
                 </CardContent>
               </Card>
 
-              <Card className="border-card-border">
+              <Card className="border-card-border bg-purple-50/50">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Processing Fees</CardTitle>
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Retainer Fees</CardTitle>
+                  <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-200">Contracts</Badge>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold font-mono">
-                    ${(analytics?.financial?.processingFees || 0).toFixed(2)}
+                  <div className="text-2xl font-bold font-mono text-purple-600">
+                    ${((analytics?.financial?.retainerPlatformFees || 0) + (analytics?.financial?.retainerProcessingFees || 0)).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{stripeFeeDisplay} payment processing</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {analytics?.financial?.retainerTransactionCount || 0} transactions
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -782,7 +806,14 @@ export default function AdminAnalytics() {
                   <div className="text-2xl font-bold font-mono">
                     ${(analytics?.financial?.totalPayouts || 0).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">To creators</p>
+                  <div className="flex gap-2 mt-2 text-xs">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                      Affiliate: ${(analytics?.financial?.affiliatePayouts || 0).toFixed(2)}
+                    </span>
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                      Retainer: ${(analytics?.financial?.retainerPayouts || 0).toFixed(2)}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -795,7 +826,14 @@ export default function AdminAnalytics() {
                   <div className="text-2xl font-bold font-mono text-yellow-600">
                     ${(analytics?.financial?.pendingPayouts || 0).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Awaiting approval</p>
+                  <div className="flex gap-2 mt-2 text-xs">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                      Affiliate: ${(analytics?.financial?.affiliatePendingPayouts || 0).toFixed(2)}
+                    </span>
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                      Retainer: ${(analytics?.financial?.retainerPendingPayouts || 0).toFixed(2)}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -807,7 +845,14 @@ export default function AdminAnalytics() {
                   <div className="text-2xl font-bold font-mono text-green-600">
                     ${(analytics?.financial?.completedPayouts || 0).toFixed(2)}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Successfully processed</p>
+                  <div className="flex gap-2 mt-2 text-xs">
+                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                      Affiliate: ${(analytics?.financial?.affiliateCompletedPayouts || 0).toFixed(2)}
+                    </span>
+                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded">
+                      Retainer: ${(analytics?.financial?.retainerCompletedPayouts || 0).toFixed(2)}
+                    </span>
+                  </div>
                 </CardContent>
               </Card>
 
