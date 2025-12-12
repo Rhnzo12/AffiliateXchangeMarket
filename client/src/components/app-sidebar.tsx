@@ -47,7 +47,7 @@ import {
 export function AppSidebar() {
   const { user } = useAuth();
   const [location] = useLocation();
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, state } = useSidebar();
   const currentYear = new Date().getFullYear();
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
 
@@ -288,7 +288,7 @@ export function AppSidebar() {
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </SidebarMenuButton>
-                      <SidebarMenuSub className={isOpen ? "flex" : "hidden"}>
+                      <SidebarMenuSub className={isOpen && state === "expanded" ? "flex" : "hidden"}>
                         {item.children?.map((child) => (
                           <SidebarMenuSubItem key={child.url}>
                             <SidebarMenuSubButton
