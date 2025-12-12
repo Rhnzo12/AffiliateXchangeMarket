@@ -77,6 +77,8 @@ import SelectRole from "./pages/select-role";
 import PrivacyPolicy from "./pages/privacy-policy";
 import TermsOfService from "./pages/terms-of-service";
 import OAuthCallback from "./pages/oauth-callback";
+import ForgotPassword from "./pages/forgot-password";
+import ResetPassword from "./pages/reset-password";
 import { HeaderContentProvider, useHeaderContent } from "./components/HeaderContentContext";
 import { CompanyTourProvider } from "./contexts/CompanyTourContext";
 import { CompanyTour } from "./components/CompanyTour";
@@ -91,6 +93,8 @@ function PublicRouter() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/select-role" component={SelectRole} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/oauth-callback" component={OAuthCallback} />
@@ -467,7 +471,7 @@ function Router() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   // Define public routes
-  const publicRoutes = ['/login', '/register', '/select-role', '/privacy-policy', '/terms-of-service'];
+  const publicRoutes = ['/login', '/register', '/select-role', '/forgot-password', '/reset-password', '/privacy-policy', '/terms-of-service'];
   const isPublicRoute = publicRoutes.includes(location);
 
   // While loading, show a loading state
