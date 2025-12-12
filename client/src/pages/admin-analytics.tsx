@@ -306,7 +306,7 @@ export default function AdminAnalytics() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [dateRange, setDateRange] = useState("30d");
+  const [dateRange, setDateRange] = useState("all");
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
