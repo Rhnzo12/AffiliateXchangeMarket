@@ -318,14 +318,14 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 sticky right-0 bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {payments.map((payment) => (
-                  <tr key={payment.id} className="transition hover:bg-gray-50">
+                  <tr key={payment.id} className="transition hover:bg-gray-50 group">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {payment.id.slice(0, 8)}...
                     </td>
@@ -352,7 +352,7 @@ function CreatorOverview({ payments }: { payments: CreatorPayment[] }) {
                         ? new Date(payment.completedAt).toLocaleDateString()
                         : new Date(payment.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
+                    <td className="whitespace-nowrap px-6 py-4 sticky right-0 bg-white group-hover:bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                       <Link href={`/payments/${payment.id}`}>
                         <Button variant="outline" size="sm" className="gap-2">
                           <Eye className="h-4 w-4" />
@@ -1101,14 +1101,14 @@ function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 sticky right-0 bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredPayouts.map((payout) => (
-                  <tr key={payout.id} className="transition hover:bg-gray-50">
+                  <tr key={payout.id} className="transition hover:bg-gray-50 group">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       {payout.id.slice(0, 8)}...
                     </td>
@@ -1129,7 +1129,7 @@ function CompanyOverview({ payouts }: { payouts: CreatorPayment[] }) {
                         ? new Date(payout.completedAt).toLocaleDateString()
                         : new Date(payout.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
+                    <td className="whitespace-nowrap px-6 py-4 sticky right-0 bg-white group-hover:bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                       <Link href={`/payments/${payout.id}`}>
                         <Button variant="outline" size="sm" className="gap-2">
                           <Eye className="h-4 w-4" />
@@ -1527,14 +1527,14 @@ function AdminPaymentDashboard({
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 sticky right-0 bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {filteredPayments.map((payment) => (
-                  <tr key={payment.id} className="transition hover:bg-gray-50 cursor-pointer">
+                  <tr key={payment.id} className="transition hover:bg-gray-50 cursor-pointer group">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
                       <Link href={`/payments/${payment.id}`} className="block hover:text-primary">
                         {payment.id.slice(0, 8)}...
@@ -1572,7 +1572,7 @@ function AdminPaymentDashboard({
                           : new Date(payment.createdAt).toLocaleDateString()}
                       </Link>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm sticky right-0 bg-white group-hover:bg-gray-50 shadow-[-4px_0_6px_-4px_rgba(0,0,0,0.1)]" onClick={(e) => e.stopPropagation()}>
                       {payment.status === 'pending' && (
                         <Button
                           size="sm"
