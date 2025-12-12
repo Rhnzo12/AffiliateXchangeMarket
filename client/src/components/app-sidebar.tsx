@@ -290,7 +290,7 @@ export function AppSidebar() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
-                              className={`flex w-8 h-8 items-center justify-center rounded-md p-2 transition-all duration-200 hover:text-primary ${isActive ? "text-primary" : ""}`}
+                              className={`flex w-8 h-8 items-center justify-center rounded-md p-2 transition-all duration-200 hover:text-primary hover:font-bold ${isActive ? "text-primary font-bold" : ""}`}
                               data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                             >
                               <item.icon className="h-4 w-4" />
