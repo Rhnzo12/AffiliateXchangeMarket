@@ -912,13 +912,9 @@ export default function CreatorRetainers() {
                                 )}
                               </div>
                             </div>
-                            <div
-                              className="group/btn flex items-center gap-2 px-4 py-2 rounded-md border border-input bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium shrink-0 text-sm"
-                              data-testid={`button-view-retainer-${contract.id}`}
-                            >
-                              <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform duration-200" />
-                              View Details
-                            </div>
+                            <Badge variant="outline" className="shrink-0">
+                              {contract.requiredPlatform}
+                            </Badge>
                           </div>
                         <p className="text-muted-foreground line-clamp-2 leading-relaxed">
                           {contract.description}
