@@ -939,35 +939,32 @@ export default function CompanyRetainers() {
       ) : (
         <div className="grid gap-6">
           {filteredContracts.map((contract: any) => (
-            <Card
+            <Link
               key={contract.id}
-              className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-card-border cursor-pointer ring-2 ring-primary/30 hover:ring-primary/50 hover:shadow-primary/20"
-              data-testid={`retainer-card-${contract.id}`}
+              href={`/company/retainers/${contract.id}`}
+              className="block"
             >
-              <CardHeader className="pb-4">
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <CardTitle className="text-xl" data-testid={`text-retainer-title-${contract.id}`}>
-                          {contract.title}
-                        </CardTitle>
-                        <Badge variant={getStatusBadgeVariant(contract.status)}>
-                          {contract.status.replace("_", " ")}
-                        </Badge>
+              <Card
+                className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-card-border cursor-pointer ring-2 ring-primary/30 hover:ring-primary/50 hover:shadow-primary/20"
+                data-testid={`retainer-card-${contract.id}`}
+              >
+                <CardHeader className="pb-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <CardTitle className="text-xl" data-testid={`text-retainer-title-${contract.id}`}>
+                            {contract.title}
+                          </CardTitle>
+                          <Badge variant={getStatusBadgeVariant(contract.status)}>
+                            {contract.status.replace("_", " ")}
+                          </Badge>
+                        </div>
                       </div>
+                      <Badge variant="outline" className="shrink-0">
+                        {contract.requiredPlatform}
+                      </Badge>
                     </div>
-                    <Link href={`/company/retainers/${contract.id}`}>
-                      <Button
-                        variant="outline"
-                        className="group/btn hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium shrink-0"
-                        data-testid={`button-view-retainer-${contract.id}`}
-                      >
-                        <Eye className="h-4 w-4 mr-2 group-hover/btn:scale-110 transition-transform duration-200" />
-                        View Details
-                      </Button>
-                    </Link>
-                  </div>
                   <p className="text-muted-foreground line-clamp-2 leading-relaxed">
                     {contract.description}
                   </p>
@@ -1065,6 +1062,7 @@ export default function CompanyRetainers() {
                 )}
               </CardContent>
             </Card>
+            </Link>
           ))}
         </div>
       )}
