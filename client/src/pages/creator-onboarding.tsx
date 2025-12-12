@@ -563,7 +563,7 @@ export default function CreatorOnboarding() {
             <Alert className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'}>
               <Video className={`h-5 w-5 ${!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-600' : 'text-blue-600'}`} />
               <AlertTitle className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-900 dark:text-red-300' : 'text-blue-900 dark:text-blue-300'}>
-                {!youtubeUrl && !tiktokUrl && !instagramUrl ? '\u26A0\uFE0F Video Platform Required' : '\u2713 Video Platform Added'}
+                {!youtubeUrl && !tiktokUrl && !instagramUrl ? '⚠️ Video Platform Required' : '✓ Video Platform Added'}
               </AlertTitle>
               <AlertDescription className={!youtubeUrl && !tiktokUrl && !instagramUrl ? 'text-red-800 dark:text-red-200' : 'text-blue-800 dark:text-blue-200'}>
                 {!youtubeUrl && !tiktokUrl && !instagramUrl ? (

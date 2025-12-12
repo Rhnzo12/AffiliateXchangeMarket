@@ -1457,7 +1457,7 @@ export default function Settings() {
                     <div className="space-y-2">
                       <div className="bg-green-50 dark:bg-green-950 p-3 rounded-md border border-green-200 dark:border-green-800 mb-3">
                         <p className="text-sm text-green-900 dark:text-green-100">
-                          \u2713 Verification code sent to <strong>{maskedEmail}</strong>
+                          ✓ Verification code sent to <strong>{maskedEmail}</strong>
                         </p>
                         <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                           The code will expire in 15 minutes.
@@ -1600,7 +1600,7 @@ export default function Settings() {
 
                 <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                   <p className="text-sm text-blue-900 dark:text-blue-100">
-                    <strong>\u1F4A1 What to do:</strong> Go to your {user?.role === 'creator' ? 'applications or retainer contracts' : 'offers or retainer contracts'} page and complete or cancel all active items. Then you can return here to delete your account.
+                    <strong>💡 What to do:</strong> Go to your {user?.role === 'creator' ? 'applications or retainer contracts' : 'offers or retainer contracts'} page and complete or cancel all active items. Then you can return here to delete your account.
                   </p>
                 </div>
               </AlertDialogDescription>

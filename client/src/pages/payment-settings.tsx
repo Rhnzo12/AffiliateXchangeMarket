@@ -1732,7 +1732,7 @@ function AdminPaymentDashboard({
               </p>
 
               <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 mt-4">
-                <p className="text-sm font-semibold text-blue-900 mb-1">\u2705 Notification Sent Automatically</p>
+                <p className="text-sm font-semibold text-blue-900 mb-1">✅ Notification Sent Automatically</p>
                 <p className="text-xs text-blue-800">
                   The company has been automatically notified via email and in-app notification about this insufficient funds issue.
                 </p>
