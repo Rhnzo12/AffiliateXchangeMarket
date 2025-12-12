@@ -134,7 +134,7 @@ export default function Analytics() {
 function CreatorAnalytics() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [dateRange, setDateRange] = useState("30d");
+  const [dateRange, setDateRange] = useState("all");
   const [, params] = useRoute("/analytics/:id");
   const applicationId = params?.id;
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
@@ -957,7 +957,7 @@ function CreatorAnalytics() {
 function CompanyAnalytics() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const [dateRange, setDateRange] = useState("30d");
+  const [dateRange, setDateRange] = useState("all");
   const [, params] = useRoute("/analytics/:id");
   const applicationId = params?.id;
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
