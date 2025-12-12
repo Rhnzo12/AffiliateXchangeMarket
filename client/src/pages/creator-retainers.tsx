@@ -879,46 +879,47 @@ export default function CreatorRetainers() {
                 const monthlyAmount = Number(contract.monthlyAmount || 0);
 
                 return (
-                  <Card
+                  <Link
                     key={contract.id}
-                    className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-card-border cursor-pointer ring-2 ring-primary/30 hover:ring-primary/50 hover:shadow-primary/20"
-                    data-testid={`retainer-card-${contract.id}`}
+                    href={`/retainers/${contract.id}`}
+                    className="block"
                   >
-                    <CardHeader className="pb-4">
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <CardTitle className="text-xl" data-testid={`text-retainer-title-${contract.id}`}>
-                                {contract.title}
-                              </CardTitle>
-                              {applicationStatus.badge && (
-                                <Badge
-                                  variant={
-                                    applicationStatus.variant === "default" && applicationStatus.badge.includes("Approved")
-                                      ? "default"
-                                      : applicationStatus.variant === "destructive"
-                                      ? "destructive"
-                                      : "secondary"
-                                  }
-                                  className={applicationStatus.badge.includes("Approved") ? "bg-green-500 hover:bg-green-600" : ""}
-                                >
-                                  {applicationStatus.badge}
-                                </Badge>
-                              )}
+                    <Card
+                      className="group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border-card-border cursor-pointer ring-2 ring-primary/30 hover:ring-primary/50 hover:shadow-primary/20"
+                      data-testid={`retainer-card-${contract.id}`}
+                    >
+                      <CardHeader className="pb-4">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <CardTitle className="text-xl" data-testid={`text-retainer-title-${contract.id}`}>
+                                  {contract.title}
+                                </CardTitle>
+                                {applicationStatus.badge && (
+                                  <Badge
+                                    variant={
+                                      applicationStatus.variant === "default" && applicationStatus.badge.includes("Approved")
+                                        ? "default"
+                                        : applicationStatus.variant === "destructive"
+                                        ? "destructive"
+                                        : "secondary"
+                                    }
+                                    className={applicationStatus.badge.includes("Approved") ? "bg-green-500 hover:bg-green-600" : ""}
+                                  >
+                                    {applicationStatus.badge}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <Link href={`/retainers/${contract.id}`}>
-                            <Button
-                              variant="outline"
-                              className="group/btn hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium shrink-0"
+                            <div
+                              className="group/btn flex items-center gap-2 px-4 py-2 rounded-md border border-input bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200 font-medium shrink-0 text-sm"
                               data-testid={`button-view-retainer-${contract.id}`}
                             >
-                              <Eye className="h-4 w-4 mr-2 group-hover/btn:scale-110 transition-transform duration-200" />
+                              <Eye className="h-4 w-4 group-hover/btn:scale-110 transition-transform duration-200" />
                               View Details
-                            </Button>
-                          </Link>
-                        </div>
+                            </div>
+                          </div>
                         <p className="text-muted-foreground line-clamp-2 leading-relaxed">
                           {contract.description}
                         </p>
@@ -1027,6 +1028,7 @@ export default function CreatorRetainers() {
                       )}
                     </CardContent>
                   </Card>
+                  </Link>
                 );
               })}
             </div>
