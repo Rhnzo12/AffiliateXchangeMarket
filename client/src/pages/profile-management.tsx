@@ -1575,7 +1575,6 @@ export default function Settings() {
   // Define navigation sections based on user role
   const settingsSections: SettingsSection[] = useMemo(() => {
     const sections: SettingsSection[] = [
-      { id: "profile-info", label: "Profile Information", icon: <User className="h-4 w-4" /> },
       { id: "account-info", label: "Account Information", icon: <User className="h-4 w-4" /> },
       { id: "change-email", label: "Change Email", icon: <Mail className="h-4 w-4" /> },
       { id: "change-password-otp", label: "Password (Email Verify)", icon: <Key className="h-4 w-4" /> },
@@ -1600,9 +1599,14 @@ export default function Settings() {
 
           <div className="flex-1 space-y-8 min-w-0 max-w-4xl">
 
-            <Card id="profile-info" className="border-card-border scroll-mt-24">
+            <Card id="account-info" className="border-card-border scroll-mt-24">
               <CardHeader className="pb-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <CardTitle>Profile Information</CardTitle>
+                <div>
+                  <CardTitle>Account Information</CardTitle>
+                  <CardDescription className="mt-1">
+                    Manage your account details and personal information
+                  </CardDescription>
+                </div>
                 <Button
                   size="sm"
                   onClick={() => setIsProfileEditMode(!isProfileEditMode)}
@@ -1615,11 +1619,68 @@ export default function Settings() {
               </CardHeader>
               <CardContent className="space-y-8">
 
-          {/* COMPANY PROFILE SECTION */}
-          {user?.role === 'company' && (
-            <>
-              {/* Company Logo Section - Horizontal Layout */}
-              <div className="flex items-center gap-6">
+                {/* Basic Account Information Section */}
+                <div className="space-y-6">
+                  <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username <span className="text-destructive">*</span></Label>
+                      <Input
+                        id="username"
+                        type="text"
+                        placeholder="username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        disabled={!isProfileEditMode}
+                        data-testid="input-username"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={user?.email || ""}
+                        disabled
+                        className="bg-muted"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        type="text"
+                        placeholder="John"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        disabled={!isProfileEditMode}
+                        data-testid="input-first-name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        type="text"
+                        placeholder="Doe"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        disabled={!isProfileEditMode}
+                        data-testid="input-last-name"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* COMPANY PROFILE SECTION */}
+                {user?.role === 'company' && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold border-b pb-2">Company Profile</h3>
+                    {/* Company Logo Section - Horizontal Layout */}
+                    <div className="flex items-center gap-6">
                 <div className="relative">
                   <Avatar className="h-24 w-24 ring-2 ring-border">
                     <AvatarImage
@@ -2023,15 +2084,15 @@ export default function Settings() {
                     These are required for your offers to display properly.
                   </AlertDescription>
                 </Alert>
-              )}
+                    )}
+                  </div>
+                )}
 
-            </>
-          )}
-
-          {/* CREATOR PROFILE SECTION */}
-          {user?.role === 'creator' && (
-            <>
-              {/* Profile Image and Bio Section */}
+                {/* CREATOR PROFILE SECTION */}
+                {user?.role === 'creator' && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold border-b pb-2">Creator Profile</h3>
+                    {/* Profile Image and Bio Section */}
               <div className="flex flex-col lg:flex-row gap-6 items-start">
                 <div className="space-y-3">
                   <div className={`relative inline-block ${isProfileEditMode ? "group" : ""}`}>
@@ -2307,91 +2368,58 @@ export default function Settings() {
                   </div>
                 </div>
 
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                    </div>
+                  </div>
+                )}
 
-      <Card id="account-info" className="border-card-border scroll-mt-24">
-        <CardHeader className="pb-2">
-          <CardTitle>Account Information</CardTitle>
-          <CardDescription>
-            Manage your account details and personal information
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username <span className="text-destructive">*</span></Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={!isProfileEditMode}
-                data-testid="input-username"
-              />
-            </div>
+                {/* ADMIN PROFILE SECTION */}
+                {user?.role === 'admin' && (
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold border-b pb-2">Administrator Profile</h3>
+                    <div className="flex items-center gap-6">
+                      <Avatar className="h-24 w-24 ring-2 ring-border">
+                        <AvatarImage
+                          src={proxiedSrc(user?.profileImageUrl) || ''}
+                          alt={user?.firstName || 'Admin'}
+                          referrerPolicy="no-referrer"
+                        />
+                        <AvatarFallback className="text-2xl bg-primary/10 text-primary">
+                          <Shield className="h-10 w-10" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="space-y-1">
+                        <p className="text-lg font-semibold">{user?.firstName} {user?.lastName}</p>
+                        <Badge variant="secondary" className="gap-1">
+                          <Shield className="h-3 w-3" />
+                          Administrator
+                        </Badge>
+                        <p className="text-sm text-muted-foreground">
+                          Full access to platform administration
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={user?.email || ""}
-                disabled
-                className="bg-muted"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name</Label>
-              <Input
-                id="firstName"
-                type="text"
-                placeholder="John"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                disabled={!isProfileEditMode}
-                data-testid="input-first-name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name</Label>
-              <Input
-                id="lastName"
-                type="text"
-                placeholder="Doe"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                disabled={!isProfileEditMode}
-                data-testid="input-last-name"
-              />
-            </div>
-          </div>
-
-          {/* Save Button - saves both profile and account info */}
-          <div className="pt-2">
-            <Button
-              onClick={() => {
-                // Save profile info if in edit mode
-                if (isProfileEditMode) {
-                  handleSaveProfile();
-                }
-                // Also save account info
-                updateAccountMutation.mutate();
-              }}
-              disabled={!isProfileEditMode || updateAccountMutation.isPending || updateProfileMutation.isPending}
-              data-testid="button-save-account"
-            >
-              {(updateAccountMutation.isPending || updateProfileMutation.isPending) ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+                {/* Save Button - saves both profile and account info */}
+                <div className="pt-4 border-t">
+                  <Button
+                    onClick={() => {
+                      // Save profile info if in edit mode (for company/creator)
+                      if (isProfileEditMode && (user?.role === 'company' || user?.role === 'creator')) {
+                        handleSaveProfile();
+                      }
+                      // Also save account info
+                      updateAccountMutation.mutate();
+                    }}
+                    disabled={!isProfileEditMode || updateAccountMutation.isPending || updateProfileMutation.isPending}
+                    data-testid="button-save-account"
+                  >
+                    {(updateAccountMutation.isPending || updateProfileMutation.isPending) ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
       {/* Email Change Section */}
       <Card id="change-email" className="border-card-border scroll-mt-24">
