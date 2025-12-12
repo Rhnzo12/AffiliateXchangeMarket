@@ -424,12 +424,14 @@ function PaymentMethodSettings({
   const { data: feeSettings } = useQuery<{
     platformFeeDisplay: string;
     stripeFeeDisplay: string;
+    totalFeeDisplay: string;
   }>({
     queryKey: ["/api/platform/fees"],
   });
 
   const platformFeeDisplay = feeSettings?.platformFeeDisplay ?? "4%";
   const stripeFeeDisplay = feeSettings?.stripeFeeDisplay ?? "3%";
+  const totalFeeDisplay = feeSettings?.totalFeeDisplay ?? "7%";
 
   const isAddDisabled =
     isSubmitting ||
@@ -661,7 +663,7 @@ function PaymentMethodSettings({
             </div>
             <div className="mt-2 flex justify-between border-t-2 border-blue-300 pt-2 font-bold">
               <span>Total Deduction:</span>
-              <span>Platform fee + {stripeFeeDisplay} processing</span>
+              <span>{totalFeeDisplay}</span>
             </div>
             <p className="mt-2 text-xs text-blue-600">
               Note: Platform fees may vary by company partnership agreements.
