@@ -257,7 +257,7 @@ export default function CreatorRetainers() {
         };
       case 'approved':
         return { 
-          badge: 'Approved \u2713', 
+          badge: 'Approved ✓', 
           buttonText: 'Application Approved', 
           disabled: true,
           variant: 'default' as const,
@@ -1317,7 +1317,7 @@ export default function CreatorRetainers() {
               </ul>
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>\u1F4A1 Next Step:</strong> Add your video platform URL in your profile settings, then come back to apply!
+                  <strong>💡 Next Step:</strong> Add your video platform URL in your profile settings, then come back to apply!
                 </p>
               </div>
             </AlertDialogDescription>

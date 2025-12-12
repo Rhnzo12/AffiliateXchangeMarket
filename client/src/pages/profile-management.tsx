@@ -2728,7 +2728,7 @@ export default function Settings() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-6 w-6" />
-              \u26A0\uFE0F Video Platform Required
+              ⚠️ Video Platform Required
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-4 text-base">
               <p className="font-semibold text-foreground">
@@ -2747,7 +2747,7 @@ export default function Settings() {
               </p>
               <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <strong>\u1F4A1 Tip:</strong> Add your YouTube, TikTok, or Instagram URL in the fields above, then click Save Changes again.
+                  <strong>💡 Tip:</strong> Add your YouTube, TikTok, or Instagram URL in the fields above, then click Save Changes again.
                 </p>
               </div>
             </AlertDialogDescription>

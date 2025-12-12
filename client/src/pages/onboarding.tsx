@@ -84,19 +84,19 @@ export default function Onboarding() {
             <CardContent>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Browse and apply to affiliate offers</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Get unique tracking links</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Earn commissions on sales</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Track performance analytics</span>
                 </li>
               </ul>
@@ -125,19 +125,19 @@ export default function Onboarding() {
             <CardContent>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Create affiliate offers</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Manage creator partnerships</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Track campaign performance</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">\u2713</span>
+                  <span className="text-primary mt-0.5">✓</span>
                   <span>Approve creator work</span>
                 </li>
               </ul>

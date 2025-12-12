@@ -654,7 +654,7 @@ export default function CompanyOffers() {
                 This will permanently delete the offer "{offerToDelete?.title}". This action cannot be undone.
                 {offers.find(o => o.id === offerToDelete?.id)?.applicationCount > 0 && (
                   <span className="block mt-2 text-destructive font-semibold">
-                    \u26A0\uFE0F Warning: This offer has {offers.find(o => o.id === offerToDelete?.id)?.applicationCount} active application(s).
+                    ⚠️ Warning: This offer has {offers.find(o => o.id === offerToDelete?.id)?.applicationCount} active application(s).
                   </span>
                 )}
               </AlertDialogDescription>
