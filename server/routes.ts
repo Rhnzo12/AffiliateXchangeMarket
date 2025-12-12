@@ -8785,25 +8785,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const deliverable = await storage.createRetainerDeliverable({ ...validated, creatorId: userId });
 
       // Send notification to company user about new video upload
+      console.log(`[Deliverable] Sending notification for contract ${contract.id}, companyId: ${contract.companyId}`);
       const companyProfile = await storage.getCompanyProfileById(contract.companyId);
+      console.log(`[Deliverable] Company profile found:`, companyProfile ? `userId: ${companyProfile.userId}` : 'null');
       if (companyProfile) {
         const creatorUser = await storage.getUserById(userId);
         const creatorName = creatorUser?.firstName || creatorUser?.username || 'A creator';
-        await notificationService.sendNotification(
-          companyProfile.userId,
-          'deliverable_submitted',
-          'New Video Uploaded for Review',
-          `${creatorName} uploaded a new video for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}). Please review the deliverable.`,
-          {
-            creatorName,
-            contractTitle: contract.title,
-            monthNumber: deliverable.monthNumber,
-            videoNumber: deliverable.videoNumber,
-            contractId: contract.id,
-            deliverableId: deliverable.id,
-            linkUrl: `/company/retainers/${contract.id}`,
-          }
-        );
+        console.log(`[Deliverable] Sending notification to company user ${companyProfile.userId} for deliverable from ${creatorName}`);
+        try {
+          await notificationService.sendNotification(
+            companyProfile.userId,
+            'deliverable_submitted',
+            'New Video Uploaded for Review',
+            `${creatorName} uploaded a new video for "${contract.title}" (Month ${deliverable.monthNumber}, Video #${deliverable.videoNumber}). Please review the deliverable.`,
+            {
+              creatorName,
+              contractTitle: contract.title,
+              monthNumber: deliverable.monthNumber,
+              videoNumber: deliverable.videoNumber,
+              contractId: contract.id,
+              deliverableId: deliverable.id,
+              linkUrl: `/company/retainers/${contract.id}`,
+            }
+          );
+          console.log(`[Deliverable] Notification sent successfully`);
+        } catch (notifError) {
+          console.error(`[Deliverable] Error sending notification:`, notifError);
+        }
+      } else {
+        console.warn(`[Deliverable] No company profile found for companyId: ${contract.companyId}`);
       }
 
       res.json(deliverable);

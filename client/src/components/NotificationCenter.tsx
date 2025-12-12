@@ -10,7 +10,9 @@ import {
   Star,
   FileText,
   AlertTriangle,
-  Building2
+  Building2,
+  Video,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -253,6 +255,14 @@ export function NotificationCenter() {
         return <Check {...iconProps} className="h-5 w-5 text-green-600" />;
       case "priority_listing_expiring":
         return <AlertTriangle {...iconProps} className="h-5 w-5 text-yellow-600" />;
+      case "deliverable_submitted":
+        return <Video {...iconProps} className="h-5 w-5 text-blue-600" />;
+      case "deliverable_resubmitted":
+        return <RefreshCw {...iconProps} className="h-5 w-5 text-purple-600" />;
+      case "revision_requested":
+        return <AlertTriangle {...iconProps} className="h-5 w-5 text-orange-600" />;
+      case "deliverable_rejected":
+        return <X {...iconProps} className="h-5 w-5 text-red-600" />;
       default:
         return <Bell {...iconProps} />;
     }
