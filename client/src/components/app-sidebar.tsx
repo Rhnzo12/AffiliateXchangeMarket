@@ -298,11 +298,15 @@ export function AppSidebar() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-[200px] z-[100]">
                             {item.children?.map((child) => (
-                              <DropdownMenuItem key={child.url} asChild>
+                              <DropdownMenuItem
+                                key={child.url}
+                                asChild
+                                className="hover:bg-transparent focus:bg-transparent cursor-pointer"
+                              >
                                 <Link
                                   href={child.url}
                                   onClick={handleNavClick}
-                                  className={location === child.url ? "text-primary font-bold" : ""}
+                                  className={`hover:text-primary hover:font-bold transition-all duration-200 ${location === child.url ? "text-primary font-bold" : ""}`}
                                 >
                                   <child.icon className="h-4 w-4 mr-2" />
                                   <span>{child.title}</span>
