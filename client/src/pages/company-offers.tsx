@@ -57,7 +57,7 @@ import {
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { TopNavBar } from "../components/TopNavBar";
 import { OfferCardSkeleton } from "../components/skeletons";
-import { usePageTour } from "../components/CompanyTour";
+import { useCompanyPageTour } from "../components/CompanyTour";
 import { COMPANY_TOUR_IDS, offersTourSteps } from "../lib/companyTourConfig";
 
 const COMMISSION_TYPES = [
@@ -160,7 +160,7 @@ export default function CompanyOffers() {
   const [errorDialog, setErrorDialog] = useState<{ title: string; description: string } | null>(null);
 
   // Quick tour for offers page
-  usePageTour(COMPANY_TOUR_IDS.OFFERS, offersTourSteps);
+  useCompanyPageTour(COMPANY_TOUR_IDS.OFFERS, offersTourSteps);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

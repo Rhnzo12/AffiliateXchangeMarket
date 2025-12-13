@@ -59,6 +59,8 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip";
 import { uploadToCloudinary } from "../lib/cloudinary-upload";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, retainerDetailTourSteps } from "../lib/creatorTourConfig";
 
 const uploadDeliverableSchema = z.object({
   platformUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
@@ -103,6 +105,9 @@ export default function CreatorRetainerDetail() {
   const resubmitVideoInputRef = useRef<HTMLInputElement>(null);
   const [applyOpen, setApplyOpen] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+
+  // Quick tour for retainer detail page
+  useCreatorPageTour(CREATOR_TOUR_IDS.RETAINER_DETAIL, retainerDetailTourSteps);
 
   const { data: contract, isLoading } = useQuery<any>({
     queryKey: [`/api/retainer-contracts/${contractId}`],

@@ -43,7 +43,7 @@ import { Link } from "wouter";
 import { TopNavBar } from "../components/TopNavBar";
 import { ListSkeleton } from "../components/skeletons";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
-import { usePageTour } from "../components/CompanyTour";
+import { useCompanyPageTour } from "../components/CompanyTour";
 import { COMPANY_TOUR_IDS, retainersTourSteps } from "../lib/companyTourConfig";
 
 const retainerTierSchema = z.object({
@@ -79,7 +79,7 @@ export default function CompanyRetainers() {
   const [open, setOpen] = useState(false);
 
   // Quick tour for retainers page
-  usePageTour(COMPANY_TOUR_IDS.RETAINERS, retainersTourSteps);
+  useCompanyPageTour(COMPANY_TOUR_IDS.RETAINERS, retainersTourSteps);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");

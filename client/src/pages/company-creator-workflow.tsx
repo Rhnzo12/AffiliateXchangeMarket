@@ -5,7 +5,7 @@ import { TopNavBar } from "../components/TopNavBar";
 import CompanyVideos from "./company-videos";
 import CompanyApplications from "./company-applications";
 import CompanyCreators from "./company-creators";
-import { usePageTour } from "../components/CompanyTour";
+import { useCompanyPageTour } from "../components/CompanyTour";
 import { COMPANY_TOUR_IDS, creatorWorkflowTourSteps } from "../lib/companyTourConfig";
 
 type WorkflowTab = "videos" | "applications" | "creators";
@@ -34,7 +34,7 @@ export default function CompanyCreatorWorkflow({ defaultTab = "videos" }: Compan
   const [activeTab, setActiveTab] = useState<WorkflowTab>(defaultTab);
 
   // Quick tour for creator workflow page
-  usePageTour(COMPANY_TOUR_IDS.CREATOR_WORKFLOW, creatorWorkflowTourSteps);
+  useCompanyPageTour(COMPANY_TOUR_IDS.CREATOR_WORKFLOW, creatorWorkflowTourSteps);
 
   useEffect(() => {
     const routeTab = tabFromPath(location);

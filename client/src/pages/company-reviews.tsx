@@ -20,7 +20,7 @@ import { formatDistanceToNow } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { proxiedSrc } from "../lib/image";
-import { usePageTour } from "../components/CompanyTour";
+import { useCompanyPageTour } from "../components/CompanyTour";
 import { COMPANY_TOUR_IDS, reviewsTourSteps } from "../lib/companyTourConfig";
 
 export default function CompanyReviews() {
@@ -29,7 +29,7 @@ export default function CompanyReviews() {
   const queryClient = useQueryClient();
 
   // Quick tour for reviews page
-  usePageTour(COMPANY_TOUR_IDS.REVIEWS, reviewsTourSteps);
+  useCompanyPageTour(COMPANY_TOUR_IDS.REVIEWS, reviewsTourSteps);
 
   const [responseDialog, setResponseDialog] = useState<{ open: boolean; reviewId: string | null; response: string }>({
     open: false,
