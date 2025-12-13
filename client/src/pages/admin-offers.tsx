@@ -79,9 +79,9 @@ export default function AdminOffers() {
   }, [isAuthenticated, isLoading]);
 
   const queryParams = new URLSearchParams();
-  if (filters.status) queryParams.append("status", filters.status);
-  if (filters.niche) queryParams.append("niche", filters.niche);
-  if (filters.commissionType) queryParams.append("commissionType", filters.commissionType);
+  if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
+  if (filters.niche && filters.niche !== "all") queryParams.append("niche", filters.niche);
+  if (filters.commissionType && filters.commissionType !== "all") queryParams.append("commissionType", filters.commissionType);
 
   const { data: offers = [], isLoading: loadingOffers } = useQuery<any[]>({
     queryKey: ["/api/admin/offers", filters.status, filters.niche, filters.commissionType],

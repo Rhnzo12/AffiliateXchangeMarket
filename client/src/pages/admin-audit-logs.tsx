@@ -94,11 +94,12 @@ export default function AdminAuditLogs() {
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="action">Action</Label>
-              <Select value={filterAction || undefined} onValueChange={(val) => setFilterAction(val)}>
+              <Select value={filterAction || "all"} onValueChange={(val) => setFilterAction(val === "all" ? "" : val)}>
                 <SelectTrigger id="action">
                   <SelectValue placeholder="All actions" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
                   <SelectItem value="approve_company">Approve Company</SelectItem>
                   <SelectItem value="reject_company">Reject Company</SelectItem>
                   <SelectItem value="approve_offer">Approve Offer</SelectItem>
@@ -112,11 +113,12 @@ export default function AdminAuditLogs() {
 
             <div className="space-y-2">
               <Label htmlFor="entityType">Entity Type</Label>
-              <Select value={filterEntityType || undefined} onValueChange={(val) => setFilterEntityType(val)}>
+              <Select value={filterEntityType || "all"} onValueChange={(val) => setFilterEntityType(val === "all" ? "" : val)}>
                 <SelectTrigger id="entityType">
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="company">Company</SelectItem>
                   <SelectItem value="offer">Offer</SelectItem>
                   <SelectItem value="user">User</SelectItem>
