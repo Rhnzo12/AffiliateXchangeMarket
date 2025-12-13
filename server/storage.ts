@@ -3540,21 +3540,25 @@ export class DatabaseStorage implements IStorage {
 
   async getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]> {
     try {
-      let daysBack = 30;
-      if (dateRange === "7d") daysBack = 7;
-      else if (dateRange === "30d") daysBack = 30;
-      else if (dateRange === "90d") daysBack = 90;
-
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - daysBack);
-
       const whereClauses: any[] = [
         eq(applications.creatorId, creatorId),
-        sql`${analytics.date} >= ${startDate}`,
       ];
+
+      // Only apply date filter when not "all"
+      if (dateRange !== "all") {
+        let daysBack = 30;
+        if (dateRange === "7d") daysBack = 7;
+        else if (dateRange === "30d") daysBack = 30;
+        else if (dateRange === "90d") daysBack = 90;
+
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysBack);
+        whereClauses.push(sql`${analytics.date} >= ${startDate}`);
+      }
 
       const result = await db
         .select({
+          date: sql<string>`TO_CHAR(${analytics.date}, 'Mon DD')`,
           isoDate: analytics.date,
           clicks: sql<number>`COALESCE(SUM(${analytics.clicks}), 0)`,
           conversions: sql<number>`COALESCE(SUM(${analytics.conversions}), 0)`,
@@ -3566,38 +3570,7 @@ export class DatabaseStorage implements IStorage {
         .groupBy(analytics.date)
         .orderBy(analytics.date);
 
-      // Create a map of existing data by date string
-      const dataMap = new Map<string, { clicks: number; conversions: number; earnings: number }>();
-      for (const row of result || []) {
-        const dateKey = new Date(row.isoDate).toISOString().split('T')[0];
-        dataMap.set(dateKey, {
-          clicks: Number(row.clicks) || 0,
-          conversions: Number(row.conversions) || 0,
-          earnings: Number(row.earnings) || 0,
-        });
-      }
-
-      // Generate complete date range with all days filled in
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const completeData: any[] = [];
-
-      for (let i = daysBack - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateKey = date.toISOString().split('T')[0];
-        const dayName = days[date.getDay()];
-
-        const existing = dataMap.get(dateKey);
-        completeData.push({
-          date: dayName,
-          isoDate: date,
-          clicks: existing?.clicks || 0,
-          conversions: existing?.conversions || 0,
-          earnings: existing?.earnings || 0,
-        });
-      }
-
-      return completeData;
+      return result || [];
     } catch (error) {
       console.error("[getAnalyticsTimeSeriesByCreator] Error:", error);
       return [];
