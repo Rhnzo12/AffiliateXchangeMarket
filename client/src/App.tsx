@@ -404,6 +404,7 @@ function ProtectedRouter() {
               <Route path="/admin/companies" component={AdminCompanies} />
               <Route path="/admin/companies/:id" component={AdminCompanyDetail} />
               <Route path="/admin/offers" component={AdminOffers} />
+              <Route path="/admin/offers/:id" component={AdminOfferDetail} />
               <Route path="/admin-offer-detail/:id" component={AdminOfferDetail} />
               <Route path="/admin/creators" component={AdminCreators} />
               <Route path="/admin/reviews" component={AdminReviews} />

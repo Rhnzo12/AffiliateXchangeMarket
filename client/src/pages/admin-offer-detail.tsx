@@ -54,9 +54,10 @@ const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondar
 export default function AdminOfferDetail() {
   const { toast } = useToast();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [, params] = useRoute("/admin-offer-detail/:id");
+  const [, params1] = useRoute("/admin-offer-detail/:id");
+  const [, params2] = useRoute("/admin/offers/:id");
   const [, navigate] = useLocation();
-  const offerId = params?.id;
+  const offerId = params1?.id || params2?.id;
 
   const [rejectDialog, setRejectDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
