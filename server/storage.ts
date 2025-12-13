@@ -3540,23 +3540,27 @@ export class DatabaseStorage implements IStorage {
 
   async getAnalyticsTimeSeriesByCreator(creatorId: string, dateRange: string): Promise<any[]> {
     try {
-      const whereClauses: any[] = [
-        eq(applications.creatorId, creatorId),
-      ];
-
-      // Only apply date filter when not "all"
+      // Calculate date filter
+      let startDate: Date | null = null;
       if (dateRange !== "all") {
         let daysBack = 30;
         if (dateRange === "7d") daysBack = 7;
         else if (dateRange === "30d") daysBack = 30;
         else if (dateRange === "90d") daysBack = 90;
 
-        const startDate = new Date();
+        startDate = new Date();
         startDate.setDate(startDate.getDate() - daysBack);
-        whereClauses.push(sql`${analytics.date} >= ${startDate}`);
       }
 
-      const result = await db
+      // Query 1: Get affiliate analytics (clicks, conversions, affiliate earnings)
+      const affiliateWhereClauses: any[] = [
+        eq(applications.creatorId, creatorId),
+      ];
+      if (startDate) {
+        affiliateWhereClauses.push(sql`${analytics.date} >= ${startDate}`);
+      }
+
+      const affiliateResult = await db
         .select({
           date: sql<string>`TO_CHAR(${analytics.date}, 'Mon DD')`,
           isoDate: analytics.date,
@@ -3566,11 +3570,68 @@ export class DatabaseStorage implements IStorage {
         })
         .from(analytics)
         .innerJoin(applications, eq(analytics.applicationId, applications.id))
-        .where(and(...whereClauses))
+        .where(and(...affiliateWhereClauses))
         .groupBy(analytics.date)
         .orderBy(analytics.date);
 
-      return result || [];
+      // Query 2: Get retainer payments (retainer earnings by completion date)
+      const retainerWhereClauses: any[] = [
+        eq(retainerPayments.creatorId, creatorId),
+        eq(retainerPayments.status, 'completed'),
+      ];
+      if (startDate) {
+        retainerWhereClauses.push(sql`COALESCE(${retainerPayments.completedAt}, ${retainerPayments.createdAt}) >= ${startDate}`);
+      }
+
+      const retainerResult = await db
+        .select({
+          date: sql<string>`TO_CHAR(DATE(COALESCE(${retainerPayments.completedAt}, ${retainerPayments.createdAt})), 'Mon DD')`,
+          isoDate: sql<Date>`DATE(COALESCE(${retainerPayments.completedAt}, ${retainerPayments.createdAt}))`,
+          retainerEarnings: sql<number>`COALESCE(SUM(CAST(${retainerPayments.netAmount} AS DECIMAL)), 0)`,
+        })
+        .from(retainerPayments)
+        .where(and(...retainerWhereClauses))
+        .groupBy(sql`DATE(COALESCE(${retainerPayments.completedAt}, ${retainerPayments.createdAt}))`)
+        .orderBy(sql`DATE(COALESCE(${retainerPayments.completedAt}, ${retainerPayments.createdAt}))`);
+
+      // Merge affiliate and retainer data by date
+      const dataMap = new Map<string, { date: string; isoDate: Date; clicks: number; conversions: number; earnings: number }>();
+
+      // Add affiliate data
+      for (const row of affiliateResult || []) {
+        const dateKey = new Date(row.isoDate).toISOString().split('T')[0];
+        dataMap.set(dateKey, {
+          date: row.date,
+          isoDate: new Date(row.isoDate),
+          clicks: Number(row.clicks) || 0,
+          conversions: Number(row.conversions) || 0,
+          earnings: Number(row.earnings) || 0,
+        });
+      }
+
+      // Add/merge retainer earnings
+      for (const row of retainerResult || []) {
+        const dateKey = new Date(row.isoDate).toISOString().split('T')[0];
+        const existing = dataMap.get(dateKey);
+        if (existing) {
+          existing.earnings += Number(row.retainerEarnings) || 0;
+        } else {
+          dataMap.set(dateKey, {
+            date: row.date,
+            isoDate: new Date(row.isoDate),
+            clicks: 0,
+            conversions: 0,
+            earnings: Number(row.retainerEarnings) || 0,
+          });
+        }
+      }
+
+      // Sort by date and return
+      const result = Array.from(dataMap.values()).sort((a, b) =>
+        a.isoDate.getTime() - b.isoDate.getTime()
+      );
+
+      return result;
     } catch (error) {
       console.error("[getAnalyticsTimeSeriesByCreator] Error:", error);
       return [];
