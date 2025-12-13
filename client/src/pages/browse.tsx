@@ -901,7 +901,19 @@ export default function Browse() {
               <div className="space-y-6 mt-6">
                 {/* Niche Filter */}
                 <div className="space-y-3">
-                  <Label>Niche/Category</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Niche/Category</Label>
+                    {selectedNiches.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedNiches([])}
+                        className="h-auto p-0 text-xs"
+                      >
+                        Clear ({selectedNiches.length})
+                      </Button>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     {nichesLoading ? (
                       <div className="text-sm text-muted-foreground">Loading niches...</div>
@@ -910,17 +922,22 @@ export default function Browse() {
                     ) : (
                       niches.map((niche) => {
                         const normalizedValue = normalizeNicheValue(niche.name);
+                        const isChecked = selectedNiches.includes(normalizedValue);
                         return (
-                          <div key={niche.id} className="flex items-center gap-2">
+                          <div
+                            key={niche.id}
+                            className={`flex items-center gap-2 p-2 rounded-md transition-colors cursor-pointer hover:bg-muted/50 ${isChecked ? 'bg-primary/10' : ''}`}
+                            onClick={() => toggleNiche(normalizedValue)}
+                          >
                             <Checkbox
                               id={`niche-${niche.id}`}
-                              checked={selectedNiches.includes(normalizedValue)}
+                              checked={isChecked}
                               onCheckedChange={() => toggleNiche(normalizedValue)}
                               data-testid={`checkbox-niche-${niche.name}`}
                             />
                             <Label
                               htmlFor={`niche-${niche.id}`}
-                              className="text-sm font-normal cursor-pointer"
+                              className={`text-sm font-normal cursor-pointer flex-1 ${isChecked ? 'font-medium text-primary' : ''}`}
                             >
                               {formatNicheLabel(niche.name)}
                             </Label>
