@@ -195,9 +195,9 @@ export default function CompanyVideos({ hideTopNav = false }: CompanyVideosProps
                           value={pendingOfferFilter}
                           onValueChange={setPendingOfferFilter}
                         >
-                          <DropdownMenuRadioItem value="all">All Offers</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="all" onSelect={(e) => e.preventDefault()}>All Offers</DropdownMenuRadioItem>
                           {uniqueOffers.map(([id, title]) => (
-                            <DropdownMenuRadioItem key={id} value={id}>
+                            <DropdownMenuRadioItem key={id} value={id} onSelect={(e) => e.preventDefault()}>
                               {title}
                             </DropdownMenuRadioItem>
                           ))}
@@ -213,9 +213,9 @@ export default function CompanyVideos({ hideTopNav = false }: CompanyVideosProps
                           value={pendingCreditFilter}
                           onValueChange={setPendingCreditFilter}
                         >
-                          <DropdownMenuRadioItem value="all">All Videos</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="with">With Creator Credit</DropdownMenuRadioItem>
-                          <DropdownMenuRadioItem value="without">Without Creator Credit</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="all" onSelect={(e) => e.preventDefault()}>All Videos</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="with" onSelect={(e) => e.preventDefault()}>With Creator Credit</DropdownMenuRadioItem>
+                          <DropdownMenuRadioItem value="without" onSelect={(e) => e.preventDefault()}>Without Creator Credit</DropdownMenuRadioItem>
                         </DropdownMenuRadioGroup>
                       </AccordionContent>
                     </AccordionItem>
