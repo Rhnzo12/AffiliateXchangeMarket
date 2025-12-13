@@ -188,6 +188,7 @@ export class RetainerPaymentScheduler {
         providerTransactionId: paymentResult.transactionId,
         providerResponse: paymentResult.providerResponse,
         completedAt: new Date(),
+        description: 'Payment completed successfully',
       });
 
       console.log(`[Retainer Scheduler] Successfully processed payment ${payment.id} - TX: ${paymentResult.transactionId}`);
