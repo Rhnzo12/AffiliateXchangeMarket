@@ -53,6 +53,8 @@ import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { useForm } from "react-hook-form";
+import { useCompanyPageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, retainerDetailTourSteps } from "../lib/companyTourConfig";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
@@ -95,6 +97,9 @@ export default function CompanyRetainerDetail() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
+
+  // Quick tour for retainer detail page
+  useCompanyPageTour(COMPANY_TOUR_IDS.RETAINER_DETAIL, retainerDetailTourSteps);
 
   // Use the correct API endpoint - /api/retainer-contracts/:id (not /api/company/retainer-contracts/:id)
   const { data: contract, isLoading, error } = useQuery<any>({

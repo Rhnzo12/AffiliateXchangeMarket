@@ -49,6 +49,8 @@ import { VideoPlayer } from "../components/VideoPlayer";
 import { DetailPageSkeleton } from "../components/skeletons";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { uploadToCloudinary } from "../lib/cloudinary-upload";
+import { useCompanyPageTour } from "../components/CompanyTour";
+import { COMPANY_TOUR_IDS, offerDetailTourSteps } from "../lib/companyTourConfig";
 
 // Helper function to format commission display
 const formatCommission = (offer: any) => {
@@ -172,6 +174,9 @@ export default function CompanyOfferDetail() {
   const overviewRef = useRef<HTMLDivElement>(null);
   const videosRef = useRef<HTMLDivElement>(null);
   const applicationsRef = useRef<HTMLDivElement>(null);
+
+  // Quick tour for offer detail page
+  useCompanyPageTour(COMPANY_TOUR_IDS.OFFER_DETAIL, offerDetailTourSteps);
 
   // Auth check
   useEffect(() => {

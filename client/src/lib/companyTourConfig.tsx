@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   CreditCard,
   Download,
+  Eye,
+  CheckCircle2,
 } from "lucide-react";
 
 // Tour IDs for each company page
@@ -26,6 +28,7 @@ export const COMPANY_TOUR_IDS = {
   OFFER_CREATE: "company-offer-create-tour",
   OFFER_DETAIL: "company-offer-detail-tour",
   RETAINERS: "company-retainers-tour",
+  RETAINER_DETAIL: "company-retainer-detail-tour",
   CREATOR_WORKFLOW: "company-creator-workflow-tour",
   ANALYTICS: "company-analytics-tour",
   REVIEWS: "company-reviews-tour",
@@ -115,6 +118,17 @@ export const offerCreateTourSteps: TourStep[] = [
   },
 ];
 
+// Offer Detail Tour Steps
+export const offerDetailTourSteps: TourStep[] = [
+  {
+    target: "body",
+    title: "Offer Details",
+    content: "View and manage your offer details. From here you can see performance metrics, edit settings, and manage applications.",
+    placement: "center",
+    icon: <Eye className="h-7 w-7 text-primary" />,
+  },
+];
+
 // Retainers Page Tour Steps
 export const retainersTourSteps: TourStep[] = [
   {
@@ -123,6 +137,17 @@ export const retainersTourSteps: TourStep[] = [
     content: "Manage ongoing partnerships with creators through monthly retainer contracts. This provides consistent promotion for your brand.",
     placement: "center",
     icon: <CalendarClock className="h-7 w-7 text-primary" />,
+  },
+];
+
+// Retainer Detail Tour Steps
+export const retainerDetailTourSteps: TourStep[] = [
+  {
+    target: "body",
+    title: "Retainer Contract Details",
+    content: "Review the retainer contract details, manage creator applications, and track deliverables submitted by creators.",
+    placement: "center",
+    icon: <CheckCircle2 className="h-7 w-7 text-primary" />,
   },
 ];
 
@@ -211,8 +236,12 @@ export function getTourSteps(pageId: string): TourStep[] {
       return offersTourSteps;
     case COMPANY_TOUR_IDS.OFFER_CREATE:
       return offerCreateTourSteps;
+    case COMPANY_TOUR_IDS.OFFER_DETAIL:
+      return offerDetailTourSteps;
     case COMPANY_TOUR_IDS.RETAINERS:
       return retainersTourSteps;
+    case COMPANY_TOUR_IDS.RETAINER_DETAIL:
+      return retainerDetailTourSteps;
     case COMPANY_TOUR_IDS.CREATOR_WORKFLOW:
       return creatorWorkflowTourSteps;
     case COMPANY_TOUR_IDS.ANALYTICS:

@@ -353,7 +353,7 @@ export function CompanyTour() {
 }
 
 // Hook for individual pages to trigger their tour
-export function usePageTour(pageId: string, steps: TourStep[], enabled: boolean = true) {
+export function useCompanyPageTour(pageId: string, steps: TourStep[], enabled: boolean = true) {
   const { hasSeenPageTour, startTour, restartTour, isRunning, currentPageTourId } = useCompanyTour();
   const hasSeenRef = useRef(false);
 
@@ -378,7 +378,4 @@ export function usePageTour(pageId: string, steps: TourStep[], enabled: boolean 
     isActive: isRunning && currentPageTourId === pageId,
   };
 }
-
-// Alias for consistency with CreatorTour naming
-export const useCompanyPageTour = usePageTour;
 

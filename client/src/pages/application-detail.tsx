@@ -31,6 +31,8 @@ import {
 import { proxiedSrc } from "../lib/image";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { useCreatorPageTour } from "../components/CreatorTour";
+import { CREATOR_TOUR_IDS, applicationDetailTourSteps } from "../lib/creatorTourConfig";
 
 const STATUS_CONFIG: Record<string, any> = {
   pending: {
@@ -125,6 +127,9 @@ export default function ApplicationDetail() {
   const queryClient = useQueryClient();
   const [, params] = useRoute("/applications/:id");
   const applicationId = params?.id;
+
+  // Quick tour for application detail page
+  useCreatorPageTour(CREATOR_TOUR_IDS.APPLICATION_DETAIL, applicationDetailTourSteps);
 
   const [reviewDialog, setReviewDialog] = useState(false);
   const [reviewForm, setReviewForm] = useState<ReviewFormData>({

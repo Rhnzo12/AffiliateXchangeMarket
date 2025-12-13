@@ -16,7 +16,7 @@ import { GenericErrorDialog } from "../components/GenericErrorDialog";
 import { FirstTimeTutorial } from "../components/FirstTimeTutorial";
 import { useTutorial } from "../hooks/useTutorial";
 import { TUTORIAL_IDS, companyDashboardTutorialConfig } from "../lib/tutorialConfig";
-import { usePageTour } from "../components/CompanyTour";
+import { useCompanyPageTour } from "../components/CompanyTour";
 import { COMPANY_TOUR_IDS, dashboardTourSteps } from "../lib/companyTourConfig";
 
 export default function CompanyDashboard() {
@@ -26,7 +26,7 @@ export default function CompanyDashboard() {
   const { showTutorial, completeTutorial } = useTutorial(TUTORIAL_IDS.COMPANY_DASHBOARD);
 
   // Quick tour for new company accounts - only start after tutorial is dismissed
-  usePageTour(COMPANY_TOUR_IDS.DASHBOARD, dashboardTourSteps, !showTutorial);
+  useCompanyPageTour(COMPANY_TOUR_IDS.DASHBOARD, dashboardTourSteps, !showTutorial);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
