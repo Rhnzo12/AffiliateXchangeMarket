@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useToast } from "../hooks/use-toast";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -15,19 +15,70 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "../components/ui/form";
+import { Input } from "../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
-import { DollarSign, Video, Calendar, Briefcase, CheckCircle, XCircle, Clock, ExternalLink, Play, Eye, EyeOff } from "lucide-react";
-import { useState } from "react";
+import { DollarSign, Video, Calendar, Briefcase, CheckCircle, XCircle, Clock, ExternalLink, Play, Eye, EyeOff, Edit3, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { VideoPlayer } from "../components/VideoPlayer";
 import { format } from "date-fns";
 import { TopNavBar } from "../components/TopNavBar";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const editRetainerSchema = z.object({
+  title: z.string().min(5, "Title must be at least 5 characters"),
+  description: z.string().min(20, "Description must be at least 20 characters"),
+  monthlyAmount: z.string().min(1, "Monthly amount is required"),
+  videosPerMonth: z.string().min(1, "Videos per month is required"),
+  durationMonths: z.string().min(1, "Duration is required"),
+  requiredPlatform: z.string().min(1, "Platform is required"),
+  platformAccountDetails: z.string().optional(),
+  contentGuidelines: z.string().optional(),
+  brandSafetyRequirements: z.string().optional(),
+  minimumFollowers: z.string().optional(),
+  niches: z.string().optional(),
+  contentApprovalRequired: z.boolean().default(false),
+  exclusivityRequired: z.boolean().default(false),
+  minimumVideoLengthSeconds: z.string().optional(),
+  postingSchedule: z.string().optional(),
+});
+
+type EditRetainerForm = z.infer<typeof editRetainerSchema>;
 
 export default function CompanyRetainerDetail() {
   const [, params] = useRoute("/company/retainers/:id");
+  const [, setLocation] = useLocation();
   const contractId = params?.id;
   const { toast } = useToast();
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
@@ -39,6 +90,11 @@ export default function CompanyRetainerDetail() {
   const [reviewNotes, setReviewNotes] = useState("");
   const [showRejected, setShowRejected] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null);
+
+  // Edit, Delete, Suspend state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
 
   // Use the correct API endpoint - /api/retainer-contracts/:id (not /api/company/retainer-contracts/:id)
   const { data: contract, isLoading, error } = useQuery<any>({
@@ -57,6 +113,151 @@ export default function CompanyRetainerDetail() {
     queryKey: [`/api/retainer-contracts/${contractId}/deliverables`],
     enabled: !!contractId && (contract?.status === 'in_progress' || !!contract?.assignedCreatorId),
   });
+
+  // Edit form
+  const editForm = useForm<EditRetainerForm>({
+    resolver: zodResolver(editRetainerSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      monthlyAmount: "",
+      videosPerMonth: "",
+      durationMonths: "3",
+      requiredPlatform: "",
+      platformAccountDetails: "",
+      contentGuidelines: "",
+      brandSafetyRequirements: "",
+      minimumFollowers: "",
+      niches: "",
+      contentApprovalRequired: false,
+      exclusivityRequired: false,
+      minimumVideoLengthSeconds: "",
+      postingSchedule: "",
+    },
+  });
+
+  // Populate edit form when contract data is loaded
+  useEffect(() => {
+    if (contract && editDialogOpen) {
+      editForm.reset({
+        title: contract.title || "",
+        description: contract.description || "",
+        monthlyAmount: contract.monthlyAmount?.toString() || "",
+        videosPerMonth: contract.videosPerMonth?.toString() || "",
+        durationMonths: contract.durationMonths?.toString() || "3",
+        requiredPlatform: contract.requiredPlatform || "",
+        platformAccountDetails: contract.platformAccountDetails || "",
+        contentGuidelines: contract.contentGuidelines || "",
+        brandSafetyRequirements: contract.brandSafetyRequirements || "",
+        minimumFollowers: contract.minimumFollowers?.toString() || "",
+        niches: contract.niches?.join(", ") || "",
+        contentApprovalRequired: contract.contentApprovalRequired || false,
+        exclusivityRequired: contract.exclusivityRequired || false,
+        minimumVideoLengthSeconds: contract.minimumVideoLengthSeconds?.toString() || "",
+        postingSchedule: contract.postingSchedule || "",
+      });
+    }
+  }, [contract, editDialogOpen]);
+
+  // Edit mutation
+  const editMutation = useMutation({
+    mutationFn: async (data: EditRetainerForm) => {
+      const payload = {
+        ...data,
+        monthlyAmount: parseFloat(data.monthlyAmount),
+        videosPerMonth: parseInt(data.videosPerMonth),
+        durationMonths: parseInt(data.durationMonths),
+        minimumFollowers: data.minimumFollowers ? parseInt(data.minimumFollowers) : null,
+        niches: data.niches ? data.niches.split(",").map((n) => n.trim()).filter(Boolean) : [],
+        minimumVideoLengthSeconds: data.minimumVideoLengthSeconds
+          ? parseInt(data.minimumVideoLengthSeconds)
+          : null,
+      };
+      return await apiRequest("PATCH", `/api/company/retainer-contracts/${contractId}`, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/retainer-contracts"] });
+      toast({
+        title: "Retainer Updated",
+        description: "Your retainer contract has been updated successfully.",
+      });
+      setEditDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to update retainer contract",
+      });
+    },
+  });
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/company/retainer-contracts/${contractId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company/retainer-contracts"] });
+      toast({
+        title: "Retainer Deleted",
+        description: "The retainer contract has been deleted.",
+      });
+      setDeleteDialogOpen(false);
+      setLocation("/company/retainers");
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to delete retainer contract",
+      });
+    },
+  });
+
+  // Suspend/Resume mutation
+  const suspendMutation = useMutation({
+    mutationFn: async (newStatus: 'paused' | 'open' | 'in_progress') => {
+      return await apiRequest("PATCH", `/api/company/retainer-contracts/${contractId}`, {
+        status: newStatus,
+      });
+    },
+    onSuccess: (_, newStatus) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/retainer-contracts/${contractId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/company/retainer-contracts"] });
+      toast({
+        title: newStatus === 'paused' ? "Retainer Suspended" : "Retainer Resumed",
+        description: newStatus === 'paused'
+          ? "The retainer contract has been suspended."
+          : "The retainer contract has been resumed.",
+      });
+      setSuspendDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      setErrorDialog({
+        title: "Error",
+        message: error.message || "Failed to update retainer status",
+      });
+    },
+  });
+
+  const handleEditSubmit = (data: EditRetainerForm) => {
+    editMutation.mutate(data);
+  };
+
+  const handleDelete = () => {
+    deleteMutation.mutate();
+  };
+
+  const handleSuspendResume = () => {
+    if (contract?.status === 'paused') {
+      // Resume - go back to open or in_progress depending on whether there's an assigned creator
+      const newStatus = contract.assignedCreatorId ? 'in_progress' : 'open';
+      suspendMutation.mutate(newStatus);
+    } else {
+      // Suspend
+      suspendMutation.mutate('paused');
+    }
+  };
 
   const approveMutation = useMutation({
     mutationFn: async (applicationId: string) => {
@@ -312,17 +513,82 @@ export default function CompanyRetainerDetail() {
 
   const isContractAssigned = contract.status === 'in_progress' || !!contract.assignedCreatorId;
 
+  const getContractStatusBadge = (status: string) => {
+    switch (status) {
+      case 'open':
+        return <Badge variant="secondary">Open</Badge>;
+      case 'in_progress':
+        return <Badge variant="default">In Progress</Badge>;
+      case 'completed':
+        return <Badge className="bg-green-500 hover:bg-green-600">Completed</Badge>;
+      case 'cancelled':
+        return <Badge variant="destructive">Cancelled</Badge>;
+      case 'paused':
+        return <Badge variant="outline" className="border-amber-500 text-amber-600"><PauseCircle className="h-3 w-3 mr-1" />Suspended</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const canEditContract = contract?.status !== 'completed' && contract?.status !== 'cancelled';
+  const canSuspendContract = contract?.status === 'open' || contract?.status === 'in_progress' || contract?.status === 'paused';
+  const canDeleteContract = contract?.status === 'open' && !contract?.assignedCreatorId;
+
   return (
     <div className="space-y-6">
       <TopNavBar />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{contract.title}</h1>
           <p className="text-muted-foreground">Retainer Contract Details</p>
         </div>
-        <Badge variant={isContractAssigned ? 'default' : 'secondary'}>
-          {isContractAssigned ? 'In Progress' : 'Open'}
-        </Badge>
+        <div className="flex items-center gap-3 flex-wrap">
+          {getContractStatusBadge(contract.status)}
+
+          {canEditContract && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditDialogOpen(true)}
+            >
+              <Edit3 className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          )}
+
+          {canSuspendContract && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSuspendDialogOpen(true)}
+              className={contract.status === 'paused' ? 'border-green-500 text-green-600 hover:bg-green-50' : 'border-amber-500 text-amber-600 hover:bg-amber-50'}
+            >
+              {contract.status === 'paused' ? (
+                <>
+                  <PlayCircle className="h-4 w-4 mr-2" />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <PauseCircle className="h-4 w-4 mr-2" />
+                  Suspend
+                </>
+              )}
+            </Button>
+          )}
+
+          {canDeleteContract && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="border-destructive text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -869,6 +1135,422 @@ export default function CompanyRetainerDetail() {
               className="bg-destructive hover:bg-destructive/90"
             >
               {rejectMutation.isPending ? "Rejecting..." : "Reject Application"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Retainer Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Retainer Contract</DialogTitle>
+            <DialogDescription>
+              Update your retainer contract details
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+              <FormField
+                control={editForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contract Title</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., TikTok Lifestyle Content - 30 Videos/Month"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Describe the type of content, brand voice, target audience, etc."
+                        rows={4}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="monthlyAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Monthly Payment ($)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="5000.00"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="videosPerMonth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Videos Per Month</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="30-50"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="durationMonths"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contract Duration (Months)</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          value={field.value || "3"}
+                          className="grid grid-cols-2 gap-2"
+                        >
+                          {["1", "3", "6", "12"].map((value) => (
+                            <label
+                              key={value}
+                              className={`flex items-center gap-2 rounded-md border p-3 cursor-pointer transition-all ${
+                                field.value === value
+                                  ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+                                  : "hover:border-primary hover:bg-accent"
+                              }`}
+                            >
+                              <RadioGroupItem value={value} />
+                              <span className={`font-medium ${field.value === value ? "text-primary" : ""}`}>
+                                {value} month{value === "1" ? "" : "s"}
+                              </span>
+                            </label>
+                          ))}
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="requiredPlatform"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Required Platform</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select platform" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="TikTok">TikTok</SelectItem>
+                          <SelectItem value="Instagram">Instagram Reels</SelectItem>
+                          <SelectItem value="YouTube Shorts">YouTube Shorts</SelectItem>
+                          <SelectItem value="Facebook Reels">Facebook Reels</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={editForm.control}
+                name="platformAccountDetails"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Platform Account Details (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., Creator will be given access to @brandname account"
+                        rows={2}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="contentGuidelines"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Content Guidelines (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Specific content requirements, posting schedule, editing style, etc."
+                        rows={3}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={editForm.control}
+                name="brandSafetyRequirements"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Brand Safety Requirements (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Topics to avoid, brand safety guidelines, compliance requirements, etc."
+                        rows={2}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="minimumVideoLengthSeconds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Minimum Video Length (seconds)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="45"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="postingSchedule"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Posting Schedule</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., 1 video every weekday"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="contentApprovalRequired"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-1">
+                        <FormLabel className="text-base">Content approval required</FormLabel>
+                        <FormDescription>Review videos before they go live</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="exclusivityRequired"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-1">
+                        <FormLabel className="text-base">Exclusivity</FormLabel>
+                        <FormDescription>Prevent creators from working with competitors</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="minimumFollowers"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Minimum Followers (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="10000"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={editForm.control}
+                  name="niches"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Niches (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Fashion, Lifestyle, Beauty"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription className="text-xs">
+                        Comma-separated
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={editMutation.isPending}
+                >
+                  {editMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Delete Retainer Contract
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this retainer contract? This action cannot be undone.
+              <br /><br />
+              <span className="font-semibold text-foreground">"{contract.title}"</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Contract"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Suspend/Resume Confirmation Dialog */}
+      <AlertDialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              {contract.status === 'paused' ? (
+                <>
+                  <PlayCircle className="h-5 w-5 text-green-600" />
+                  Resume Retainer Contract
+                </>
+              ) : (
+                <>
+                  <PauseCircle className="h-5 w-5 text-amber-600" />
+                  Suspend Retainer Contract
+                </>
+              )}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {contract.status === 'paused' ? (
+                <>
+                  Are you sure you want to resume this retainer contract? The contract will become active again
+                  {contract.assignedCreatorId ? " and the assigned creator can continue submitting deliverables" : " and creators can apply to it"}.
+                </>
+              ) : (
+                <>
+                  Are you sure you want to suspend this retainer contract? While suspended:
+                  <ul className="list-disc pl-5 mt-2 space-y-1">
+                    <li>Creators won't be able to apply to this contract</li>
+                    <li>Assigned creators won't be able to submit new deliverables</li>
+                    <li>No new payments will be processed</li>
+                  </ul>
+                  <p className="mt-2">You can resume the contract at any time.</p>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSuspendResume}
+              disabled={suspendMutation.isPending}
+              className={contract.status === 'paused' ? "bg-green-500 hover:bg-green-600" : "bg-amber-500 hover:bg-amber-600"}
+            >
+              {suspendMutation.isPending
+                ? "Processing..."
+                : contract.status === 'paused'
+                ? "Resume Contract"
+                : "Suspend Contract"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
