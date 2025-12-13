@@ -1542,6 +1542,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Delete assets from cloud storage before deleting the offer
+      const { ObjectStorageService } = await import('./objectStorage');
+      const objectStorage = new ObjectStorageService();
+
+      // Delete featured image if exists
+      if (offer.featuredImageUrl) {
+        try {
+          const imagePublicId = objectStorage.extractPublicIdFromUrl(offer.featuredImageUrl);
+          if (imagePublicId) {
+            await objectStorage.deleteResource(imagePublicId, 'image');
+            console.log(`[Offer Delete] Deleted featured image: ${imagePublicId}`);
+          }
+        } catch (error: any) {
+          console.error(`[Offer Delete] Failed to delete featured image: ${error.message}`);
+        }
+      }
+
+      // Delete all offer videos and their thumbnails
+      const offerVideos = await storage.getOfferVideos(offerId);
+      for (const video of offerVideos) {
+        if (video.videoUrl) {
+          try {
+            const videoPublicId = objectStorage.extractPublicIdFromUrl(video.videoUrl);
+            if (videoPublicId) {
+              await objectStorage.deleteResource(videoPublicId, 'video');
+              console.log(`[Offer Delete] Deleted video: ${videoPublicId}`);
+            }
+          } catch (error: any) {
+            console.error(`[Offer Delete] Failed to delete video ${video.id}: ${error.message}`);
+          }
+        }
+        if (video.thumbnailUrl) {
+          try {
+            const thumbnailPublicId = objectStorage.extractPublicIdFromUrl(video.thumbnailUrl);
+            if (thumbnailPublicId) {
+              await objectStorage.deleteResource(thumbnailPublicId, 'image');
+              console.log(`[Offer Delete] Deleted thumbnail: ${thumbnailPublicId}`);
+            }
+          } catch (error: any) {
+            console.error(`[Offer Delete] Failed to delete thumbnail: ${error.message}`);
+          }
+        }
+      }
+
       // Delete the offer (cascades to videos, applications, favorites per DB constraints)
       await storage.deleteOffer(offerId);
 
@@ -6248,6 +6292,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get company info for notification before deletion
       const company = await storage.getCompanyProfileById(offer.companyId);
       const offerTitle = offer.title;
+
+      // Delete assets from cloud storage before deleting the offer
+      const { ObjectStorageService } = await import('./objectStorage');
+      const objectStorage = new ObjectStorageService();
+      const assetDeletionErrors: string[] = [];
+
+      // Delete featured image if exists
+      if (offer.featuredImageUrl) {
+        try {
+          const imagePublicId = objectStorage.extractPublicIdFromUrl(offer.featuredImageUrl);
+          if (imagePublicId) {
+            await objectStorage.deleteResource(imagePublicId, 'image');
+            console.log(`[Offer Delete] Deleted featured image: ${imagePublicId}`);
+          }
+        } catch (error: any) {
+          const errorMsg = `Failed to delete featured image: ${error.message}`;
+          console.error(`[Offer Delete] ${errorMsg}`);
+          assetDeletionErrors.push(errorMsg);
+        }
+      }
+
+      // Delete all offer videos and their thumbnails
+      const offerVideos = await storage.getOfferVideos(offer.id);
+      for (const video of offerVideos) {
+        // Delete video file
+        if (video.videoUrl) {
+          try {
+            const videoPublicId = objectStorage.extractPublicIdFromUrl(video.videoUrl);
+            if (videoPublicId) {
+              await objectStorage.deleteResource(videoPublicId, 'video');
+              console.log(`[Offer Delete] Deleted video: ${videoPublicId}`);
+            }
+          } catch (error: any) {
+            const errorMsg = `Failed to delete video ${video.id}: ${error.message}`;
+            console.error(`[Offer Delete] ${errorMsg}`);
+            assetDeletionErrors.push(errorMsg);
+          }
+        }
+
+        // Delete thumbnail if exists
+        if (video.thumbnailUrl) {
+          try {
+            const thumbnailPublicId = objectStorage.extractPublicIdFromUrl(video.thumbnailUrl);
+            if (thumbnailPublicId) {
+              await objectStorage.deleteResource(thumbnailPublicId, 'image');
+              console.log(`[Offer Delete] Deleted thumbnail: ${thumbnailPublicId}`);
+            }
+          } catch (error: any) {
+            const errorMsg = `Failed to delete thumbnail for video ${video.id}: ${error.message}`;
+            console.error(`[Offer Delete] ${errorMsg}`);
+            assetDeletionErrors.push(errorMsg);
+          }
+        }
+      }
+
+      if (assetDeletionErrors.length > 0) {
+        console.warn(`[Offer Delete] Asset deletion completed with ${assetDeletionErrors.length} error(s)`);
+      }
 
       // Approve and delete the offer
       await storage.approveOfferDelete(req.params.id);
