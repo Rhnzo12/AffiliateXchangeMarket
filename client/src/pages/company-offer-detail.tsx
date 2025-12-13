@@ -37,7 +37,10 @@ import {
   MousePointer,
   Wallet,
   TrendingUp,
-  Info
+  Info,
+  Pause,
+  X,
+  Loader2
 } from "lucide-react";
 import { proxiedSrc } from "../lib/image";
 import { apiRequest, queryClient } from "../lib/queryClient";
@@ -159,6 +162,11 @@ export default function CompanyOfferDetail() {
   const [originalPlatform, setOriginalPlatform] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [errorDialog, setErrorDialog] = useState({ open: false, title: "Error", description: "An error occurred", errorDetails: "" });
+
+  // Delete/Suspend dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false);
+  const [actionReason, setActionReason] = useState("");
 
   // Refs for sections
   const overviewRef = useRef<HTMLDivElement>(null);
@@ -331,6 +339,76 @@ export default function CompanyOfferDetail() {
         title: "Deletion Error",
         description: "Failed to delete the video. Please try again.",
         errorDetails: error.message || "Failed to delete video",
+      });
+    },
+  });
+
+  // Request delete mutation
+  const requestDeleteMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      return await apiRequest("POST", `/api/offers/${offerId}/request-delete`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/offers/${offerId}`] });
+      setShowDeleteDialog(false);
+      setActionReason("");
+      toast({
+        title: "Delete Request Submitted",
+        description: "Your deletion request has been sent to the admin for approval.",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Request Failed",
+        description: "Failed to submit deletion request. Please try again.",
+        errorDetails: error.message || "Failed to request deletion",
+      });
+    },
+  });
+
+  // Request suspend mutation
+  const requestSuspendMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      return await apiRequest("POST", `/api/offers/${offerId}/request-suspend`, { reason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/offers/${offerId}`] });
+      setShowSuspendDialog(false);
+      setActionReason("");
+      toast({
+        title: "Suspend Request Submitted",
+        description: "Your suspension request has been sent to the admin for approval.",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Request Failed",
+        description: "Failed to submit suspension request. Please try again.",
+        errorDetails: error.message || "Failed to request suspension",
+      });
+    },
+  });
+
+  // Cancel pending action mutation
+  const cancelPendingActionMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", `/api/offers/${offerId}/cancel-pending-action`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/offers/${offerId}`] });
+      toast({
+        title: "Request Cancelled",
+        description: "Your pending request has been cancelled.",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Cancellation Failed",
+        description: "Failed to cancel the pending request. Please try again.",
+        errorDetails: error.message || "Failed to cancel request",
       });
     },
   });
@@ -603,12 +681,66 @@ export default function CompanyOfferDetail() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
 
-          <Link href={`/company/offers/${offerId}/edit`}>
-            <Button variant="outline" className="gap-2">
-              <Edit className="h-4 w-4" />
-              <span className="hidden sm:inline">Edit Offer</span>
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* Show pending action status */}
+            {offer.pendingAction && (
+              <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-600">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Pending {offer.pendingAction === 'delete' ? 'Deletion' : 'Suspension'}
+              </Badge>
+            )}
+
+            {/* Cancel pending action button */}
+            {offer.pendingAction && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => cancelPendingActionMutation.mutate()}
+                disabled={cancelPendingActionMutation.isPending}
+                className="gap-1 text-gray-600"
+              >
+                {cancelPendingActionMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <X className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Cancel Request</span>
+              </Button>
+            )}
+
+            {/* Suspend button - only show if not already suspended and no pending action */}
+            {!offer.pendingAction && offer.status !== 'paused' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSuspendDialog(true)}
+                className="gap-1 text-yellow-600 border-yellow-600 hover:bg-yellow-50"
+              >
+                <Pause className="h-4 w-4" />
+                <span className="hidden sm:inline">Suspend</span>
+              </Button>
+            )}
+
+            {/* Delete button - only show if no pending action */}
+            {!offer.pendingAction && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+                className="gap-1 text-red-600 border-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            )}
+
+            <Link href={`/company/offers/${offerId}/edit`}>
+              <Button variant="outline" className="gap-2">
+                <Edit className="h-4 w-4" />
+                <span className="hidden sm:inline">Edit Offer</span>
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -1124,6 +1256,131 @@ export default function CompanyOfferDetail() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Delete Request Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open);
+        if (!open) setActionReason("");
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Request Offer Deletion
+            </DialogTitle>
+            <DialogDescription>
+              This will submit a deletion request to the admin for approval. The offer will remain active until approved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Once approved, this action cannot be undone. All applications, videos, and data associated with this offer will be permanently deleted.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-2">
+              <Label htmlFor="delete-reason">Reason for deletion (optional)</Label>
+              <Textarea
+                id="delete-reason"
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="Why do you want to delete this offer?"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteDialog(false);
+                setActionReason("");
+              }}
+              disabled={requestDeleteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => requestDeleteMutation.mutate(actionReason)}
+              disabled={requestDeleteMutation.isPending}
+            >
+              {requestDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                "Request Deletion"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Suspend Request Dialog */}
+      <Dialog open={showSuspendDialog} onOpenChange={(open) => {
+        setShowSuspendDialog(open);
+        if (!open) setActionReason("");
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-yellow-600 flex items-center gap-2">
+              <Pause className="h-5 w-5" />
+              Request Offer Suspension
+            </DialogTitle>
+            <DialogDescription>
+              This will submit a suspension request to the admin for approval. The offer will remain active until approved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Once suspended, the offer will not be visible to creators. You can request to resume it later by contacting the admin.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-2">
+              <Label htmlFor="suspend-reason">Reason for suspension (optional)</Label>
+              <Textarea
+                id="suspend-reason"
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="Why do you want to suspend this offer?"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSuspendDialog(false);
+                setActionReason("");
+              }}
+              disabled={requestSuspendMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              className="bg-yellow-600 hover:bg-yellow-700"
+              onClick={() => requestSuspendMutation.mutate(actionReason)}
+              disabled={requestSuspendMutation.isPending}
+            >
+              {requestSuspendMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Submitting...
+                </>
+              ) : (
+                "Request Suspension"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Error Dialog */}
       <GenericErrorDialog

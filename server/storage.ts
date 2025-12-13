@@ -2145,6 +2145,111 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async requestOfferDelete(offerId: string, reason: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        pendingAction: "delete",
+        pendingActionRequestedAt: new Date(),
+        pendingActionReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async requestOfferSuspend(offerId: string, reason: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        pendingAction: "suspend",
+        pendingActionRequestedAt: new Date(),
+        pendingActionReason: reason,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async approveOfferDelete(offerId: string): Promise<Offer | undefined> {
+    // First get the offer to return its data before deletion
+    const offer = await this.getOffer(offerId);
+    if (!offer) return undefined;
+
+    // Delete the offer
+    await db
+      .delete(offers)
+      .where(eq(offers.id, offerId));
+
+    return offer;
+  }
+
+  async rejectOfferDelete(offerId: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        pendingAction: null,
+        pendingActionRequestedAt: null,
+        pendingActionReason: null,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async approveOfferSuspend(offerId: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        status: "paused",
+        pendingAction: null,
+        pendingActionRequestedAt: null,
+        pendingActionReason: null,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async rejectOfferSuspend(offerId: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        pendingAction: null,
+        pendingActionRequestedAt: null,
+        pendingActionReason: null,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async cancelOfferPendingAction(offerId: string): Promise<Offer | undefined> {
+    const result = await db
+      .update(offers)
+      .set({
+        pendingAction: null,
+        pendingActionRequestedAt: null,
+        pendingActionReason: null,
+        updatedAt: new Date()
+      })
+      .where(eq(offers.id, offerId))
+      .returning();
+    return result[0];
+  }
+
+  async getOffersWithPendingActions(): Promise<Offer[]> {
+    return await db
+      .select()
+      .from(offers)
+      .where(sql`${offers.pendingAction} IS NOT NULL`);
+  }
+
   async adjustOfferListingFee(offerId: string, fee: string): Promise<Offer | undefined> {
     const result = await db
       .update(offers)
