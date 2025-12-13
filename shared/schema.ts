@@ -49,6 +49,12 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'offer_rejected',
   'offer_edit_requested',
   'offer_removed',
+  'offer_delete_requested',
+  'offer_delete_approved',
+  'offer_delete_rejected',
+  'offer_suspend_requested',
+  'offer_suspend_approved',
+  'offer_suspend_rejected',
   'new_application',
   'review_received',
   'system_announcement',
@@ -67,6 +73,7 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'account_deletion_otp',
   'password_change_otp'
 ]);
+export const offerPendingActionEnum = pgEnum('offer_pending_action', ['delete', 'suspend']);
 export const keywordCategoryEnum = pgEnum('keyword_category', ['profanity', 'spam', 'legal', 'harassment', 'custom']);
 export const contentTypeEnum = pgEnum('content_type', ['message', 'review']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed', 'action_taken']);
@@ -312,6 +319,9 @@ export const offers = pgTable("offers", {
   priorityPurchasedAt: timestamp("priority_purchased_at"),
   exclusivityRequired: boolean("exclusivity_required").default(false),
   contentApprovalRequired: boolean("content_approval_required").default(false),
+  pendingAction: offerPendingActionEnum("pending_action"),
+  pendingActionRequestedAt: timestamp("pending_action_requested_at"),
+  pendingActionReason: text("pending_action_reason"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

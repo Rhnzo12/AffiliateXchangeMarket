@@ -1552,6 +1552,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Request offer deletion (requires admin approval)
+  app.post("/api/offers/:id/request-delete", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = req.params.id;
+      const { reason } = req.body;
+
+      // Verify ownership
+      const offer = await storage.getOffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Unauthorized: You don't own this offer" });
+      }
+
+      // Check if there's already a pending action
+      if (offer.pendingAction) {
+        return res.status(400).json({
+          error: "Pending action exists",
+          message: `This offer already has a pending ${offer.pendingAction} request.`
+        });
+      }
+
+      // Request deletion
+      const updatedOffer = await storage.requestOfferDelete(offerId, reason || "No reason provided");
+
+      // Notify all admins about the delete request
+      const adminUsers = await storage.getUsersByRole('admin');
+      for (const admin of adminUsers) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: 'offer_delete_requested',
+          title: 'Offer Deletion Request',
+          message: `Company "${companyProfile.tradeName || companyProfile.legalName}" has requested to delete offer "${offer.title}". Reason: ${reason || "No reason provided"}`,
+          linkUrl: `/admin/offers/${offerId}`,
+          metadata: { offerId, companyId: companyProfile.id, reason },
+        });
+      }
+
+      res.json({ success: true, offer: updatedOffer });
+    } catch (error: any) {
+      console.error('[POST /api/offers/:id/request-delete] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Request offer suspension (requires admin approval)
+  app.post("/api/offers/:id/request-suspend", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = req.params.id;
+      const { reason } = req.body;
+
+      // Verify ownership
+      const offer = await storage.getOffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Unauthorized: You don't own this offer" });
+      }
+
+      // Check if already paused
+      if (offer.status === 'paused') {
+        return res.status(400).json({
+          error: "Already suspended",
+          message: "This offer is already suspended."
+        });
+      }
+
+      // Check if there's already a pending action
+      if (offer.pendingAction) {
+        return res.status(400).json({
+          error: "Pending action exists",
+          message: `This offer already has a pending ${offer.pendingAction} request.`
+        });
+      }
+
+      // Request suspension
+      const updatedOffer = await storage.requestOfferSuspend(offerId, reason || "No reason provided");
+
+      // Notify all admins about the suspend request
+      const adminUsers = await storage.getUsersByRole('admin');
+      for (const admin of adminUsers) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: 'offer_suspend_requested',
+          title: 'Offer Suspension Request',
+          message: `Company "${companyProfile.tradeName || companyProfile.legalName}" has requested to suspend offer "${offer.title}". Reason: ${reason || "No reason provided"}`,
+          linkUrl: `/admin/offers/${offerId}`,
+          metadata: { offerId, companyId: companyProfile.id, reason },
+        });
+      }
+
+      res.json({ success: true, offer: updatedOffer });
+    } catch (error: any) {
+      console.error('[POST /api/offers/:id/request-suspend] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Cancel pending action request
+  app.post("/api/offers/:id/cancel-pending-action", requireAuth, requireRole('company'), async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = req.params.id;
+
+      // Verify ownership
+      const offer = await storage.getOffer(offerId);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const companyProfile = await storage.getCompanyProfile(userId);
+      if (!companyProfile || offer.companyId !== companyProfile.id) {
+        return res.status(403).json({ error: "Unauthorized: You don't own this offer" });
+      }
+
+      // Check if there's a pending action to cancel
+      if (!offer.pendingAction) {
+        return res.status(400).json({
+          error: "No pending action",
+          message: "This offer doesn't have a pending action to cancel."
+        });
+      }
+
+      // Cancel the pending action
+      const updatedOffer = await storage.cancelOfferPendingAction(offerId);
+
+      res.json({ success: true, offer: updatedOffer });
+    } catch (error: any) {
+      console.error('[POST /api/offers/:id/cancel-pending-action] Error:', error);
+      res.status(500).send(error.message);
+    }
+  });
+
   // Submit offer for review - validates 6-12 video requirement
   app.post("/api/offers/:id/submit-for-review", requireAuth, requireRole('company'), async (req, res) => {
     try {
@@ -6077,6 +6218,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(offer);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Get offers with pending actions (delete/suspend requests)
+  app.get("/api/admin/offers/pending-actions", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const offers = await storage.getOffersWithPendingActions();
+      res.json(offers);
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Admin approve delete request
+  app.post("/api/admin/offers/:id/approve-delete", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      if (offer.pendingAction !== 'delete') {
+        return res.status(400).json({ error: "This offer does not have a pending delete request" });
+      }
+
+      // Get company info for notification before deletion
+      const company = await storage.getCompanyProfileById(offer.companyId);
+      const offerTitle = offer.title;
+
+      // Approve and delete the offer
+      await storage.approveOfferDelete(req.params.id);
+
+      // Notify company about approval
+      if (company) {
+        await storage.createNotification({
+          userId: company.userId,
+          type: 'offer_delete_approved',
+          title: 'Offer Deletion Approved',
+          message: `Your request to delete offer "${offerTitle}" has been approved. The offer has been permanently deleted.`,
+          metadata: { offerTitle },
+        });
+      }
+
+      res.json({ success: true, message: "Offer deleted successfully" });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Admin reject delete request
+  app.post("/api/admin/offers/:id/reject-delete", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { reason } = req.body;
+
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      if (offer.pendingAction !== 'delete') {
+        return res.status(400).json({ error: "This offer does not have a pending delete request" });
+      }
+
+      // Reject the delete request (clears pending action)
+      const updatedOffer = await storage.rejectOfferDelete(req.params.id);
+
+      // Notify company about rejection
+      const company = await storage.getCompanyProfileById(offer.companyId);
+      if (company) {
+        await storage.createNotification({
+          userId: company.userId,
+          type: 'offer_delete_rejected',
+          title: 'Offer Deletion Request Rejected',
+          message: `Your request to delete offer "${offer.title}" has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+          linkUrl: `/company/offers/${offer.id}`,
+          metadata: { offerId: offer.id, reason },
+        });
+      }
+
+      res.json({ success: true, offer: updatedOffer });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Admin approve suspend request
+  app.post("/api/admin/offers/:id/approve-suspend", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      if (offer.pendingAction !== 'suspend') {
+        return res.status(400).json({ error: "This offer does not have a pending suspend request" });
+      }
+
+      // Approve and suspend the offer (changes status to 'paused')
+      const updatedOffer = await storage.approveOfferSuspend(req.params.id);
+
+      // Notify company about approval
+      const company = await storage.getCompanyProfileById(offer.companyId);
+      if (company) {
+        await storage.createNotification({
+          userId: company.userId,
+          type: 'offer_suspend_approved',
+          title: 'Offer Suspension Approved',
+          message: `Your request to suspend offer "${offer.title}" has been approved. The offer is now paused and not visible to creators.`,
+          linkUrl: `/company/offers/${offer.id}`,
+          metadata: { offerId: offer.id },
+        });
+      }
+
+      res.json({ success: true, offer: updatedOffer });
+    } catch (error: any) {
+      res.status(500).send(error.message);
+    }
+  });
+
+  // Admin reject suspend request
+  app.post("/api/admin/offers/:id/reject-suspend", requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+      const { reason } = req.body;
+
+      const offer = await storage.getOffer(req.params.id);
+      if (!offer) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      if (offer.pendingAction !== 'suspend') {
+        return res.status(400).json({ error: "This offer does not have a pending suspend request" });
+      }
+
+      // Reject the suspend request (clears pending action)
+      const updatedOffer = await storage.rejectOfferSuspend(req.params.id);
+
+      // Notify company about rejection
+      const company = await storage.getCompanyProfileById(offer.companyId);
+      if (company) {
+        await storage.createNotification({
+          userId: company.userId,
+          type: 'offer_suspend_rejected',
+          title: 'Offer Suspension Request Rejected',
+          message: `Your request to suspend offer "${offer.title}" has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+          linkUrl: `/company/offers/${offer.id}`,
+          metadata: { offerId: offer.id, reason },
+        });
+      }
+
+      res.json({ success: true, offer: updatedOffer });
     } catch (error: any) {
       res.status(500).send(error.message);
     }

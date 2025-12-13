@@ -33,7 +33,11 @@ import {
   Link as LinkIcon,
   Play,
   BarChart3,
+  AlertCircle,
+  Pause,
+  Loader2,
 } from "lucide-react";
+import { Alert, AlertDescription } from "../components/ui/alert";
 import { TopNavBar } from "../components/TopNavBar";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { GenericErrorDialog } from "../components/GenericErrorDialog";
@@ -60,6 +64,10 @@ export default function AdminOfferDetail() {
   const [editNotes, setEditNotes] = useState("");
   const [feeDialog, setFeeDialog] = useState(false);
   const [listingFee, setListingFee] = useState("");
+  const [rejectDeleteDialog, setRejectDeleteDialog] = useState(false);
+  const [rejectDeleteReason, setRejectDeleteReason] = useState("");
+  const [rejectSuspendDialog, setRejectSuspendDialog] = useState(false);
+  const [rejectSuspendReason, setRejectSuspendReason] = useState("");
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
     title: string;
@@ -239,6 +247,104 @@ export default function AdminOfferDetail() {
     },
   });
 
+  // Approve delete request
+  const approveDeleteMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/admin/offers/${offerId}/approve-delete`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers/pending-actions"] });
+      toast({
+        title: "Deletion Approved",
+        description: "The offer has been deleted successfully",
+      });
+      navigate("/admin/offers");
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to approve deletion",
+      });
+    },
+  });
+
+  // Reject delete request
+  const rejectDeleteMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const response = await apiRequest("POST", `/api/admin/offers/${offerId}/reject-delete`, { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/offers/${offerId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers/pending-actions"] });
+      setRejectDeleteDialog(false);
+      setRejectDeleteReason("");
+      toast({
+        title: "Deletion Rejected",
+        description: "The deletion request has been rejected",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to reject deletion",
+      });
+    },
+  });
+
+  // Approve suspend request
+  const approveSuspendMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/admin/offers/${offerId}/approve-suspend`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/offers/${offerId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers/pending-actions"] });
+      toast({
+        title: "Suspension Approved",
+        description: "The offer has been suspended successfully",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to approve suspension",
+      });
+    },
+  });
+
+  // Reject suspend request
+  const rejectSuspendMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const response = await apiRequest("POST", `/api/admin/offers/${offerId}/reject-suspend`, { reason });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/offers/${offerId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/offers/pending-actions"] });
+      setRejectSuspendDialog(false);
+      setRejectSuspendReason("");
+      toast({
+        title: "Suspension Rejected",
+        description: "The suspension request has been rejected",
+      });
+    },
+    onError: (error: any) => {
+      setErrorDialog({
+        open: true,
+        title: "Error",
+        description: error.message || "Failed to reject suspension",
+      });
+    },
+  });
+
   if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -290,8 +396,103 @@ export default function AdminOfferDetail() {
               Featured
             </Badge>
           )}
+          {offer.pendingAction && (
+            <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-600">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Pending {offer.pendingAction === 'delete' ? 'Deletion' : 'Suspension'}
+            </Badge>
+          )}
         </div>
       </div>
+
+      {/* Pending Action Alert */}
+      {offer.pendingAction && (
+        <Card className="border-yellow-500 bg-yellow-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2 text-yellow-700">
+              <AlertCircle className="h-5 w-5" />
+              {offer.pendingAction === 'delete' ? 'Deletion' : 'Suspension'} Request
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-yellow-700">
+                  The company has requested to <strong>{offer.pendingAction}</strong> this offer.
+                </p>
+                {offer.pendingActionReason && (
+                  <div className="mt-2 p-3 bg-white rounded-lg border border-yellow-200">
+                    <p className="text-sm font-medium text-gray-700">Reason:</p>
+                    <p className="text-sm text-gray-600">{offer.pendingActionReason}</p>
+                  </div>
+                )}
+                {offer.pendingActionRequestedAt && (
+                  <p className="text-xs text-yellow-600 mt-2">
+                    Requested on: {new Date(offer.pendingActionRequestedAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {offer.pendingAction === 'delete' ? (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => approveDeleteMutation.mutate()}
+                      disabled={approveDeleteMutation.isPending}
+                      className="gap-2"
+                    >
+                      {approveDeleteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                      Approve Deletion
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRejectDeleteDialog(true)}
+                      disabled={rejectDeleteMutation.isPending}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Reject Deletion
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => approveSuspendMutation.mutate()}
+                      disabled={approveSuspendMutation.isPending}
+                      className="gap-2 bg-yellow-600 hover:bg-yellow-700"
+                    >
+                      {approveSuspendMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )}
+                      Approve Suspension
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRejectSuspendDialog(true)}
+                      disabled={rejectSuspendMutation.isPending}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Reject Suspension
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       <Card className="border-card-border">
@@ -690,6 +891,78 @@ export default function AdminOfferDetail() {
               disabled={!listingFee || adjustFeeMutation.isPending}
             >
               Update Fee
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Delete Dialog */}
+      <Dialog open={rejectDeleteDialog} onOpenChange={setRejectDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Deletion Request</DialogTitle>
+            <DialogDescription>
+              Optionally provide a reason for rejecting this deletion request. The company will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter reason (optional)..."
+            value={rejectDeleteReason}
+            onChange={(e) => setRejectDeleteReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDeleteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => rejectDeleteMutation.mutate(rejectDeleteReason)}
+              disabled={rejectDeleteMutation.isPending}
+            >
+              {rejectDeleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Rejecting...
+                </>
+              ) : (
+                "Reject Deletion"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Suspend Dialog */}
+      <Dialog open={rejectSuspendDialog} onOpenChange={setRejectSuspendDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Suspension Request</DialogTitle>
+            <DialogDescription>
+              Optionally provide a reason for rejecting this suspension request. The company will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Enter reason (optional)..."
+            value={rejectSuspendReason}
+            onChange={(e) => setRejectSuspendReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectSuspendDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => rejectSuspendMutation.mutate(rejectSuspendReason)}
+              disabled={rejectSuspendMutation.isPending}
+            >
+              {rejectSuspendMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Rejecting...
+                </>
+              ) : (
+                "Reject Suspension"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
