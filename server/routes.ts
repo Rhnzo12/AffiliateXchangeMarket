@@ -3673,6 +3673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           providerTransactionId: paymentResult.transactionId,
           providerResponse: paymentResult.providerResponse,
           completedAt: new Date(),
+          description: 'Payment completed successfully',
         });
 
         console.log(`[Payment] SUCCESS - Sent $${payment.netAmount} to creator. TX ID: ${paymentResult.transactionId}`);
@@ -4122,6 +4123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           providerTransactionId: paymentResult.transactionId,
           providerResponse: paymentResult.providerResponse,
           completedAt: new Date(),
+          description: 'Payment completed successfully',
         });
 
         res.json(updatedPayment);
