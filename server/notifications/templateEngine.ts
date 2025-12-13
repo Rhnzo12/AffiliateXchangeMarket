@@ -287,7 +287,7 @@ export function getAvailableVariablesForTemplate(slug: string): Array<{
       { name: 'companyName', description: 'Company requesting deletion', example: 'Acme Corp' },
       { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
       { name: 'reason', description: 'Reason for deletion request', example: 'Product discontinued' },
-      { name: 'linkUrl', description: 'Link to review the request', example: '/admin/offers/offer_123' },
+      { name: 'linkUrl', description: 'Link to review the request', example: '/admin-offer-detail/offer_123' },
     ],
     'offer-delete-approved': [
       { name: 'userName', description: 'Company contact name', example: 'Jane' },
@@ -304,7 +304,7 @@ export function getAvailableVariablesForTemplate(slug: string): Array<{
       { name: 'companyName', description: 'Company requesting suspension', example: 'Acme Corp' },
       { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
       { name: 'reason', description: 'Reason for suspension request', example: 'Seasonal pause' },
-      { name: 'linkUrl', description: 'Link to review the request', example: '/admin/offers/offer_123' },
+      { name: 'linkUrl', description: 'Link to review the request', example: '/admin-offer-detail/offer_123' },
     ],
     'offer-suspend-approved': [
       { name: 'userName', description: 'Company contact name', example: 'Jane' },

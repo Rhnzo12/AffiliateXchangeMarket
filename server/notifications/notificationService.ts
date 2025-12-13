@@ -233,7 +233,7 @@ export class NotificationService {
       case 'offer_suspend_requested':
         // Admin: go to specific offer to review the request
         if (data.offerId) {
-          return `/admin/offers/${data.offerId}`;
+          return `/admin-offer-detail/${data.offerId}`;
         }
         return '/admin/offers';
 
