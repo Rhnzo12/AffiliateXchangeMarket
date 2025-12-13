@@ -150,6 +150,12 @@ export function getTemplateSlugForNotificationType(type: string): string | null 
     // Offer templates
     'offer_approved': 'offer-approved',
     'offer_rejected': 'offer-rejected',
+    'offer_delete_requested': 'offer-delete-requested',
+    'offer_delete_approved': 'offer-delete-approved',
+    'offer_delete_rejected': 'offer-delete-rejected',
+    'offer_suspend_requested': 'offer-suspend-requested',
+    'offer_suspend_approved': 'offer-suspend-approved',
+    'offer_suspend_rejected': 'offer-suspend-rejected',
 
     // Company templates
     'registration_approved': 'registration-approved',
@@ -272,6 +278,40 @@ export function getAvailableVariablesForTemplate(slug: string): Array<{
       { name: 'linkUrl', description: 'Link to the offer', example: '/company/offers/offer_123' },
     ],
     'offer-rejected': [
+      { name: 'userName', description: 'Company contact name', example: 'Jane' },
+      { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
+      { name: 'linkUrl', description: 'Link to the offer', example: '/company/offers/offer_123' },
+    ],
+    'offer-delete-requested': [
+      { name: 'userName', description: 'Admin name', example: 'Admin' },
+      { name: 'companyName', description: 'Company requesting deletion', example: 'Acme Corp' },
+      { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
+      { name: 'reason', description: 'Reason for deletion request', example: 'Product discontinued' },
+      { name: 'linkUrl', description: 'Link to review the request', example: '/admin/offers/offer_123' },
+    ],
+    'offer-delete-approved': [
+      { name: 'userName', description: 'Company contact name', example: 'Jane' },
+      { name: 'offerTitle', description: 'Title of the deleted offer', example: 'Premium SEO Package' },
+      { name: 'linkUrl', description: 'Link to offers page', example: '/company/offers' },
+    ],
+    'offer-delete-rejected': [
+      { name: 'userName', description: 'Company contact name', example: 'Jane' },
+      { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
+      { name: 'linkUrl', description: 'Link to the offer', example: '/company/offers/offer_123' },
+    ],
+    'offer-suspend-requested': [
+      { name: 'userName', description: 'Admin name', example: 'Admin' },
+      { name: 'companyName', description: 'Company requesting suspension', example: 'Acme Corp' },
+      { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
+      { name: 'reason', description: 'Reason for suspension request', example: 'Seasonal pause' },
+      { name: 'linkUrl', description: 'Link to review the request', example: '/admin/offers/offer_123' },
+    ],
+    'offer-suspend-approved': [
+      { name: 'userName', description: 'Company contact name', example: 'Jane' },
+      { name: 'offerTitle', description: 'Title of the suspended offer', example: 'Premium SEO Package' },
+      { name: 'linkUrl', description: 'Link to the offer', example: '/company/offers/offer_123' },
+    ],
+    'offer-suspend-rejected': [
       { name: 'userName', description: 'Company contact name', example: 'Jane' },
       { name: 'offerTitle', description: 'Title of the offer', example: 'Premium SEO Package' },
       { name: 'linkUrl', description: 'Link to the offer', example: '/company/offers/offer_123' },

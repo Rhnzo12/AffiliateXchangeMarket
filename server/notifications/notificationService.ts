@@ -67,6 +67,12 @@ export type NotificationType =
   | 'payment_failed_insufficient_funds'
   | 'offer_approved'
   | 'offer_rejected'
+  | 'offer_delete_requested'
+  | 'offer_delete_approved'
+  | 'offer_delete_rejected'
+  | 'offer_suspend_requested'
+  | 'offer_suspend_approved'
+  | 'offer_suspend_rejected'
   | 'new_application'
   | 'review_received'
   | 'system_announcement'
@@ -213,11 +219,23 @@ export class NotificationService {
 
       case 'offer_approved':
       case 'offer_rejected':
+      case 'offer_delete_approved':
+      case 'offer_delete_rejected':
+      case 'offer_suspend_approved':
+      case 'offer_suspend_rejected':
         // Company: go to specific offer detail page
         if (data.offerId) {
           return `/company/offers/${data.offerId}`;
         }
         return '/company/offers';
+
+      case 'offer_delete_requested':
+      case 'offer_suspend_requested':
+        // Admin: go to specific offer to review the request
+        if (data.offerId) {
+          return `/admin/offers/${data.offerId}`;
+        }
+        return '/admin/offers';
 
       case 'review_received':
         // Company: go to reviews page, optionally highlight specific review
@@ -451,6 +469,18 @@ export class NotificationService {
         return emailTemplates.offerApprovedEmail(data);
       case 'offer_rejected':
         return emailTemplates.offerRejectedEmail(data);
+      case 'offer_delete_requested':
+        return emailTemplates.offerDeleteRequestedEmail(data);
+      case 'offer_delete_approved':
+        return emailTemplates.offerDeleteApprovedEmail(data);
+      case 'offer_delete_rejected':
+        return emailTemplates.offerDeleteRejectedEmail(data);
+      case 'offer_suspend_requested':
+        return emailTemplates.offerSuspendRequestedEmail(data);
+      case 'offer_suspend_approved':
+        return emailTemplates.offerSuspendApprovedEmail(data);
+      case 'offer_suspend_rejected':
+        return emailTemplates.offerSuspendRejectedEmail(data);
       case 'new_application':
         return emailTemplates.newApplicationEmail(data);
       case 'review_received':
@@ -615,6 +645,12 @@ export class NotificationService {
         return preferences.emailPayment;
       case 'offer_approved':
       case 'offer_rejected':
+      case 'offer_delete_requested':
+      case 'offer_delete_approved':
+      case 'offer_delete_rejected':
+      case 'offer_suspend_requested':
+      case 'offer_suspend_approved':
+      case 'offer_suspend_rejected':
       case 'new_application':
         return preferences.emailOffer;
       case 'review_received':

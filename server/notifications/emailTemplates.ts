@@ -500,6 +500,236 @@ export function offerRejectedEmail(data: EmailTemplateData): { subject: string; 
   return { subject, html };
 }
 
+export function offerDeleteRequestedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Deletion Request: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #EF4444;">
+          <h1>Offer Deletion Request</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p><strong>${data.companyName}</strong> has requested to delete their offer <strong>"${data.offerTitle}"</strong>.</p>
+
+          ${data.reason ? `
+            <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #374151;">Reason for Deletion:</h3>
+              <p style="margin: 0; color: #6B7280;">${data.reason}</p>
+            </div>
+          ` : ''}
+
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: #92400E;">Action Required</p>
+            <p style="margin: 5px 0 0 0; color: #78350F; font-size: 14px;">Please review this request and approve or reject the deletion.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/admin/offers')}" class="button" style="background-color: #EF4444;">Review Request</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function offerDeleteApprovedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Deletion Approved: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #10B981;">
+          <h1>Offer Deletion Approved</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>Your request to delete the offer <strong>"${data.offerTitle}"</strong> has been approved.</p>
+
+          <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #065F46;">The offer has been successfully deleted from the marketplace.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/offers')}" class="button" style="background-color: #10B981;">View Your Offers</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="${toAbsoluteUrl('/settings')}">notification preferences</a> anytime.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function offerDeleteRejectedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Deletion Request Rejected: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #EF4444;">
+          <h1>Deletion Request Rejected</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>Your request to delete the offer <strong>"${data.offerTitle}"</strong> has been rejected by the admin.</p>
+
+          <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #991B1B;">The offer will remain active on the marketplace. If you have questions, please contact support.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/offers')}" class="button">View Offer</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="${toAbsoluteUrl('/settings')}">notification preferences</a> anytime.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function offerSuspendRequestedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Suspension Request: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #F59E0B;">
+          <h1>Offer Suspension Request</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p><strong>${data.companyName}</strong> has requested to suspend their offer <strong>"${data.offerTitle}"</strong>.</p>
+
+          ${data.reason ? `
+            <div style="background-color: #F3F4F6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0; color: #374151;">Reason for Suspension:</h3>
+              <p style="margin: 0; color: #6B7280;">${data.reason}</p>
+            </div>
+          ` : ''}
+
+          <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; font-weight: 600; color: #92400E;">Action Required</p>
+            <p style="margin: 5px 0 0 0; color: #78350F; font-size: 14px;">Please review this request and approve or reject the suspension.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/admin/offers')}" class="button" style="background-color: #F59E0B;">Review Request</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function offerSuspendApprovedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Suspension Approved: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #10B981;">
+          <h1>Offer Suspension Approved</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>Your request to suspend the offer <strong>"${data.offerTitle}"</strong> has been approved.</p>
+
+          <div style="background-color: #ECFDF5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #065F46;">The offer has been suspended and is no longer visible to creators. You can request to reactivate it at any time.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/offers')}" class="button" style="background-color: #10B981;">View Your Offers</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="${toAbsoluteUrl('/settings')}">notification preferences</a> anytime.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
+export function offerSuspendRejectedEmail(data: EmailTemplateData): { subject: string; html: string } {
+  const subject = `Offer Suspension Request Rejected: "${data.offerTitle}"`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>${baseStyles}</style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header" style="background-color: #EF4444;">
+          <h1>Suspension Request Rejected</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${data.userName},</p>
+          <p>Your request to suspend the offer <strong>"${data.offerTitle}"</strong> has been rejected by the admin.</p>
+
+          <div style="background-color: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <p style="margin: 0; color: #991B1B;">The offer will remain active on the marketplace. If you have questions, please contact support.</p>
+          </div>
+
+          <a href="${data.linkUrl || toAbsoluteUrl('/company/offers')}" class="button">View Offer</a>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification from Affiliate Marketplace.</p>
+          <p>Update your <a href="${toAbsoluteUrl('/settings')}">notification preferences</a> anytime.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return { subject, html };
+}
+
 export function newApplicationEmail(data: EmailTemplateData): { subject: string; html: string } {
   const subject = data.offerTitle
     ? `New offer pending review: "${data.offerTitle}"`
