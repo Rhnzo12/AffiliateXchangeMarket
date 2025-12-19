@@ -151,6 +151,19 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
               <div className="flex items-center gap-4 flex-1 min-w-0">
                 <div className="flex items-center gap-3 flex-shrink-0">
                   <SidebarTrigger className="h-9 w-9 rounded-full border bg-background/80 backdrop-blur-sm shadow-sm transition-all duration-300 hover:border-primary/60 hover:shadow-md" />
+                  <Link
+                    href="/"
+                    className="inline-flex items-center gap-2 rounded-md px-2 py-1 transition-all duration-300 hover:bg-primary/10"
+                  >
+                    <img
+                      src="/logo.png"
+                      alt="AffiliateXchange logo"
+                      className="h-9 w-9 rounded-md object-cover shadow-sm transition-all duration-300"
+                    />
+                    <span className="text-lg font-semibold text-foreground transition-colors duration-300 hover:text-primary whitespace-nowrap">
+                      AffiliateXchange
+                    </span>
+                  </Link>
                 </div>
                 {headerContent && <div className="w-full max-w-xl transition-all duration-300">{headerContent}</div>}
               </div>
