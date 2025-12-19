@@ -260,21 +260,27 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2 space-y-3">
-        <div className={`flex items-center gap-3 ${isCollapsed ? "flex-col gap-2" : ""}`}>
+      <SidebarHeader className="relative border-b px-4 py-4 group-data-[collapsible=icon]:p-2 space-y-3">
+        <div className="flex items-center gap-3">
           <SidebarTrigger className="h-8 w-8 shrink-0" />
           <Link
             href="/"
-            className={`flex items-center gap-2 group ${isCollapsed ? "flex-col gap-1 text-center" : ""}`}
+            className={`group flex items-center gap-2 transition-all duration-300 ${
+              isCollapsed
+                ? "absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-full border bg-background px-3 py-2 shadow-md"
+                : ""
+            }`}
           >
             <img
               src="/logo.png"
               alt="AffiliateXchange Logo"
-              className={`rounded-md object-cover ${isCollapsed ? "h-9 w-9" : "h-8 w-8"}`}
+              className={`rounded-md object-cover transition-all duration-300 ${
+                isCollapsed ? "h-9 w-9" : "h-8 w-8"
+              }`}
             />
             <span
-              className={`font-semibold text-foreground ${
-                isCollapsed ? "text-xs leading-tight text-center" : "text-lg whitespace-nowrap"
+              className={`font-semibold text-foreground transition-all duration-300 ${
+                isCollapsed ? "text-base" : "text-lg whitespace-nowrap"
               }`}
             >
               AffiliateXchange
