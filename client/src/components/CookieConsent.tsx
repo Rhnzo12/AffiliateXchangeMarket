@@ -91,59 +91,54 @@ export function CookieConsent() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-4">
-        <div className="mx-auto w-full max-w-3xl rounded-xl border border-white/20 bg-gradient-to-br from-[#7b3bb7] via-[#c94d9f] to-[#ff7b67] text-white shadow-2xl">
-          <div className="flex items-start gap-3 p-4 sm:p-5">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowBanner(false)}
-              className="text-white hover:bg-white/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-            <div className="flex-1 space-y-3 sm:space-y-2">
+      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-5" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}>
+        <div className="mx-auto w-full max-w-5xl rounded-2xl border border-white/10 bg-slate-900/80 text-white shadow-2xl backdrop-blur-md">
+          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowBanner(false)}
+                className="mt-1 text-white/80 hover:bg-white/10"
+              >
+                <X className="h-4 w-4" />
+              </Button>
               <div className="space-y-2">
-                <h3 className="text-lg font-semibold">We value your privacy</h3>
-                <p className="text-sm leading-relaxed text-white/90">
-                  We use cookies to improve your experience and personalize content. Choose
-                  how we use cookies or manage your preferences anytime.
-                  <span className="block pt-2 text-sm">
-                    <a
-                      href="/cookie-policy"
-                      className="underline transition hover:text-white"
-                    >
-                      Cookie Policy
-                    </a>
-                  </span>
+                <h3 className="text-xl font-semibold tracking-tight text-white">Cookies & Privacy</h3>
+                <p className="max-w-3xl text-sm leading-relaxed text-white/85">
+                  This website uses cookies to ensure you get the best experience on our site.
+                  Review our
+                  <a
+                    href="/cookie-policy"
+                    className="mx-1 underline decoration-white/70 underline-offset-4 transition hover:text-white"
+                  >
+                    Cookie Policy
+                  </a>
+                  for details or manage your preferences at any time.
                 </p>
               </div>
+            </div>
 
-              <div className="flex flex-col gap-2 text-sm font-medium sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap gap-2 sm:gap-3">
-                  <Button
-                    onClick={acceptAll}
-                    size="sm"
-                    className="rounded-md bg-white text-black hover:bg-white/90"
-                  >
-                    Accept all
-                  </Button>
-                  <Button
-                    onClick={acceptEssential}
-                    size="sm"
-                    variant="outline"
-                    className="border-white/60 text-white hover:bg-white/10 hover:text-white"
-                  >
-                    Essential only
-                  </Button>
-                </div>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="text-white underline transition hover:text-white/80"
-                >
-                  Manage preferences
-                </button>
-              </div>
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <Button
+                onClick={acceptAll}
+                className="min-w-[120px] rounded-full bg-blue-500/90 px-5 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-blue-500"
+              >
+                Agree
+              </Button>
+              <Button
+                onClick={acceptEssential}
+                variant="outline"
+                className="min-w-[140px] rounded-full border-white/50 bg-white/5 px-5 py-2 text-sm font-medium text-white/90 backdrop-blur-sm transition hover:bg-white/10"
+              >
+                Essential only
+              </Button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="text-sm font-medium text-white/80 underline underline-offset-4 transition hover:text-white"
+              >
+                Manage preferences
+              </button>
             </div>
           </div>
         </div>
