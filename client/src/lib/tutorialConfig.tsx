@@ -37,7 +37,7 @@ export const TUTORIAL_IDS = {
 // Creator Dashboard Preview: Analytics Chart
 function AnalyticsPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-medium text-muted-foreground">Earnings</span>
         <BarChart3 className="h-3 w-3 text-primary" />
@@ -46,7 +46,7 @@ function AnalyticsPreview() {
         {[40, 60, 45, 80, 65, 90, 75].map((height, i) => (
           <div
             key={i}
-            className="flex-1 bg-primary/20 rounded-t"
+            className="flex-1 bg-primary/15 rounded-t"
             style={{ height: `${height}%` }}
           >
             <div
@@ -67,9 +67,9 @@ function AnalyticsPreview() {
 // Creator Dashboard Preview: Offer Card
 function OfferCardPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center gap-2 mb-2">
-        <div className="h-8 w-8 rounded-md bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
+        <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center">
           <Star className="h-4 w-4 text-primary" />
         </div>
         <div>
@@ -94,7 +94,7 @@ function QuickActionsPreview() {
         { icon: ClipboardList, label: "Applications", color: "text-purple-500" },
         { icon: Settings, label: "Settings", color: "text-gray-500" },
       ].map((item, i) => (
-        <div key={i} className="flex items-center gap-2 rounded-md border border-border bg-card p-2">
+        <div key={i} className="flex items-center gap-2 rounded-md border border-border bg-card/70 p-2">
           <item.icon className={`h-3 w-3 ${item.color}`} />
           <span className="text-[10px] font-medium">{item.label}</span>
         </div>
@@ -113,7 +113,7 @@ function StatsPreview() {
         { label: "Clicks", value: "1.2K", icon: TrendingUp },
         { label: "Apps", value: "45", icon: ClipboardList },
       ].map((stat, i) => (
-        <div key={i} className="rounded-md border border-border bg-card p-2 text-center">
+        <div key={i} className="rounded-md border border-border bg-card/70 p-2 text-center">
           <stat.icon className="h-3 w-3 mx-auto mb-1 text-primary" />
           <p className="text-xs font-semibold">{stat.value}</p>
           <p className="text-[8px] text-muted-foreground">{stat.label}</p>
@@ -126,8 +126,8 @@ function StatsPreview() {
 // Company Dashboard Preview: Create Offer
 function CreateOfferPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-center justify-center gap-2 mb-2 py-3 border-2 border-dashed border-primary/30 rounded-md bg-primary/5">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
+      <div className="flex items-center justify-center gap-2 mb-2 py-3 border border-dashed border-border rounded-md bg-muted/40">
         <Plus className="h-5 w-5 text-primary" />
       </div>
       <p className="text-[10px] font-medium text-center">Create New Offer</p>
@@ -141,11 +141,11 @@ function CreateOfferPreview() {
 // Company Dashboard Preview: Applications List
 function ApplicationsPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-2 shadow-sm space-y-2">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-2 space-y-2">
       {["Pending", "Approved", "Review"].map((status, i) => (
-        <div key={i} className="flex items-center justify-between p-1.5 rounded-md bg-muted/50">
+        <div key={i} className="flex items-center justify-between p-1.5 rounded-md border border-border/60 bg-card">
           <div className="flex items-center gap-2">
-            <div className="h-5 w-5 rounded-full bg-gradient-to-br from-primary/30 to-primary/10" />
+            <div className="h-5 w-5 rounded-full bg-muted" />
             <span className="text-[9px] font-medium">Creator {i + 1}</span>
           </div>
           <span className={`text-[8px] px-1.5 py-0.5 rounded ${
@@ -164,8 +164,8 @@ function ApplicationsPreview() {
 // Browse Page Preview: Search & Filter
 function SearchFilterPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-center gap-2 p-2 rounded-md border border-border mb-2">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
+      <div className="flex items-center gap-2 p-2 rounded-md border border-border mb-2 bg-card">
         <Search className="h-3 w-3 text-muted-foreground" />
         <span className="text-[9px] text-muted-foreground">Search offers...</span>
       </div>
@@ -187,8 +187,8 @@ function OfferGridPreview() {
   return (
     <div className="w-full max-w-[160px] grid grid-cols-2 gap-2">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="rounded-md border border-border bg-card p-2">
-          <div className="h-8 w-full rounded-sm bg-gradient-to-br from-primary/20 to-primary/5 mb-1" />
+        <div key={i} className="rounded-md border border-border bg-card/70 p-2">
+          <div className="h-8 w-full rounded-sm bg-muted/50 mb-1" />
           <div className="h-1.5 w-3/4 bg-muted rounded" />
           <div className="h-1 w-1/2 bg-muted rounded mt-1" />
         </div>
@@ -200,14 +200,14 @@ function OfferGridPreview() {
 // Browse Page Preview: Favorites
 function FavoritesPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center gap-2 mb-2">
         <Bookmark className="h-4 w-4 text-primary" />
         <span className="text-[10px] font-medium">Saved Offers</span>
       </div>
       <div className="space-y-1.5">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50">
+          <div key={i} className="flex items-center gap-2 p-1.5 rounded-md border border-border/60 bg-card">
             <Heart className="h-3 w-3 text-red-400 fill-red-400" />
             <span className="text-[9px]">Saved Offer {i}</span>
           </div>
@@ -220,7 +220,7 @@ function FavoritesPreview() {
 // Analytics Preview: Earnings Dashboard
 function EarningsDashboardPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-medium text-muted-foreground">Total Earnings</span>
         <DollarSign className="h-3 w-3 text-green-500" />
@@ -251,7 +251,7 @@ function EarningsDashboardPreview() {
 // Analytics Preview: Performance Charts
 function PerformanceChartsPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-medium text-muted-foreground">Performance</span>
         <BarChart3 className="h-3 w-3 text-primary" />
@@ -286,7 +286,7 @@ function PerformanceChartsPreview() {
 // Analytics Preview: Export Options
 function ExportOptionsPreview() {
   return (
-    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div className="w-full max-w-[160px] rounded-lg border border-border bg-card/70 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-medium text-muted-foreground">Export Data</span>
         <Download className="h-3 w-3 text-primary" />
@@ -297,7 +297,7 @@ function ExportOptionsPreview() {
           { icon: BarChart3, label: "CSV Export", color: "text-green-500" },
           { icon: TrendingUp, label: "Analytics API", color: "text-blue-500" },
         ].map((item, i) => (
-          <div key={i} className="flex items-center gap-2 p-1.5 rounded-md bg-muted/50">
+          <div key={i} className="flex items-center gap-2 p-1.5 rounded-md border border-border/60 bg-card">
             <item.icon className={`h-3 w-3 ${item.color}`} />
             <span className="text-[9px] font-medium">{item.label}</span>
           </div>
