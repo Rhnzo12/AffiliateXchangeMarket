@@ -261,8 +261,22 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b px-4 py-3 group-data-[collapsible=icon]:p-2">
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-between gap-3 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-2">
           <SidebarTrigger className="h-8 w-8 shrink-0" />
+          <Link
+            href="/"
+            onClick={handleNavClick}
+            className="group flex items-center gap-2 rounded-md px-2 py-1 transition-all duration-300 hover:bg-primary/10 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-0"
+          >
+            <img
+              src="/logo.png"
+              alt="AffiliateXchange logo"
+              className="h-9 w-9 rounded-md object-cover shadow-sm transition-all duration-300 group-hover:shadow-md group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8"
+            />
+            <span className="text-lg font-semibold text-foreground transition-colors duration-300 group-hover:text-primary group-data-[collapsible=icon]:hidden">
+              AffiliateXchange
+            </span>
+          </Link>
         </div>
       </SidebarHeader>
 
