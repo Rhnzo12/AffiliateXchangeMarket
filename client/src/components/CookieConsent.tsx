@@ -91,27 +91,23 @@ export function CookieConsent() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6">
-        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-gradient-to-br from-[#7b3bb7] via-[#c94d9f] to-[#ff7b67] text-white shadow-2xl">
-          <div className="p-6 sm:p-8">
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowBanner(false)}
-                className="text-white hover:bg-white/10"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-6">
-              <div className="space-y-3 text-center sm:text-left">
-                <h3 className="text-xl font-semibold">We use cookies on our website</h3>
-                <p className="text-sm text-white/90">
-                  We use cookies on our website to give you the most relevant experience by
-                  remembering your preferences and repeat visits. By clicking “Accept”, you
-                  consent to the use of ALL the cookies. You may visit Cookie settings to
-                  manage which cookies are used.
+      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-4">
+        <div className="mx-auto w-full max-w-3xl rounded-xl border border-white/20 bg-gradient-to-br from-[#7b3bb7] via-[#c94d9f] to-[#ff7b67] text-white shadow-2xl">
+          <div className="flex items-start gap-3 p-4 sm:p-5">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowBanner(false)}
+              className="text-white hover:bg-white/10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <div className="flex-1 space-y-3 sm:space-y-2">
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold">We value your privacy</h3>
+                <p className="text-sm leading-relaxed text-white/90">
+                  We use cookies to improve your experience and personalize content. Choose
+                  how we use cookies or manage your preferences anytime.
                   <span className="block pt-2 text-sm">
                     <a
                       href="/cookie-policy"
@@ -123,25 +119,29 @@ export function CookieConsent() {
                 </p>
               </div>
 
-              <div className="flex flex-col gap-3 text-sm font-medium sm:flex-row sm:items-center sm:justify-center">
-                <Button
-                  onClick={acceptAll}
-                  className="flex-1 rounded-md bg-white text-black hover:bg-white/90 sm:flex-none sm:min-w-[120px]"
-                >
-                  Accept
-                </Button>
-                <Button
-                  onClick={acceptEssential}
-                  variant="outline"
-                  className="flex-1 rounded-md border-white/60 text-white hover:bg-white/10 hover:text-white sm:flex-none sm:min-w-[120px]"
-                >
-                  Reject
-                </Button>
+              <div className="flex flex-col gap-2 text-sm font-medium sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2 sm:gap-3">
+                  <Button
+                    onClick={acceptAll}
+                    size="sm"
+                    className="rounded-md bg-white text-black hover:bg-white/90"
+                  >
+                    Accept all
+                  </Button>
+                  <Button
+                    onClick={acceptEssential}
+                    size="sm"
+                    variant="outline"
+                    className="border-white/60 text-white hover:bg-white/10 hover:text-white"
+                  >
+                    Essential only
+                  </Button>
+                </div>
                 <button
                   onClick={() => setShowSettings(true)}
                   className="text-white underline transition hover:text-white/80"
                 >
-                  Cookie settings
+                  Manage preferences
                 </button>
               </div>
             </div>
