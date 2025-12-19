@@ -43,22 +43,22 @@ interface FirstTimeTutorialProps {
 }
 
 const accentColorClasses = {
-  teal: "text-teal-500",
-  purple: "text-purple-500",
-  orange: "text-orange-500",
+  teal: "text-teal-600",
+  purple: "text-purple-600",
+  orange: "text-amber-600",
 };
 
 // Feature Preview Card Component
 function FeaturePreviewCard({ feature }: { feature: TutorialFeature }) {
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-lg border border-border bg-card/70 min-h-[200px] shadow-none">
+    <div className="flex flex-col gap-3 p-5 rounded-xl border border-border bg-white min-h-[220px] shadow-sm">
       <div className="space-y-1 text-left">
-        <p className={`text-xs font-semibold uppercase tracking-wide ${accentColorClasses[feature.accentColor]}`}>
+        <p className={`text-xs font-semibold tracking-wide ${accentColorClasses[feature.accentColor]}`}>
           {feature.accentText}
         </p>
-        <p className="text-sm text-muted-foreground">{feature.subtitle}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">{feature.subtitle}</p>
       </div>
-      <div className="flex-1 flex items-center justify-start">
+      <div className="flex-1 rounded-lg bg-muted/40 p-3 border border-border/60">
         {feature.preview}
       </div>
     </div>
@@ -81,17 +81,19 @@ export function FirstTimeTutorial({
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleComplete()}>
         <DialogContent className="sm:max-w-3xl p-0 overflow-hidden">
-          <div className="p-6 space-y-6">
+          <div className="p-6 space-y-6 bg-gradient-to-b from-background to-muted/20">
             {/* Header */}
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Become a
+                Onboarding guide
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="text-xs px-2 py-1">
+                <Badge variant="secondary" className="text-xs px-2 py-1 border-border">
                   {config.badgeText}
                 </Badge>
-                <h2 className="text-2xl font-semibold leading-snug">{config.headline}</h2>
+                <h2 className="text-2xl font-semibold leading-snug text-foreground">
+                  {config.headline}
+                </h2>
               </div>
             </div>
 
