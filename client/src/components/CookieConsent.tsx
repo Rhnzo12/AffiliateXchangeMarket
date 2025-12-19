@@ -92,25 +92,25 @@ export function CookieConsent() {
   return (
     <>
       <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-5" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}>
-        <div className="mx-auto w-full max-w-5xl rounded-2xl border border-white/10 bg-slate-900/80 text-white shadow-2xl backdrop-blur-md">
+        <div className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
           <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex items-start gap-3 sm:gap-4">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowBanner(false)}
-                className="mt-1 text-white/80 hover:bg-white/10"
+                className="mt-1 text-slate-500 hover:bg-slate-100"
               >
                 <X className="h-4 w-4" />
               </Button>
               <div className="space-y-2">
-                <h3 className="text-xl font-semibold tracking-tight text-white">Cookies & Privacy</h3>
-                <p className="max-w-3xl text-sm leading-relaxed text-white/85">
+                <h3 className="text-xl font-semibold tracking-tight text-slate-900">Cookies & Privacy</h3>
+                <p className="max-w-3xl text-sm leading-relaxed text-slate-700">
                   This website uses cookies to ensure you get the best experience on our site.
                   Review our
                   <a
                     href="/cookie-policy"
-                    className="mx-1 underline decoration-white/70 underline-offset-4 transition hover:text-white"
+                    className="mx-1 text-blue-600 underline decoration-blue-600/70 underline-offset-4 transition hover:text-blue-700"
                   >
                     Cookie Policy
                   </a>
@@ -122,20 +122,20 @@ export function CookieConsent() {
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
               <Button
                 onClick={acceptAll}
-                className="min-w-[120px] rounded-full bg-blue-500/90 px-5 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-blue-500"
+                className="min-w-[120px] rounded-full bg-blue-500 px-5 py-2 text-base font-semibold text-white shadow-lg transition hover:bg-blue-600"
               >
                 Agree
               </Button>
               <Button
                 onClick={acceptEssential}
                 variant="outline"
-                className="min-w-[140px] rounded-full border-white/50 bg-white/5 px-5 py-2 text-sm font-medium text-white/90 backdrop-blur-sm transition hover:bg-white/10"
+                className="min-w-[140px] rounded-full border-slate-200 bg-white px-5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Essential only
               </Button>
               <button
                 onClick={() => setShowSettings(true)}
-                className="text-sm font-medium text-white/80 underline underline-offset-4 transition hover:text-white"
+                className="text-sm font-medium text-slate-700 underline underline-offset-4 transition hover:text-slate-900"
               >
                 Manage preferences
               </button>
