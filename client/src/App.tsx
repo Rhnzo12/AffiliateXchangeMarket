@@ -148,8 +148,14 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
 
           {!hideHeader && (
             <header className="relative flex items-center justify-between gap-4 px-4 sm:px-6 py-3 sm:py-4 border-b shrink-0 bg-background sticky top-0 z-50">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  <Link href="/" className="flex items-center gap-2">
+                    <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
+                    <span className="font-semibold text-base sm:text-lg text-foreground">AffiliateXchange</span>
+                  </Link>
+                </div>
 
                 {headerContent && (
                   <div className="w-full max-w-xl ml-auto">
