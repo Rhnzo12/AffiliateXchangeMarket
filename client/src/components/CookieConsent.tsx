@@ -91,7 +91,10 @@ export function CookieConsent() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-5" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}>
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-5 animate-cookie-pop motion-reduce:animate-none"
+        style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}
+      >
         <div className="mx-auto w-full max-w-5xl rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl">
           <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="flex items-start gap-3 sm:gap-4">
