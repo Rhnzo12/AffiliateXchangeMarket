@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
-import { X, Cookie, Settings } from "lucide-react";
+import { X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -93,66 +92,61 @@ export function CookieConsent() {
   return (
     <>
       <div className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6">
-        <Card className="max-w-4xl mx-auto border-2 shadow-lg">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 mt-1">
-                <Cookie className="h-6 w-6 text-primary" />
-              </div>
-              <div className="flex-1 space-y-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="font-semibold text-lg">We value your privacy</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      We use cookies to enhance your browsing experience, serve personalized
-                      content, and analyze our traffic. By clicking "Accept All", you consent
-                      to our use of cookies.
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowBanner(false)}
-                    className="flex-shrink-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button onClick={acceptAll} className="flex-1 sm:flex-none">
-                    Accept All
-                  </Button>
-                  <Button
-                    onClick={acceptEssential}
-                    variant="outline"
-                    className="flex-1 sm:flex-none"
-                  >
-                    Essential Only
-                  </Button>
-                  <Button
-                    onClick={() => setShowSettings(true)}
-                    variant="outline"
-                    className="flex-1 sm:flex-none"
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Customize
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Read our{" "}
-                  <a href="/privacy-policy" className="underline hover:text-primary">
-                    Privacy Policy
-                  </a>{" "}
-                  and{" "}
-                  <a href="/cookie-policy" className="underline hover:text-primary">
-                    Cookie Policy
-                  </a>
-                  .
+        <div className="mx-auto w-full max-w-3xl rounded-2xl border border-white/20 bg-gradient-to-br from-[#7b3bb7] via-[#c94d9f] to-[#ff7b67] text-white shadow-2xl">
+          <div className="p-6 sm:p-8">
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowBanner(false)}
+                className="text-white hover:bg-white/10"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-6">
+              <div className="space-y-3 text-center sm:text-left">
+                <h3 className="text-xl font-semibold">We use cookies on our website</h3>
+                <p className="text-sm text-white/90">
+                  We use cookies on our website to give you the most relevant experience by
+                  remembering your preferences and repeat visits. By clicking “Accept”, you
+                  consent to the use of ALL the cookies. You may visit Cookie settings to
+                  manage which cookies are used.
+                  <span className="block pt-2 text-sm">
+                    <a
+                      href="/cookie-policy"
+                      className="underline transition hover:text-white"
+                    >
+                      Cookie Policy
+                    </a>
+                  </span>
                 </p>
               </div>
+
+              <div className="flex flex-col gap-3 text-sm font-medium sm:flex-row sm:items-center sm:justify-center">
+                <Button
+                  onClick={acceptAll}
+                  className="flex-1 rounded-md bg-white text-black hover:bg-white/90 sm:flex-none sm:min-w-[120px]"
+                >
+                  Accept
+                </Button>
+                <Button
+                  onClick={acceptEssential}
+                  variant="outline"
+                  className="flex-1 rounded-md border-white/60 text-white hover:bg-white/10 hover:text-white sm:flex-none sm:min-w-[120px]"
+                >
+                  Reject
+                </Button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="text-white underline transition hover:text-white/80"
+                >
+                  Cookie settings
+                </button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
