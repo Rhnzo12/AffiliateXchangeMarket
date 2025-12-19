@@ -45,7 +45,7 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
-import { DollarSign, Video, Calendar, Briefcase, CheckCircle, XCircle, Clock, ExternalLink, Play, Eye, EyeOff, Edit3, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { ArrowLeft, DollarSign, Video, Calendar, Briefcase, CheckCircle, XCircle, Clock, ExternalLink, Play, Eye, EyeOff, Edit3, Trash2, PauseCircle, PlayCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { VideoPlayer } from "../components/VideoPlayer";
@@ -543,9 +543,19 @@ export default function CompanyRetainerDetail() {
     <div className="space-y-6">
       <TopNavBar />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">{contract.title}</h1>
-          <p className="text-muted-foreground">Retainer Contract Details</p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLocation("/company/retainers")}
+            className="h-10 w-10 rounded-full"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">{contract.title}</h1>
+            <p className="text-muted-foreground">Retainer Contract Details</p>
+          </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {getContractStatusBadge(contract.status)}
