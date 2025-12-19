@@ -4,7 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
+import { SidebarProvider } from "./components/ui/sidebar";
 import { AppSidebar } from "./components/app-sidebar";
 import { CookieConsent } from "./components/CookieConsent";
 import { useAuth } from "./hooks/useAuth";
@@ -140,7 +140,7 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
 
   const { headerContent } = useHeaderContent();
 
- return (
+  return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
@@ -149,22 +149,6 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
           {!hideHeader && (
             <header className="relative flex items-center justify-between gap-4 px-4 sm:px-6 py-3 sm:py-4 border-b shrink-0 bg-background sticky top-0 z-50">
               <div className="flex items-center gap-4 flex-1 min-w-0">
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  <SidebarTrigger className="h-9 w-9 rounded-full border bg-background/80 backdrop-blur-sm shadow-sm transition-all duration-300 hover:border-primary/60 hover:shadow-md" />
-                  <Link
-                    href="/"
-                    className="inline-flex items-center gap-2 rounded-md px-2 py-1 transition-all duration-300 hover:bg-primary/10"
-                  >
-                    <img
-                      src="/logo.png"
-                      alt="AffiliateXchange logo"
-                      className="h-9 w-9 rounded-md object-cover shadow-sm transition-all duration-300"
-                    />
-                    <span className="text-lg font-semibold text-foreground transition-colors duration-300 hover:text-primary whitespace-nowrap">
-                      AffiliateXchange
-                    </span>
-                  </Link>
-                </div>
                 {headerContent && <div className="w-full max-w-xl transition-all duration-300">{headerContent}</div>}
               </div>
 
