@@ -336,7 +336,21 @@ export default function Login() {
         >
           <Card>
             <CardHeader>
-              <CardTitle>Welcome back</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle>Welcome back</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2"
+                  onClick={() => {
+                    window.location.href = "/";
+                  }}
+                  data-testid="button-back-home"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Home
+                </Button>
+              </div>
               <CardDescription>Sign in to your account to continue</CardDescription>
             </CardHeader>
             <CardContent>
