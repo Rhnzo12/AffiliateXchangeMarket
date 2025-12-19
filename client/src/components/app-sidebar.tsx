@@ -260,12 +260,9 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2">
-        <Link href="/" onClick={handleNavClick}>
-          <div className="flex items-center gap-2 cursor-pointer">
-            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover shrink-0" />
-            <span className="font-bold text-lg group-data-[collapsible=icon]:hidden">AffiliateXchange</span>
-          </div>
-        </Link>
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">
+          Navigation
+        </div>
       </SidebarHeader>
 
       <SidebarContent>
