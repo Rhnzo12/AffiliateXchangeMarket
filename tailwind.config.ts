@@ -99,12 +99,12 @@ export default {
         },
         "cookie-pop": {
           "0%": {
-            transform: "translateY(18px) scale(0.97)",
+            transform: "translateY(28px) scale(0.98)",
             opacity: "0",
           },
           "60%": {
-            transform: "translateY(-6px) scale(1.01)",
-            opacity: "1",
+            transform: "translateY(6px) scale(1)",
+            opacity: "0.95",
           },
           "100%": {
             transform: "translateY(0) scale(1)",
@@ -115,7 +115,7 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "cookie-pop": "cookie-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1)",
+        "cookie-pop": "cookie-pop 0.85s ease-in-out",
       },
     },
   },
