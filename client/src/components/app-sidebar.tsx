@@ -265,13 +265,10 @@ export function AppSidebar() {
           <SidebarTrigger className="h-8 w-8 shrink-0" />
           <Link href="/" className="flex items-center gap-2 group">
             <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
-            <span className="font-semibold text-lg text-foreground truncate group-data-[collapsible=icon]:hidden">
+            <span className="font-semibold text-lg text-foreground whitespace-nowrap">
               AffiliateXchange
             </span>
           </Link>
-        </div>
-        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">
-          Navigation
         </div>
       </SidebarHeader>
 
