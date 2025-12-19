@@ -6,7 +6,7 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { ExternalLink, Star } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 export interface TutorialFeature {
   accentText: string;
@@ -51,28 +51,15 @@ const accentColorClasses = {
 // Feature Preview Card Component
 function FeaturePreviewCard({ feature }: { feature: TutorialFeature }) {
   return (
-    <div className="flex flex-col items-center text-center space-y-3 p-4 rounded-lg border border-border/50 bg-muted/30 min-h-[200px]">
-      <div className="space-y-1">
-        <p className={`font-semibold text-sm ${accentColorClasses[feature.accentColor]}`}>
+    <div className="flex flex-col gap-3 p-4 rounded-lg border border-border bg-card/70 min-h-[200px] shadow-none">
+      <div className="space-y-1 text-left">
+        <p className={`text-xs font-semibold uppercase tracking-wide ${accentColorClasses[feature.accentColor]}`}>
           {feature.accentText}
         </p>
-        <p className="text-xs text-muted-foreground">{feature.subtitle}</p>
+        <p className="text-sm text-muted-foreground">{feature.subtitle}</p>
       </div>
-      <div className="flex-1 flex items-center justify-center w-full">
+      <div className="flex-1 flex items-center justify-start">
         {feature.preview}
-      </div>
-    </div>
-  );
-}
-
-// Decorative Badge Component
-function DecorativeBadge() {
-  return (
-    <div className="absolute -right-4 top-1/4 hidden lg:block">
-      <div className="relative">
-        <div className="w-24 h-24 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center rotate-12 border border-primary/20">
-          <Star className="h-12 w-12 text-primary fill-primary/20" />
-        </div>
       </div>
     </div>
   );
@@ -94,30 +81,30 @@ export function FirstTimeTutorial({
     return (
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleComplete()}>
         <DialogContent className="sm:max-w-3xl p-0 overflow-hidden">
-          <div className="relative p-6 pb-0">
-            <DecorativeBadge />
-
+          <div className="p-6 space-y-6">
             {/* Header */}
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold">
-                Become a{" "}
-                <Badge variant="default" className="text-sm px-3 py-1 mx-1">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Become a
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="text-xs px-2 py-1">
                   {config.badgeText}
-                </Badge>{" "}
-                {config.headline}
-              </h2>
+                </Badge>
+                <h2 className="text-2xl font-semibold leading-snug">{config.headline}</h2>
+              </div>
             </div>
 
             {/* Feature Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {config.features.map((feature, index) => (
                 <FeaturePreviewCard key={index} feature={feature} />
               ))}
             </div>
 
             {/* Welcome Section */}
-            <div className="border-t border-border pt-4 mb-4">
-              <h3 className="font-semibold text-base mb-2">{config.welcomeTitle}</h3>
+            <div className="space-y-2">
+              <h3 className="font-semibold text-base">{config.welcomeTitle}</h3>
               <DialogDescription className="text-sm text-muted-foreground leading-relaxed">
                 {config.welcomeDescription}
               </DialogDescription>
