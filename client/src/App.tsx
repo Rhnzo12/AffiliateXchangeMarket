@@ -149,6 +149,15 @@ function AuthenticatedLayout({ user, unreadCount, companyProfile, onLogout, chil
           {!hideHeader && (
             <header className="relative flex items-center justify-between gap-4 px-4 sm:px-6 py-3 sm:py-4 border-b shrink-0 bg-background sticky top-0 z-50">
               <div className="flex items-center gap-4 flex-1 min-w-0">
+                <Link href="/" className="flex items-center gap-2 shrink-0 group">
+                  <img
+                    src="/logo.png"
+                    alt="AffiliateXchange Logo"
+                    className="h-8 w-8 rounded-md object-cover group-hover:scale-[1.02] transition-transform"
+                  />
+                  <span className="text-lg font-semibold text-foreground hidden sm:inline">AffiliateXchange</span>
+                </Link>
+
                 {headerContent && <div className="w-full max-w-xl ml-auto">{headerContent}</div>}
               </div>
 
