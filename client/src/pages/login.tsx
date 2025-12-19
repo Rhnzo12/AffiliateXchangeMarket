@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -18,9 +18,6 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isSliding, setIsSliding] = useState(false);
-  const [activeVariant, setActiveVariant] = useState<"primary" | "secondary">("primary");
-  const slideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { toast } = useToast();
   const [errorDialog, setErrorDialog] = useState({
     open: false,
@@ -183,28 +180,6 @@ export default function Login() {
     window.location.href = "/api/auth/google";
   };
 
-  const startSlideAnimation = () => {
-    if (isSliding) return;
-    setIsSliding(true);
-
-    if (slideTimeoutRef.current) {
-      clearTimeout(slideTimeoutRef.current);
-    }
-
-    slideTimeoutRef.current = setTimeout(() => {
-      setActiveVariant((prev) => (prev === "primary" ? "secondary" : "primary"));
-      setIsSliding(false);
-    }, 750);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (slideTimeoutRef.current) {
-        clearTimeout(slideTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Render 2FA verification form
   if (requires2FA) {
     return (
@@ -337,73 +312,147 @@ export default function Login() {
   // Regular login form
   return (
     <motion.div
-      className="relative min-h-screen bg-slate-950 flex items-center justify-center overflow-hidden p-4"
+      className="relative min-h-screen bg-background flex items-center justify-center overflow-hidden p-4"
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
     >
       <AnimatedBackground />
       <motion.div
-        className="relative w-full max-w-4xl"
+        className="w-full max-w-md space-y-6"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="absolute inset-0 rounded-[30px] bg-gradient-to-br from-cyan-500/10 via-slate-900 to-slate-950 blur-2xl" />
-        <div className="relative overflow-hidden rounded-[30px] border border-white/5 bg-white/5 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(23,162,184,0.25),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_35%),radial-gradient(circle_at_50%_80%,rgba(16,185,129,0.14),transparent_38%)] opacity-80" />
-          <div className="relative px-4 py-6 sm:px-10 sm:py-12">
-            <div className="flex items-center justify-center gap-3 pb-8">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 shadow-lg shadow-cyan-500/10 ring-1 ring-white/20">
-                <img src="/logo.png" alt="AffiliateXchange Logo" className="h-10 w-10 rounded-lg object-cover" />
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">AffiliateXchange</p>
-                <p className="text-3xl font-semibold text-white">Welcome back</p>
-                <p className="text-sm text-cyan-50/80">Sign in to continue scaling your partnerships</p>
-              </div>
-            </div>
-
-            <div className="relative min-h-[520px] md:min-h-[540px]">
-              <div className="absolute inset-0">
-                <div
-                  className={`absolute inset-0 transform transition-transform duration-[750ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    isSliding ? "-translate-x-[115%] opacity-90" : "translate-x-0 opacity-100"
-                  }`}
-                >
-                  <LoginCardContent
-                    form={form}
-                    showPassword={showPassword}
-                    setShowPassword={setShowPassword}
-                    isLoading={isLoading}
-                    handleSubmit={onSubmit}
-                    handleGoogleLogin={handleGoogleLogin}
-                    onStartSlide={startSlideAnimation}
-                    variant={activeVariant}
-                  />
-                </div>
-
-                <div
-                  className={`absolute inset-0 transform transition-transform duration-[750ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    isSliding ? "translate-x-0 opacity-100" : "translate-x-[120%] opacity-0"
-                  } pointer-events-none`}
-                >
-                  <LoginCardContent
-                    form={form}
-                    showPassword={showPassword}
-                    setShowPassword={setShowPassword}
-                    isLoading={isLoading}
-                    handleSubmit={onSubmit}
-                    handleGoogleLogin={handleGoogleLogin}
-                    onStartSlide={startSlideAnimation}
-                    variant={activeVariant === "primary" ? "secondary" : "primary"}
-                    subdued
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center justify-center gap-2">
+          <img src="/logo.png" alt="AffiliateXchange Logo" className="h-10 w-10 rounded-md object-cover" />
+          <span className="text-2xl font-bold">AffiliateXchange</span>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Welcome back</CardTitle>
+              <CardDescription>Sign in to your account to continue</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="johndoe" {...field} data-testid="input-username" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Input
+                              type={showPassword ? "text" : "password"}
+                              placeholder="••••••••"
+                              {...field}
+                              data-testid="input-password"
+                              className="pr-10"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              data-testid="toggle-password-visibility"
+                            >
+                              {showPassword ? (
+                                <EyeOff className="h-4 w-4" />
+                              ) : (
+                                <Eye className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isLoading}
+                    data-testid="button-login"
+                  >
+                    {isLoading ? "Signing in..." : "Sign In"}
+                  </Button>
+                </form>
+              </Form>
+
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                data-testid="button-google-login"
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Continue with Google
+              </Button>
+
+              <div className="mt-4 text-center text-sm">
+                Don't have an account?{" "}
+                <Link href="/register" className="text-primary hover:underline" data-testid="link-register">
+                  Create account
+                </Link>
+              </div>
+
+              <div className="mt-2 text-center text-sm">
+                <Link href="/forgot-password" className="text-muted-foreground hover:text-primary hover:underline">
+                  Forgot your password?
+                </Link>
+              </div>
+
+              <div className="mt-4 pt-4 border-t text-center text-xs text-muted-foreground">
+                <div className="flex justify-center gap-4">
+                  <Link href="/privacy-policy">
+                    <a className="hover:text-foreground transition-colors">
+                      Privacy Policy
+                    </a>
+                  </Link>
+                  <span>•</span>
+                  <Link href="/terms-of-service">
+                    <a className="hover:text-foreground transition-colors">
+                      Terms of Service
+                    </a>
+                  </Link>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
         {/* Generic Error Dialog */}
         <GenericErrorDialog
@@ -416,166 +465,6 @@ export default function Login() {
         />
       </motion.div>
     </motion.div>
-  );
-}
-
-type LoginCardContentProps = {
-  form: ReturnType<typeof useForm<LoginForm>>;
-  showPassword: boolean;
-  setShowPassword: (value: boolean) => void;
-  isLoading: boolean;
-  handleSubmit: (data: LoginForm) => Promise<void>;
-  handleGoogleLogin: () => void;
-  onStartSlide: () => void;
-  variant: "primary" | "secondary";
-  subdued?: boolean;
-};
-
-function LoginCardContent({
-  form,
-  showPassword,
-  setShowPassword,
-  isLoading,
-  handleSubmit,
-  handleGoogleLogin,
-  onStartSlide,
-  variant,
-  subdued,
-}: LoginCardContentProps) {
-  const accentClasses =
-    variant === "primary"
-      ? "bg-white/10 ring-1 ring-white/10 shadow-lg shadow-cyan-500/20"
-      : "bg-slate-950/80 ring-1 ring-white/5 shadow-lg shadow-slate-900/40 backdrop-blur";
-
-  return (
-    <Card className={`${accentClasses} border-white/10 text-white`}>
-      <CardHeader className="space-y-1">
-        <CardTitle className="flex items-center gap-2 text-2xl text-white">
-          <Shield className="h-5 w-5 text-cyan-300" /> Secure sign in
-        </CardTitle>
-        <CardDescription className="text-cyan-50/70">
-          Access your dashboard with enterprise-grade protection
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="username"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm text-cyan-50/90">Username</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="johndoe"
-                      {...field}
-                      data-testid="input-username"
-                      className="border-white/10 bg-white/5 text-white placeholder:text-white/50 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm text-cyan-50/90">Password</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        placeholder="••••••••"
-                        {...field}
-                        data-testid="input-password"
-                        className="border-white/10 bg-white/5 pr-12 text-white placeholder:text-white/50 focus-visible:ring-2 focus-visible:ring-cyan-400/60"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-cyan-100/80 transition-colors hover:text-white"
-                        data-testid="toggle-password-visibility"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <Button
-              type="submit"
-              className="w-full bg-cyan-500 text-white shadow-lg shadow-cyan-500/30 transition-transform duration-300 hover:-translate-y-0.5 hover:bg-cyan-400"
-              disabled={isLoading}
-              data-testid="button-login"
-              onClick={onStartSlide}
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
-        </Form>
-
-        <div className="relative my-5">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-white/10" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase tracking-[0.2em]">
-            <span className="bg-white/5 px-3 text-cyan-50/70">Or continue with</span>
-          </div>
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full border-white/20 bg-white/5 text-white hover:border-cyan-400/70 hover:bg-cyan-500/10"
-          onClick={handleGoogleLogin}
-          disabled={isLoading}
-          data-testid="button-google-login"
-        >
-          <Mail className="mr-2 h-4 w-4" />
-          Continue with Google
-        </Button>
-
-        <div className="mt-6 grid grid-cols-1 gap-3 text-sm text-cyan-50/80 sm:grid-cols-2">
-          <Link href="/register" className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 transition hover:border-cyan-400/50 hover:bg-cyan-500/5" data-testid="link-register">
-            <span className="h-2 w-2 rounded-full bg-cyan-400" />
-            Create account
-          </Link>
-          <Link
-            href="/forgot-password"
-            className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 py-2 transition hover:border-cyan-400/50 hover:bg-cyan-500/5"
-          >
-            <span className="h-2 w-2 rounded-full bg-cyan-200" />
-            Forgot your password?
-          </Link>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-white/5 bg-white/5 p-4 text-center text-xs text-cyan-50/60">
-          <div className="flex flex-wrap justify-center gap-3">
-            <Link href="/privacy-policy" className="hover:text-white transition-colors">
-              <a className="hover:text-white">Privacy Policy</a>
-            </Link>
-            <span>•</span>
-            <Link href="/terms-of-service" className="hover:text-white transition-colors">
-              <a className="hover:text-white">Terms of Service</a>
-            </Link>
-          </div>
-        </div>
-
-        {subdued && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-cyan-100/60">
-            <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-cyan-300" />
-            Sliding in...
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
