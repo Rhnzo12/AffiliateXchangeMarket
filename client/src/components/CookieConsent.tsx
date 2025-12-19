@@ -169,8 +169,9 @@ export function CookieConsent() {
                   </Label>
                   <p className="text-sm text-muted-foreground">
                     Required for the website to function properly. These cookies enable
-                    core functionality such as security, authentication, and accessibility.
-                    Cannot be disabled.
+                    core functionality such as security, authentication, and accessibility
+                    and are always active whenever you accept cookies through this banner
+                    or save your preferences in this window. Cannot be disabled.
                   </p>
                 </div>
               </div>
