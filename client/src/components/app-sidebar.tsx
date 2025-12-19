@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -259,17 +259,16 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar
+      collapsible="icon"
+      style={{ "--sidebar-width-icon": "11rem" } as CSSProperties }
+    >
       <SidebarHeader className="relative border-b px-4 py-4 group-data-[collapsible=icon]:p-2 space-y-3">
         <div className="flex items-center gap-3">
           <SidebarTrigger className="h-8 w-8 shrink-0" />
           <Link
             href="/"
-            className={`group flex items-center gap-2 transition-all duration-300 ${
-              isCollapsed
-                ? "absolute left-[calc(100%+0.75rem)] top-1/2 -translate-y-1/2 rounded-full border bg-background px-3 py-2 shadow-md"
-                : ""
-            }`}
+            className="group flex items-center gap-2 rounded-md transition-all duration-300"
           >
             <img
               src="/logo.png"
