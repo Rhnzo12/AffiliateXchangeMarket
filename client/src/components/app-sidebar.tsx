@@ -18,6 +18,7 @@ import {
   SidebarMenuSubItem,
   SidebarHeader,
   SidebarFooter,
+  SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
 import {
@@ -259,7 +260,16 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2">
+      <SidebarHeader className="border-b px-4 py-4 group-data-[collapsible=icon]:p-2 space-y-3">
+        <div className="flex items-center gap-3">
+          <SidebarTrigger className="h-8 w-8 shrink-0" />
+          <Link href="/" className="flex items-center gap-2 group">
+            <img src="/logo.png" alt="AffiliateXchange Logo" className="h-8 w-8 rounded-md object-cover" />
+            <span className="font-semibold text-lg text-foreground truncate group-data-[collapsible=icon]:hidden">
+              AffiliateXchange
+            </span>
+          </Link>
+        </div>
         <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">
           Navigation
         </div>
